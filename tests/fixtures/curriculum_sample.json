@@ -1,0 +1,79 @@
+{
+  "program": "資訊管理學系",
+  "cohort": 114,
+  "_note": "範例資料：課號、學分、條文編號皆為示意，需替換成實際 114 學年度應修科目表與系所規章。",
+  "sources": {
+    "IM-114-TABLE": "資管系 114 學年度入學 應修科目表",
+    "IM-REG": "資管系 學士班修業規章",
+    "NCU-ACAD": "國立中央大學 學則"
+  },
+  "passing_grade": 60,
+  "dept_prefixes": ["IM"],
+  "max_credits_per_term": 25,
+  "courses": [
+    {"code": "IM1001", "name": "計算機概論",       "credits": 3, "type": "required", "terms": ["fall"],   "prereqs": []},
+    {"code": "IM1002", "name": "程式設計(一)",     "credits": 3, "type": "required", "terms": ["fall"],   "prereqs": []},
+    {"code": "IM1003", "name": "程式設計(二)",     "credits": 3, "type": "required", "terms": ["spring"], "prereqs": ["IM1002"]},
+    {"code": "IM1004", "name": "微積分",           "credits": 3, "type": "required", "terms": ["fall"],   "prereqs": []},
+    {"code": "IM1005", "name": "管理學",           "credits": 3, "type": "required", "terms": ["spring"], "prereqs": []},
+    {"code": "IM2001", "name": "資料結構",         "credits": 3, "type": "required", "terms": ["fall"],   "prereqs": ["IM1003"]},
+    {"code": "IM2002", "name": "統計學",           "credits": 3, "type": "required", "terms": ["fall"],   "prereqs": ["IM1004"]},
+    {"code": "IM2003", "name": "資料庫管理",       "credits": 3, "type": "required", "terms": ["spring"], "prereqs": ["IM2001"]},
+    {"code": "IM2004", "name": "系統分析與設計",   "credits": 3, "type": "required", "terms": ["spring"], "prereqs": ["IM1003"]},
+    {"code": "IM3001", "name": "作業研究",         "credits": 3, "type": "required", "terms": ["fall"],   "prereqs": ["IM2002"]},
+    {"code": "IM3002", "name": "資訊管理實務專題", "credits": 3, "type": "required", "terms": ["spring"], "prereqs": ["IM2003", "IM2004"]},
+
+    {"code": "IM3101", "name": "機器學習",         "credits": 3, "type": "elective", "terms": ["fall"],   "prereqs": ["IM2002"], "field": "data"},
+    {"code": "IM3102", "name": "資料探勘",         "credits": 3, "type": "elective", "terms": ["spring"], "prereqs": ["IM2003"], "field": "data"},
+    {"code": "IM3103", "name": "大數據分析",       "credits": 3, "type": "elective", "terms": ["spring"], "prereqs": ["IM2003"], "field": "data"},
+    {"code": "IM3201", "name": "網頁程式設計",     "credits": 3, "type": "elective", "terms": ["fall"],   "prereqs": ["IM1003"], "field": "dev"},
+    {"code": "IM3202", "name": "行動應用開發",     "credits": 3, "type": "elective", "terms": ["spring"], "prereqs": ["IM3201"], "field": "dev"},
+    {"code": "IM3203", "name": "資訊安全",         "credits": 3, "type": "elective", "terms": ["fall"],   "prereqs": ["IM2001"], "field": "dev"},
+    {"code": "IM3301", "name": "電子商務",         "credits": 3, "type": "elective", "terms": ["fall"],   "prereqs": ["IM1005"], "field": "biz"},
+    {"code": "IM3302", "name": "企業資源規劃",     "credits": 3, "type": "elective", "terms": ["spring"], "prereqs": ["IM1005"], "field": "biz"},
+    {"code": "IM3303", "name": "專案管理",         "credits": 3, "type": "elective", "terms": ["fall", "spring"], "prereqs": [], "field": "biz"},
+
+    {"code": "GE0001", "name": "大一英文(一)",     "credits": 2, "type": "general", "terms": ["fall"],   "prereqs": []},
+    {"code": "GE0002", "name": "大一英文(二)",     "credits": 2, "type": "general", "terms": ["spring"], "prereqs": []},
+    {"code": "GE0003", "name": "大一國文",         "credits": 2, "type": "general", "terms": ["fall", "spring"], "prereqs": []}
+  ],
+  "requirements": [
+    {
+      "id": "R1",
+      "kind": "all_of",
+      "title": "系訂必修課程",
+      "courses": ["IM1001", "IM1002", "IM1003", "IM1004", "IM1005", "IM2001", "IM2002", "IM2003", "IM2004", "IM3001", "IM3002"],
+      "source": {"doc": "IM-114-TABLE", "ref": "一、必修科目"}
+    },
+    {
+      "id": "R2",
+      "kind": "all_of",
+      "title": "校訂共同必修（語文）",
+      "courses": ["GE0001", "GE0002", "GE0003"],
+      "source": {"doc": "NCU-ACAD", "ref": "第十二條"}
+    },
+    {
+      "id": "R3",
+      "kind": "n_of",
+      "title": "核心選修：資料領域至少修 2 門",
+      "n": 2,
+      "courses": ["IM3101", "IM3102", "IM3103"],
+      "source": {"doc": "IM-REG", "ref": "第五條第一項"}
+    },
+    {
+      "id": "R4",
+      "kind": "credits_from",
+      "title": "系選修至少 12 學分",
+      "min_credits": 12,
+      "course_type": "elective",
+      "source": {"doc": "IM-REG", "ref": "第五條第二項"}
+    },
+    {
+      "id": "R5",
+      "kind": "total_credits",
+      "title": "畢業總學分至少 128 學分",
+      "min_credits": 128,
+      "source": {"doc": "NCU-ACAD", "ref": "第二十條"}
+    }
+  ]
+}

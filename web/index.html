@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NCU Academic Twin</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --ink: #1c2230; --muted: #687085; --line: #e3e6ec;
+  --accent: #1f4e8c; --accent-soft: #e6eef9;
+  --pass: #1f8a4c; --pass-soft: #e3f4ea;
+  --warn: #b7791f; --warn-soft: #fbf1df;
+  --fail: #c53030; --fail-soft: #fce8e8;
+  --review: #6b46c1; --review-soft: #efe9fb;
+  --c-required: #1f4e8c; --c-college: #2c7a7b; --c-selective: #b7791f;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151c; --panel: #1b1f29; --ink: #e6e9f0; --muted: #9aa3b5; --line: #2c3240;
+    --accent: #7aa7e6; --accent-soft: #1f2b40;
+    --pass: #5cc489; --pass-soft: #173226; --warn: #e6b45c; --warn-soft: #3a2e17;
+    --fail: #f07a7a; --fail-soft: #3b1d1f; --review: #b49af0; --review-soft: #2a2240;
+    --c-required: #7aa7e6; --c-college: #5fc4c4; --c-selective: #e6b45c;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+.bar { max-width: 1240px; margin: 0 auto; padding: 14px 20px 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.brand { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
+.brand span { color: var(--accent); }
+.sub { color: var(--muted); font-size: 13px; }
+nav { max-width: 1240px; margin: 0 auto; padding: 0 20px; display: flex; gap: 4px; overflow-x: auto; }
+nav button { border: 0; background: none; color: var(--muted); padding: 10px 14px; font: inherit; cursor: pointer;
+  border-bottom: 2px solid transparent; white-space: nowrap; }
+nav button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+main { max-width: 1240px; margin: 0 auto; padding: 20px; }
+.view { display: none; } .view.active { display: block; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+h2 { font-size: 17px; margin: 0 0 12px; } h3 { font-size: 15px; margin: 0 0 10px; }
+.muted { color: var(--muted); } .small { font-size: 12.5px; }
+.grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.grid > * { min-width: 0; }
+.stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+.stat { cursor: pointer; } .stat .n { font-size: 28px; font-weight: 700; }
+.stat.selected { outline: 2px solid var(--accent); }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 999px; font-size: 12.5px;
+  font-weight: 600; white-space: nowrap; }
+.PASS { color: var(--pass); background: var(--pass-soft); } .WARNING { color: var(--warn); background: var(--warn-soft); }
+.FAIL { color: var(--fail); background: var(--fail-soft); } .MANUAL_REVIEW { color: var(--review); background: var(--review-soft); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 13px; }
+tbody tr { cursor: pointer; } tbody tr:hover { background: var(--accent-soft); }
+.meter { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; min-width: 80px; }
+.meter > div { height: 100%; background: var(--accent); border-radius: 99px; }
+.meter.ok > div { background: var(--pass); } .meter.bad > div { background: var(--fail); }
+select, input { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; }
+button.primary { font: inherit; border: 0; background: var(--accent); color: #fff; border-radius: 8px; padding: 7px 16px;
+  cursor: pointer; font-weight: 600; }
+button.ghost { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px;
+  padding: 6px 12px; cursor: pointer; }
+.student-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 16px; }
+.big { font-size: 34px; font-weight: 700; line-height: 1; }
+.two { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; }
+.req { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+.req.bad { border-left: 4px solid var(--fail); } .req.ok { border-left: 4px solid var(--pass); }
+.req-top { display: flex; justify-content: space-between; gap: 8px; }
+.req .cite { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.courses { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.course { font-size: 12.5px; padding: 2px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--ink);
+  border: 1px solid transparent; }
+.course.moved { background: var(--fail-soft); border-color: var(--fail); }
+.course code, .course .code { color: var(--muted); font-size: 11.5px; margin-right: 3px; }
+.stack { display: flex; height: 14px; border-radius: 99px; overflow: hidden; background: var(--line); margin: 8px 0 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+.issue { padding: 8px 10px; border-radius: 8px; margin-bottom: 6px; font-size: 13.5px; }
+.timeline { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 8px; overflow-x: auto;
+  padding-bottom: 6px; }
+.term { border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 120px; background: var(--bg); }
+.term.away { background: var(--review-soft); }
+.term.grad { border-color: var(--pass); }
+.term-head { display: flex; justify-content: space-between; font-weight: 600; font-size: 13.5px; margin-bottom: 6px; }
+.term .course { display: block; margin-bottom: 4px; }
+.other { font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 6px; padding: 2px 6px; }
+.whatif { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin: 6px 0 12px; }
+.whatif label { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); gap: 3px; }
+.verdict { padding: 12px 14px; border-radius: 8px; margin: 12px 0; font-weight: 600; }
+.verdict.delay { background: var(--fail-soft); color: var(--fail); } .verdict.same { background: var(--pass-soft); color: var(--pass); }
+.impact { margin: 6px 0 0; padding-left: 18px; font-weight: 400; color: var(--ink); }
+details summary { cursor: pointer; color: var(--muted); font-size: 13.5px; }
+.graph-wrap { overflow-x: auto; }
+svg .node rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; rx: 7; }
+svg .node text { fill: var(--ink); font-size: 12.5px; }
+svg .node .tcode { fill: var(--muted); font-size: 10.5px; }
+svg .node { cursor: pointer; }
+svg .node.sel rect { stroke: var(--accent); stroke-width: 3; }
+svg .node.anc rect { fill: var(--warn-soft); stroke: var(--warn); }
+svg .node.desc rect { fill: var(--fail-soft); stroke: var(--fail); }
+svg .node.dim { opacity: .3; }
+svg .edge { fill: none; stroke: var(--muted); stroke-width: 1.3; opacity: .55; }
+svg .edge.soft { stroke-dasharray: 5 4; }
+svg .edge.hot { stroke: var(--accent); opacity: 1; stroke-width: 2; }
+.side { position: sticky; top: 110px; }
+ol.assume li { margin-bottom: 8px; }
+.empty { color: var(--muted); padding: 20px; text-align: center; }
+@media (max-width: 900px) {
+  .two { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); }
+  .hide-sm { display: none; } main { padding: 16px; } .side { position: static; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand">NCU <span>Academic Twin</span></div>
+    <div class="sub" id="program"></div>
+  </div>
+  <nav>
+    <button data-view="batch" class="active">系辦畢審</button>
+    <button data-view="student">學生 Academic Twin</button>
+    <button data-view="graph">先修關係圖</button>
+    <button data-view="rules">規則來源</button>
+  </nav>
+</header>
+
+<main>
+  <!-- 系辦畢審 -->
+  <section class="view active" id="view-batch">
+    <div class="grid stats" id="stats"></div>
+    <div class="card">
+      <h2>批次畢業資格審查 <span class="muted small">點一列看該生細節</span></h2>
+      <table>
+        <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th>原因</th></tr></thead>
+        <tbody id="batch-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 學生 -->
+  <section class="view" id="view-student">
+    <div class="student-head">
+      <label class="muted small">學生 <select id="student-select"></select></label>
+      <span id="student-status"></span>
+      <div><span class="big" id="student-credits"></span> <span class="muted">/ 128 學分</span></div>
+      <span class="muted small" id="student-next"></span>
+    </div>
+    <div class="grid two">
+      <div class="grid">
+        <div class="card">
+          <h3>學分採計</h3>
+          <div class="stack" id="breakdown-bar"></div>
+          <div class="legend" id="breakdown-legend"></div>
+        </div>
+        <div class="card" id="issues-card">
+          <h3>需要注意</h3>
+          <div id="issues"></div>
+        </div>
+        <div class="card">
+          <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
+          <div id="requirements"></div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h3>到畢業的修課路徑</h3>
+          <div class="muted small" style="margin-bottom:8px">每學期上限 <span id="cap"></span> 學分；先排先修鏈最長的課。順序依「建議先修」，非正式擋修。</div>
+          <div class="timeline" id="base-plan"></div>
+        </div>
+        <div class="card">
+          <h3>What-if 模擬</h3>
+          <div class="whatif">
+            <label>如果這門課
+              <select id="skip-course"><option value="">（不設定）</option></select></label>
+            <label>在這學期不修
+              <select id="skip-term"></select></label>
+            <label>出國交換學期
+              <select id="away-term"><option value="">（不設定）</option></select></label>
+            <label>交換可抵學分
+              <input id="away-credits" type="number" value="15" min="0" max="25" style="width:80px"></label>
+            <button class="primary" id="run-sim">模擬</button>
+            <button class="ghost" id="reset-sim">清除</button>
+          </div>
+          <div id="sim-result"><div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div></div>
+        </div>
+        <div class="card">
+          <details>
+            <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
+            <table style="margin-top:8px">
+              <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
+              <tbody id="records"></tbody>
+            </table>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 先修關係圖 -->
+  <section class="view" id="view-graph">
+    <div class="grid">
+      <div class="card">
+        <h2>先修關係圖 <span class="muted small">實線＝正式擋修，虛線＝建議先修（推論）；點課程看影響範圍</span></h2>
+        <div class="graph-wrap"><svg id="dag"></svg></div>
+        <h3 style="margin-top:16px">其他課程（無先修關係）</h3>
+        <div class="courses" id="isolated"></div>
+      </div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start">
+        <div class="card" id="impact-card"><div class="muted">點選左邊任一門課。</div></div>
+        <div class="card">
+          <h3>瓶頸課排行</h3>
+          <table><tbody id="bottlenecks"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 規則來源 -->
+  <section class="view" id="view-rules">
+    <div class="grid">
+      <div class="card"><h2>規則來源</h2><ul id="sources"></ul></div>
+      <div class="card">
+        <h2>尚待系辦確認的假設</h2>
+        <p class="muted small">以下是官方文件沒寫清楚、規則庫暫時採用的解讀。所有正式判定仍以規則條文為準。</p>
+        <ol class="assume" id="assumptions"></ol>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const STATUS = {
+  PASS: "✅ Pass", WARNING: "⚠️ Warning", FAIL: "❌ Fail", MANUAL_REVIEW: "🔍 Manual Review",
+};
+const BREAKDOWN_COLORS = ["var(--c-required)", "var(--c-selective)", "var(--c-college)", "#8a6fd1", "#d16f9e", "#6fa8d1", "#9aa3b5"];
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const chip = (status) => `<span class="chip ${status}">${STATUS[status]}</span>`;
+const courseTag = (c, cls = "") => `<span class="course ${cls}"><span class="code">${esc(c.code)}</span>${esc(c.name)}</span>`;
+
+async function api(path) {
+  const res = await fetch(path);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+let META = null, BATCH = [], CURRENT = null, BASE_PLAN = null, statusFilter = null;
+
+// ---------- 分頁 ----------
+function show(view) {
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
+  try { localStorage.setItem("twin-view", view); } catch {}
+}
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
+
+// ---------- 系辦畢審 ----------
+function renderBatch() {
+  const counts = { PASS: 0, WARNING: 0, FAIL: 0, MANUAL_REVIEW: 0 };
+  BATCH.forEach((s) => counts[s.status]++);
+  $("#stats").innerHTML = Object.keys(counts).map((k) => `
+    <div class="card stat ${statusFilter === k ? "selected" : ""}" data-status="${k}">
+      <div class="small">${chip(k)}</div><div class="n">${counts[k]}</div>
+      <div class="muted small">${{ PASS: "條件全部符合", WARNING: "可能有問題，需確認", FAIL: "明確缺少條件", MANUAL_REVIEW: "需人工判斷" }[k]}</div>
+    </div>`).join("");
+  document.querySelectorAll(".stat").forEach((el) => el.addEventListener("click", () => {
+    statusFilter = statusFilter === el.dataset.status ? null : el.dataset.status;
+    renderBatch();
+  }));
+  const rows = BATCH.filter((s) => !statusFilter || s.status === statusFilter);
+  $("#batch-rows").innerHTML = rows.map((s) => {
+    const pct = Math.min(100, (s.total_credits / 128) * 100);
+    return `<tr data-id="${s.id}">
+      <td><b>${s.id}</b></td>
+      <td>${chip(s.status)}</td>
+      <td><div>${s.total_credits}</div><div class="meter ${pct >= 100 ? "ok" : ""}"><div style="width:${pct}%"></div></div></td>
+      <td class="hide-sm">${s.satisfied} / ${s.requirements}</td>
+      <td class="small">${s.reasons.map(esc).join("<br>") || '<span class="muted">全部符合</span>'}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5" class="empty">沒有符合的學生</td></tr>`;
+  document.querySelectorAll("#batch-rows tr[data-id]").forEach((tr) =>
+    tr.addEventListener("click", () => { loadStudent(tr.dataset.id); show("student"); }));
+}
+
+// ---------- 學生 ----------
+async function loadStudent(id) {
+  $("#student-select").value = id;
+  const s = await api(`/api/students/${encodeURIComponent(id)}`);
+  CURRENT = s;
+  $("#student-status").innerHTML = chip(s.status);
+  $("#student-credits").textContent = s.total_credits;
+  $("#student-next").textContent = `下一學期：${s.next_term}`;
+
+  // 學分採計
+  const entries = Object.entries(s.credit_breakdown);
+  const total = Math.max(128, s.total_credits);
+  $("#breakdown-bar").innerHTML = entries.map(([k, v], i) =>
+    `<div title="${esc(k)} ${v}" style="width:${(v / total) * 100}%;background:${BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]}"></div>`).join("");
+  $("#breakdown-legend").innerHTML = entries.map(([k, v], i) =>
+    `<span><i style="background:${BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]}"></i>${esc(k)} ${v}</span>`).join("")
+    + (s.total_credits < 128 ? `<span><i style="background:var(--line)"></i>尚缺 ${128 - s.total_credits}</span>` : "");
+
+  // 需要注意
+  const iss = s.issues, out = [];
+  iss.review.forEach((r) => out.push(`<div class="issue MANUAL_REVIEW">🔍 <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}，類別「${esc(r.category)}」）需人工判斷如何採計</div>`));
+  iss.failed.forEach((r) => out.push(`<div class="issue FAIL">✘ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）${r.grade} 分不及格，尚未重修通過</div>`));
+  iss.dept_unverified.forEach((r) => out.push(`<div class="issue WARNING">⚠ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）不在規則庫，暫以本系選修 ${r.credits} 學分計</div>`));
+  $("#issues").innerHTML = out.join("");
+  $("#issues-card").style.display = out.length ? "" : "none";
+
+  // 畢業條件
+  const ok = s.requirements.filter((r) => r.satisfied).length;
+  $("#req-summary").textContent = `${ok} / ${s.requirements.length} 符合`;
+  $("#requirements").innerHTML = s.requirements
+    .slice().sort((a, b) => a.satisfied - b.satisfied)
+    .map((r) => {
+      const pct = r.need ? Math.min(100, (r.have / r.need) * 100) : 100;
+      const unit = r.kind.includes("credits") ? "學分" : "門";
+      let detail = "";
+      if (!r.satisfied) {
+        detail = r.missing.length
+          ? `<div class="small" style="margin-top:6px">缺：</div><div class="courses">${r.missing.map((c) => courseTag(c)).join("")}</div>`
+          : `<div class="small" style="margin-top:6px">尚缺 ${r.shortfall} ${unit}</div>`;
+      }
+      return `<div class="req ${r.satisfied ? "ok" : "bad"}">
+        <div class="req-top"><b>${r.satisfied ? "✔" : "✘"} ${esc(r.title)}</b><span class="muted small">${r.have} / ${r.need}</span></div>
+        <div class="meter ${r.satisfied ? "ok" : "bad"}" style="margin-top:6px"><div style="width:${pct}%"></div></div>
+        ${detail}
+        <div class="cite">依據：${esc(r.citation)}</div>
+      </div>`;
+    }).join("");
+
+  // 修課紀錄
+  $("#record-count").textContent = s.records.length;
+  $("#records").innerHTML = s.records.map((r) => `<tr style="cursor:default">
+    <td>${r.term}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${r.credits}</td>
+    <td style="color:${r.grade < 60 ? "var(--fail)" : "inherit"}">${r.grade}</td><td class="muted">${esc(r.category)}</td></tr>`).join("");
+
+  // 路徑
+  const sim = await api(`/api/students/${encodeURIComponent(id)}/simulate`);
+  BASE_PLAN = sim.base;
+  $("#base-plan").innerHTML = renderPlan(sim.base);
+  fillWhatIf(sim.base);
+  $("#sim-result").innerHTML = `<div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div>`;
+}
+
+function renderPlan(plan, moved = new Set(), away = "") {
+  if (!plan.terms.length) return `<div class="empty">已符合所有畢業條件</div>`;
+  const cols = plan.terms.map((t) => {
+    const grad = t.term === plan.graduation;
+    return `<div class="term ${t.term === away ? "away" : ""} ${grad ? "grad" : ""}">
+      <div class="term-head"><span>${t.term}${grad ? " 🎓" : ""}</span><span class="muted small">${t.credits} 學分</span></div>
+      ${t.term === away ? '<div class="small" style="margin-bottom:4px">✈ 出國交換</div>' : ""}
+      ${t.courses.map((c) => courseTag(c, moved.has(c.code) ? "moved" : "")).join("")}
+      ${t.other_credits ? `<div class="other">其他學分 ${t.other_credits}</div>` : ""}
+      ${!t.courses.length && !t.other_credits ? '<div class="muted small">（無本系課程）</div>' : ""}
+    </div>`;
+  }).join("");
+  const warn = plan.unplaceable.length
+    ? `<div class="issue FAIL" style="margin-top:8px">排不進去：${plan.unplaceable.map((c) => courseTag(c)).join(" ")}</div>` : "";
+  return cols + warn;
+}
+
+function fillWhatIf(plan) {
+  const planned = plan.terms.flatMap((t) => t.courses.map((c) => ({ ...c, term: t.term })));
+  $("#skip-course").innerHTML = `<option value="">（不設定）</option>` +
+    planned.map((c) => `<option value="${c.code}" data-term="${c.term}">${c.code} ${esc(c.name)}（原排 ${c.term}）</option>`).join("");
+  const terms = plan.terms.map((t) => t.term);
+  $("#skip-term").innerHTML = terms.map((t) => `<option>${t}</option>`).join("");
+  $("#away-term").innerHTML = `<option value="">（不設定）</option>` + terms.map((t) => `<option>${t}</option>`).join("");
+}
+
+$("#skip-course").addEventListener("change", (e) => {
+  const opt = e.target.selectedOptions[0];
+  if (opt && opt.dataset.term) $("#skip-term").value = opt.dataset.term;
+});
+
+$("#reset-sim").addEventListener("click", () => {
+  $("#skip-course").value = ""; $("#away-term").value = "";
+  $("#base-plan").innerHTML = renderPlan(BASE_PLAN);
+  $("#sim-result").innerHTML = `<div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div>`;
+});
+
+$("#run-sim").addEventListener("click", async () => {
+  const params = new URLSearchParams();
+  const code = $("#skip-course").value, away = $("#away-term").value;
+  if (code) params.append("skip", `${code}@${$("#skip-term").value}`);
+  if (away) { params.append("away", away); params.append("away_credits", $("#away-credits").value || "0"); }
+  if (!code && !away) {
+    $("#sim-result").innerHTML = `<div class="muted small">請先選一門課，或選一個交換學期。</div>`;
+    return;
+  }
+  try {
+    const sim = await api(`/api/students/${encodeURIComponent(CURRENT.id)}/simulate?${params}`);
+    const sc = sim.scenario;
+    const movedCodes = new Set(sim.base.terms.flatMap((t) => t.courses.map((c) => [c.code, t.term]))
+      .filter(([c, t]) => { const n = sc.terms.find((x) => x.courses.some((y) => y.code === c)); return !n || n.term !== t; })
+      .map(([c]) => c));
+    const delayed = sc.delay_terms > 0 || !sc.feasible;
+    $("#sim-result").innerHTML = `
+      <div class="small muted">條件：${sc.conditions.map(esc).join("；")}</div>
+      <div class="verdict ${delayed ? "delay" : "same"}">
+        ${!sc.feasible ? "⚠ 此方案排不完" : delayed ? `會延畢 ${sc.delay_terms} 學期：${sim.base.graduation} → ${sc.graduation}` : `不影響畢業：仍可在 ${sc.graduation} 畢業`}
+        <ul class="impact">${sc.impact.slice(0, -1).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+      </div>
+      <div class="muted small" style="margin-bottom:6px">模擬後的路徑（紅框＝被往後推的課）</div>
+      <div class="timeline">${renderPlan(sc, movedCodes, away)}</div>`;
+  } catch (err) {
+    $("#sim-result").innerHTML = `<div class="issue FAIL">${esc(err.message)}</div>`;
+  }
+});
+
+$("#student-select").addEventListener("change", (e) => loadStudent(e.target.value));
+
+// ---------- 先修關係圖 ----------
+function renderGraph() {
+  const { courses, edges } = META;
+  const byCode = Object.fromEntries(courses.map((c) => [c.code, c]));
+  const linked = new Set(edges.flatMap((e) => [e.from, e.to]));
+  const nodes = courses.filter((c) => linked.has(c.code));
+  // 層級 = 最長先修鏈深度（courses 已是拓樸順序）
+  const layer = {};
+  nodes.forEach((c) => {
+    const parents = edges.filter((e) => e.to === c.code).map((e) => layer[e.from] ?? 0);
+    layer[c.code] = parents.length ? Math.max(...parents) + 1 : 0;
+  });
+  const cols = {};
+  nodes.forEach((c) => (cols[layer[c.code]] ||= []).push(c.code));
+  const W = 140, H = 44, GX = 26, GY = 12, PAD = 6;
+  const pos = {};
+  Object.entries(cols).forEach(([l, codes]) => codes.forEach((code, i) => {
+    pos[code] = { x: PAD + l * (W + GX), y: PAD + i * (H + GY) };
+  }));
+  const width = PAD * 2 + Object.keys(cols).length * (W + GX) - GX;
+  const height = PAD * 2 + Math.max(...Object.values(cols).map((c) => c.length)) * (H + GY) - GY;
+  const svg = $("#dag");
+  svg.setAttribute("width", width); svg.setAttribute("height", height);
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const typeColor = { required: "var(--c-required)", college: "var(--c-college)", selective: "var(--c-selective)" };
+  svg.innerHTML = edges.map((e) => {
+    const a = pos[e.from], b = pos[e.to];
+    const x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2, mx = (x1 + x2) / 2;
+    return `<path class="edge ${e.soft ? "soft" : ""}" data-from="${e.from}" data-to="${e.to}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+  }).join("") + nodes.map((c) => {
+    const p = pos[c.code];
+    return `<g class="node" data-code="${c.code}" transform="translate(${p.x},${p.y})">
+      <rect width="${W}" height="${H}"></rect>
+      <rect width="4" height="${H}" style="fill:${typeColor[c.type] || "var(--muted)"};stroke:none"></rect>
+      <text x="12" y="17" class="tcode">${c.code}・${c.terms.map((t) => (t === "fall" ? "上" : "下")).join("/")}</text>
+      <text x="12" y="34">${esc(c.name)}</text></g>`;
+  }).join("");
+  svg.querySelectorAll(".node").forEach((g) => g.addEventListener("click", () => selectCourse(g.dataset.code)));
+  $("#isolated").innerHTML = courses.filter((c) => !linked.has(c.code)).map((c) => courseTag(c)).join("");
+  $("#bottlenecks").innerHTML = META.bottlenecks.map((b) => `<tr data-code="${b.code}">
+    <td>${courseTag(b)}</td><td class="small muted">鏈長 ${b.depth}・卡住 ${b.blocked} 門</td></tr>`).join("");
+  document.querySelectorAll("#bottlenecks tr").forEach((tr) => tr.addEventListener("click", () => selectCourse(tr.dataset.code)));
+}
+
+async function selectCourse(code) {
+  const info = await api(`/api/courses/${encodeURIComponent(code)}`);
+  const anc = new Set(info.ancestors.map((c) => c.code)), desc = new Set(info.descendants.map((c) => c.code));
+  document.querySelectorAll("#dag .node").forEach((g) => {
+    const c = g.dataset.code;
+    g.classList.toggle("sel", c === code);
+    g.classList.toggle("anc", anc.has(c));
+    g.classList.toggle("desc", desc.has(c));
+    g.classList.toggle("dim", c !== code && !anc.has(c) && !desc.has(c));
+  });
+  const related = new Set([code, ...anc, ...desc]);
+  document.querySelectorAll("#dag .edge").forEach((e) =>
+    e.classList.toggle("hot", related.has(e.dataset.from) && related.has(e.dataset.to)));
+  $("#impact-card").innerHTML = `
+    <h3>${esc(info.code)} ${esc(info.name)}</h3>
+    <div class="muted small">${info.credits} 學分・開課：${info.terms.map((t) => (t === "fall" ? "上學期" : "下學期")).join("、")}</div>
+    <div style="margin-top:12px"><b>要先修</b>（${info.ancestors.length}）</div>
+    <div class="courses">${info.ancestors.map((c) => courseTag(c)).join("") || '<span class="muted small">無</span>'}</div>
+    <div style="margin-top:12px"><b>沒修會卡到</b>（${info.descendants.length}）</div>
+    <div class="courses">${info.descendants.map((c) => courseTag(c, "moved")).join("") || '<span class="muted small">無</span>'}</div>
+    ${info.soft ? '<div class="muted small" style="margin-top:10px">＊含建議先修：依建議修課學期推論，非正式擋修。</div>' : ""}`;
+}
+
+// ---------- 規則來源 ----------
+function renderRules() {
+  $("#sources").innerHTML = Object.entries(META.sources).map(([k, v]) => `<li>${esc(v)} <span class="muted small">(${k})</span></li>`).join("");
+  $("#assumptions").innerHTML = META.assumptions.map((a) => `<li>${esc(a)}</li>`).join("");
+}
+
+// ---------- 啟動 ----------
+(async function init() {
+  [META, BATCH] = await Promise.all([api("/api/meta"), api("/api/students")]);
+  $("#program").textContent = `${META.program}・${META.cohort} 學年度入學・規則庫依官方應修科目表`;
+  $("#cap").textContent = META.max_credits_per_term;
+  $("#student-select").innerHTML = BATCH.map((s) => `<option value="${s.id}">${s.id}（${STATUS[s.status]}）</option>`).join("");
+  renderBatch();
+  renderGraph();
+  renderRules();
+  await loadStudent(BATCH.find((s) => s.status === "FAIL")?.id || BATCH[0].id);
+  let saved = null;
+  try { saved = localStorage.getItem("twin-view"); } catch {}
+  if (saved) show(saved);
+})();
+</script>
+</body>
+</html>
