@@ -1,6 +1,6 @@
 ﻿# 現有實作與待建置項目
 
-更新日期：2026-10-06。依目前程式整理；本次文件工作未執行功能測試。
+更新日期：2026-10-08。依目前程式整理；測試 38 項通過。
 
 ## 現有能力
 
@@ -11,14 +11,16 @@
 | 紀錄處理 | 不及格、重修、同課號去重、本系未核對課、類別與外系課 |
 | 課程圖 | 前後依賴、瓶頸及循環檢查 |
 | 規劃器 | 貪婪排課，考慮季節、先修、學分上限及不修課／交換情境 |
-| 命令列 | 單人查詢及固定 CSV 中學生的批次文字審查 |
-| 測試程式 | `tests/test_rule_engine.py`、`tests/test_planner.py`、`tests/test_curriculum_114.py` |
+| 命令列 | 單人查詢及依應屆名單的批次文字審查 |
+| 名單比對 | 應屆名單對修課紀錄：無紀錄、不在名單、重複、學號空白列入異常清單（`academic_twin/roster.py`） |
+| 測試程式 | `tests/test_rule_engine.py`、`tests/test_planner.py`、`tests/test_curriculum_114.py`、`tests/test_roster.py` |
 
 ## 資料與基本操作
 
 - `data/curriculum_im_114.json`：114 年度規則，含來源連結與待確認假設。
 - `data/sources/im_114_table.pdf`、`data/sources/im_114_coursemap.pdf`：原始來源。
 - `data/students/sample_students.csv`：匿名示例紀錄。
+- `data/students/sample_roster.csv`：示例應屆名單，含一位無修課紀錄的 S005 以示範異常清單。
 - `tests/fixtures/curriculum_sample.json`：測試示例規則。
 
 現有入口固定使用上述正式目錄 JSON 與示例 CSV，尚無任意上傳或逐人年度切換。CSV 欄位如下，`category` 可空白：
@@ -31,17 +33,18 @@ student_id,code,name,credits,grade,term,category
 
 ```powershell
 python app.py
+python app.py --roster 名單.csv
 python app.py S002
 python app.py S002 --plan
 python app.py --bottlenecks
 ```
 
-依序為批次審查、單人查詢、修課規劃及瓶頸分析；虛擬環境可使用 `.venv\Scripts\python.exe`。
+依序為批次審查、指定名單的批次審查、單人查詢、修課規劃及瓶頸分析；虛擬環境可使用 `.venv\Scripts\python.exe`。
 
 ## 待建置
 
 - 系辦單人查詢、批次審查、明細及篩選介面。
-- 上傳與校務欄位對接、格式檢查、名單完整性核對。
+- 上傳與校務欄位對接、修課資料格式檢查。
 - AI 文件解析確認與依審查結果生成說明。
 - 按年度、學制選用規則及版本管理。
 - 舊課號、替代課、抵免與特殊核准的認列模型。
@@ -65,7 +68,7 @@ python app.py --bottlenecks
 
 ## 限制
 
-批次入口從修課 CSV 取得學生集合，尚無獨立應屆名單比對，無法列出完全沒有修課紀錄的人。
+應屆名單目前只讀 `student_id`，尚未帶入每人的適用年度與學制；網頁固定使用示例名單，尚無上傳。
 
 排課最多模擬 16 學期，使用貪婪法，畢業學期為估計且不保證全域最早。非指定課號需求以「其他學分」補足，尚未逐門安排，也未處理時間衝突、名額及實際開課異動。
 

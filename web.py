@@ -33,6 +33,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(service.meta())
             if route == ["students"]:
                 return self._json(service.batch())
+            if route == ["roster-anomalies"]:
+                return self._json(service.roster_anomalies())
             if len(route) == 2 and route[0] == "students":
                 return self._json(service.student(route[1]))
             if len(route) == 3 and route[0] == "students" and route[2] == "simulate":

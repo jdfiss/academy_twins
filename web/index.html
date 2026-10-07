@@ -139,6 +139,13 @@ ol.assume li { margin-bottom: 8px; }
         <tbody id="batch-rows"></tbody>
       </table>
     </div>
+    <div class="card" id="roster-card" style="margin-top: 16px">
+      <h2>名單異常 <span class="muted small">應屆名單與修課紀錄比對，以下學生未納入審查</span></h2>
+      <table>
+        <thead><tr><th>學號</th><th>問題</th></tr></thead>
+        <tbody id="roster-rows"></tbody>
+      </table>
+    </div>
   </section>
 
   <!-- 學生 -->
@@ -285,6 +292,12 @@ function renderBatch() {
   }).join("") || `<tr><td colspan="5" class="empty">沒有符合的學生</td></tr>`;
   document.querySelectorAll("#batch-rows tr[data-id]").forEach((tr) =>
     tr.addEventListener("click", () => { loadStudent(tr.dataset.id); show("student"); }));
+}
+
+function renderRoster(rows) {
+  $("#roster-rows").innerHTML = rows.map((a) =>
+    `<tr><td><b>${a.id ? esc(a.id) : "—"}</b></td><td class="small">${esc(a.message)}</td></tr>`
+  ).join("") || `<tr><td colspan="2" class="empty">名單比對無異常</td></tr>`;
 }
 
 // ---------- 學生 ----------
@@ -492,7 +505,9 @@ function renderRules() {
 
 // ---------- 啟動 ----------
 (async function init() {
-  [META, BATCH] = await Promise.all([api("/api/meta"), api("/api/students")]);
+  let roster;
+  [META, BATCH, roster] = await Promise.all([api("/api/meta"), api("/api/students"), api("/api/roster-anomalies")]);
+  renderRoster(roster);
   $("#program").textContent = `${META.program}・${META.cohort} 學年度入學・規則庫依官方應修科目表`;
   $("#cap").textContent = META.max_credits_per_term;
   $("#student-select").innerHTML = BATCH.map((s) => `<option value="${s.id}">${s.id}（${STATUS[s.status]}）</option>`).join("");

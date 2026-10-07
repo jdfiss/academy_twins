@@ -1,7 +1,8 @@
 """NCU Academic Twin — 規則庫 + 畢業資格檢查 + 先修圖 + 路徑模擬。
 
 用法：
-    python app.py                              # 系辦批次畢審（所有學生）
+    python app.py                              # 系辦批次畢審（依應屆名單）
+    python app.py --roster 名單.csv            # 指定應屆名單
     python app.py S002                         # 單一學生的畢業進度
     python app.py S002 --plan                  # 排出到畢業的修課計畫
     python app.py S002 --skip IM2001@114-1     # What-if：114-1 不修資料結構
@@ -20,11 +21,13 @@ from pathlib import Path
 from academic_twin import knowledge_base
 from academic_twin.graph import CourseGraph
 from academic_twin.planner import Plan, Scenario, Term, explain_delay, plan
+from academic_twin.roster import RosterCheck, check_roster, load_roster
 from academic_twin.rule_engine import AuditReport, Record, Status, audit
 
 ROOT = Path(__file__).parent
 KB_PATH = ROOT / "data" / "curriculum_im_114.json"
 STUDENTS_PATH = ROOT / "data" / "students" / "sample_students.csv"
+ROSTER_PATH = ROOT / "data" / "students" / "sample_roster.csv"
 
 STATUS_LABEL = {Status.PASS: "✅ Pass", Status.WARNING: "⚠️ Warning", Status.FAIL: "❌ Fail",
                 Status.MANUAL_REVIEW: "🔍 Manual Review"}
@@ -72,8 +75,9 @@ def print_student(kb, sid: str, report: AuditReport) -> None:
         print(f"  ! {rec.code} {rec.name}（{rec.term}）不及格，尚未重修通過")
 
 
-def print_batch(kb, reports: dict[str, AuditReport]) -> None:
-    print(f"系辦批次畢審：{kb.program} {kb.cohort} 學年度，共 {len(reports)} 位\n")
+def print_batch(kb, reports: dict[str, AuditReport], check: RosterCheck) -> None:
+    roster_size = len(check.to_audit) + len(check.no_records)
+    print(f"系辦批次畢審：{kb.program} {kb.cohort} 學年度，應屆名單 {roster_size} 位，審查 {len(reports)} 位\n")
     for sid, report in reports.items():
         reasons = [f"{r.requirement.id} {r.requirement.title}" for r in report.results if not r.satisfied]
         t = report.transcript
@@ -82,6 +86,22 @@ def print_batch(kb, reports: dict[str, AuditReport]) -> None:
         if t.dept_unverified and not reasons:
             reasons.append(f"{len(t.dept_unverified)} 門本系選修未在規則庫核對")
         print(f"  {sid}  {STATUS_LABEL[report.status]:<18} {'；'.join(reasons) or '全部符合'}")
+    print_roster_anomalies(check)
+
+
+def print_roster_anomalies(check: RosterCheck) -> None:
+    if not check.anomalies:
+        print("\n名單比對：無異常")
+        return
+    print(f"\n名單異常（{check.anomalies} 筆）")
+    for sid in check.no_records:
+        print(f"  ! {sid}  在應屆名單上，但沒有任何修課紀錄，未審查")
+    for sid in check.not_on_roster:
+        print(f"  ? {sid}  有修課紀錄，但不在應屆名單，未審查")
+    for sid in check.duplicates:
+        print(f"  ? {sid}  應屆名單重複列出")
+    for line in check.blank_rows:
+        print(f"  ? 名單第 {line} 行學號空白")
 
 
 def print_plan(kb, title: str, p: Plan) -> None:
@@ -135,6 +155,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--course", help="查這門課的先修與後續影響")
     parser.add_argument("--bottlenecks", action="store_true")
     parser.add_argument("--assumptions", action="store_true", help="列出規則庫中尚待確認的假設")
+    parser.add_argument("--roster", type=Path, default=ROSTER_PATH, help="應屆名單 CSV（需有 student_id 欄）")
     args = parser.parse_args(argv)
 
     kb = knowledge_base.load(KB_PATH)
@@ -151,14 +172,20 @@ def main(argv: list[str]) -> None:
         return
 
     students = load_students(STUDENTS_PATH)
-    reports = {sid: audit(kb, records) for sid, records in students.items()}
     if not args.student:
-        return print_batch(kb, reports)
+        try:
+            roster_ids, blank_rows = load_roster(args.roster)
+        except FileNotFoundError:
+            sys.exit(f"找不到應屆名單：{args.roster}")
+        except ValueError as e:
+            sys.exit(str(e))
+        check = check_roster(roster_ids, students, blank_rows)
+        return print_batch(kb, {sid: audit(kb, students[sid]) for sid in check.to_audit}, check)
 
     sid = args.student
-    if sid not in reports:
+    if sid not in students:
         sys.exit(f"找不到學生 {sid}")
-    report = reports[sid]
+    report = audit(kb, students[sid])
     print_student(kb, sid, report)
     if not (args.plan or args.skip or args.away):
         return

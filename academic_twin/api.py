@@ -8,11 +8,13 @@ from pathlib import Path
 from . import knowledge_base
 from .graph import CourseGraph
 from .planner import Plan, Scenario, Term, explain_delay, plan
+from .roster import check_roster, load_roster
 from .rule_engine import AuditReport, Record, audit
 
 ROOT = Path(__file__).parent.parent
 KB_PATH = ROOT / "data" / "curriculum_im_114.json"
 STUDENTS_PATH = ROOT / "data" / "students" / "sample_students.csv"
+ROSTER_PATH = ROOT / "data" / "students" / "sample_roster.csv"
 
 
 def load_students(path: Path) -> dict[str, list[Record]]:
@@ -27,10 +29,13 @@ def load_students(path: Path) -> dict[str, list[Record]]:
 
 
 class AcademicTwinService:
-    def __init__(self, kb_path: Path = KB_PATH, students_path: Path = STUDENTS_PATH):
+    def __init__(self, kb_path: Path = KB_PATH, students_path: Path = STUDENTS_PATH,
+                 roster_path: Path = ROSTER_PATH):
         self.kb = knowledge_base.load(kb_path)
         self.graph = CourseGraph(self.kb)
         self.students = load_students(students_path)
+        roster_ids, blank_rows = load_roster(roster_path)
+        self.roster = check_roster(roster_ids, self.students, blank_rows)
 
     # ---------- 共用 ----------
     def course(self, code: str) -> dict:
@@ -78,7 +83,7 @@ class AcademicTwinService:
     # ---------- 畢審 ----------
     def batch(self) -> list[dict]:
         rows = []
-        for sid in self.students:
+        for sid in self.roster.to_audit:
             report = self._report(sid)
             t = report.transcript
             reasons = [f"{r.requirement.id} {r.requirement.title}" for r in report.results if not r.satisfied]
@@ -95,6 +100,16 @@ class AcademicTwinService:
                 "reasons": reasons,
             })
         return rows
+
+    def roster_anomalies(self) -> list[dict]:
+        """名單比對異常；與 batch() 合起來涵蓋名單上每位學生。"""
+        r = self.roster
+        return (
+            [{"id": sid, "kind": "no_records", "message": "在應屆名單上，但沒有任何修課紀錄，未審查"} for sid in r.no_records]
+            + [{"id": sid, "kind": "not_on_roster", "message": "有修課紀錄，但不在應屆名單，未審查"} for sid in r.not_on_roster]
+            + [{"id": sid, "kind": "duplicate", "message": "應屆名單重複列出"} for sid in r.duplicates]
+            + [{"id": None, "kind": "blank", "message": f"名單第 {line} 行學號空白"} for line in r.blank_rows]
+        )
 
     def student(self, sid: str) -> dict:
         report = self._report(sid)
