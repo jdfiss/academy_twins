@@ -16,6 +16,8 @@ class Course:
     prereqs: tuple[str, ...]  # 正式擋修
     soft_prereqs: tuple[str, ...] = ()  # 建議先修（非擋修，排課時仍遵守）
     field: str | None = None
+    # 通過後學分計入哪一塊：None = 院系必修；dept_elective = 本系選修；outside = 外系選修（必選課用）
+    counts_as: str | None = None
 
 
 @dataclass(frozen=True)
@@ -27,7 +29,8 @@ class Source:
 @dataclass(frozen=True)
 class Requirement:
     id: str
-    kind: str  # all_of / n_of / credits_from / category_credits / category_count / total_credits
+    kind: str  # all_of / taken_all / n_of / credits_from / category_credits / category_count /
+    #            dept_elective_credits / total_credits
     title: str
     source: Source
     courses: tuple[str, ...] = ()
@@ -61,6 +64,8 @@ class KnowledgeBase:
     categories: dict[str, str] = field(default_factory=dict)  # 類別 → 上層類別（如 通識核心 → 通識）
     credit_policy: CreditPolicy = field(default_factory=CreditPolicy)
     assumptions: list[str] = field(default_factory=list)
+    # True：本系課號不在規則庫一律算本系選修（已確認規則）；False：暫算本系選修但標 Warning 待核對
+    dept_prefix_is_elective: bool = False
 
     def cite(self, source: Source) -> str:
         return f"{self.sources.get(source.doc, source.doc)} {source.ref}"
@@ -87,6 +92,7 @@ def load(path: str | Path) -> KnowledgeBase:
             prereqs=tuple(c.get("prereqs", [])),
             soft_prereqs=tuple(c.get("soft_prereqs", [])),
             field=c.get("field"),
+            counts_as=c.get("counts_as"),
         )
         for c in raw["courses"]
     }
@@ -105,7 +111,7 @@ def load(path: str | Path) -> KnowledgeBase:
                 n=r.get("n", 0),
                 min_credits=r.get("min_credits", 0),
                 course_type=r.get("course_type"),
-                exclusive=r.get("exclusive", kind in ("all_of", "n_of", "credits_from")),
+                exclusive=r.get("exclusive", kind in ("all_of", "taken_all", "n_of", "credits_from")),
             )
         )
 
@@ -129,6 +135,7 @@ def load(path: str | Path) -> KnowledgeBase:
         categories=raw.get("categories", {}),
         credit_policy=policy,
         assumptions=raw.get("assumptions", []),
+        dept_prefix_is_elective=raw.get("dept_prefix_is_elective", False),
     )
     _validate(kb)
     return kb
@@ -138,6 +145,8 @@ def _validate(kb: KnowledgeBase) -> None:
     """規則庫自我檢查：引用到不存在的課號／類別就直接報錯，避免規則悄悄失效。"""
     errors = []
     for c in kb.courses.values():
+        if c.counts_as not in (None, "dept_elective", "outside"):
+            errors.append(f"{c.code} 的 counts_as「{c.counts_as}」不是 dept_elective 或 outside")
         for p in c.prereqs + c.soft_prereqs:
             if p not in kb.courses:
                 errors.append(f"{c.code} 的先修 {p} 不在課程清單")

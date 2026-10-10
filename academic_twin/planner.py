@@ -66,9 +66,15 @@ class Plan:
         return next((t for t, cs in self.terms.items() if code in cs), None)
 
 
+def settled_courses(report: AuditReport) -> set[str]:
+    """排課時視為已完成的課：已通過，加上已修過（不及格也算）的必選課。"""
+    taken = {c for r in report.results if r.requirement.kind == "taken_all" for c in r.used}
+    return set(report.passed_courses) | taken
+
+
 def targets_from_audit(kb: KnowledgeBase, graph: CourseGraph, report: AuditReport) -> tuple[list[str], int]:
     """從畢審結果推出：還必須修哪些課，以及還缺多少自由學分。"""
-    passed = set(report.passed_courses)
+    passed = settled_courses(report)
     targets: list[str] = []
 
     def reachable(c: str) -> bool:
@@ -81,7 +87,7 @@ def targets_from_audit(kb: KnowledgeBase, graph: CourseGraph, report: AuditRepor
         req = r.requirement
         if r.satisfied or req.kind == "total_credits":
             continue
-        if req.kind == "all_of":
+        if req.kind in ("all_of", "taken_all"):
             targets += [c for c in r.missing if c not in targets]
         elif req.kind == "n_of":
             options = [c for c in by_ease(r.missing) if c not in targets and reachable(c)]
@@ -103,7 +109,10 @@ def targets_from_audit(kb: KnowledgeBase, graph: CourseGraph, report: AuditRepor
     total = next((r for r in report.results if r.requirement.kind == "total_credits"), None)
     total_short = total.shortfall if total else 0
     category_short = sum(r.shortfall for r in report.results if r.requirement.kind == "category_credits")
-    free_needed = max(total_short - sum(kb.courses[c].credits for c in targets), category_short)
+    dept_short = sum(r.shortfall for r in report.results if r.requirement.kind == "dept_elective_credits")
+    dept_short = max(dept_short - sum(kb.courses[c].credits for c in targets
+                                      if kb.courses[c].counts_as == "dept_elective"), 0)
+    free_needed = max(total_short - sum(kb.courses[c].credits for c in targets), category_short + dept_short)
     return targets, free_needed
 
 
@@ -116,7 +125,7 @@ def plan(kb: KnowledgeBase, graph: CourseGraph, report: AuditReport, start: Term
          scenario: Scenario | None = None) -> Plan:
     scenario = scenario or Scenario()
     targets, free_left = targets_from_audit(kb, graph, report)
-    done = set(report.passed_courses)
+    done = settled_courses(report)
     remaining = set(targets)
     cap = kb.max_credits_per_term
 

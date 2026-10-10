@@ -12,12 +12,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from academic_twin.api import ROSTER_PATH, STUDENTS_PATH, AcademicTwinService
+from academic_twin.api import REVIEWS_PATH, ROSTER_PATH, STUDENTS_PATH, AcademicTwinService
 from academic_twin.records import RecordsError
 
 STATIC = Path(__file__).parent / "web"
 MAX_UPLOAD = 20 * 1024 * 1024
-service = AcademicTwinService()
+service = AcademicTwinService(reviews_path=REVIEWS_PATH)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -59,10 +59,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": str(e)}, 400)
 
     def do_POST(self):
-        """上傳資料只放在記憶體，重開伺服器就回到示例資料。
+        """上傳資料只放在記憶體，重開伺服器就回到示例資料；覆核紀錄存檔。
 
         POST /api/upload  {"records": {"name", "text"}?, "roster": {"name", "text"}?}
         POST /api/reset   回到示例資料
+        POST /api/students/<id>/reviews  {"code", "term", "action", "category"?, "reviewer", "note"?}
         """
         route = urlparse(self.path).path.strip("/")
         length = int(self.headers.get("Content-Length") or 0)
@@ -70,11 +71,30 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "檔案太大（上限 20 MB）"}, 413)
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
+            if not isinstance(body, dict):
+                raise TypeError
+        except (ValueError, TypeError):
+            return self._json({"error": "請求內容不是有效的 JSON 物件"}, 400)
+        try:
             if route == "api/upload":
-                files = {k: (body[k]["name"], body[k]["text"]) for k in ("records", "roster") if body.get(k)}
+                files = {}
+                for k in ("records", "roster"):
+                    f = body.get(k)
+                    if f:
+                        if not (isinstance(f, dict) and isinstance(f.get("name"), str) and isinstance(f.get("text"), str)):
+                            return self._json({"error": f"{k} 需要 name 與 text 欄位"}, 400)
+                        files[k] = (f["name"], f["text"])
                 if not files:
                     return self._json({"error": "沒有選擇檔案"}, 400)
                 service.load_data(**files)
+            elif route.startswith("api/students/") and route.endswith("/reviews"):
+                missing = [k for k in ("code", "term", "action") if not isinstance(body.get(k), str)]
+                if missing:
+                    return self._json({"error": f"缺少欄位：{'、'.join(missing)}"}, 400)
+                return self._json(service.add_review(
+                    unquote(route.split("/")[2]), body["code"], body["term"], body["action"],
+                    str(body.get("reviewer") or ""), str(body.get("category") or ""), str(body.get("note") or ""),
+                ))
             elif route == "api/reset":
                 service.load_data(
                     (STUDENTS_PATH.name, STUDENTS_PATH.read_text(encoding="utf-8-sig")),
@@ -85,8 +105,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(service.data_source())
         except RecordsError as e:
             return self._json({"error": "資料格式錯誤，未套用", "errors": e.errors}, 400)
-        except (ValueError, KeyError, TypeError) as e:
-            return self._json({"error": f"上傳內容格式錯誤：{e}"}, 400)
+        except KeyError as e:
+            return self._json({"error": str(e.args[0])}, 404)
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
 
     def _json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")

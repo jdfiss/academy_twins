@@ -4,6 +4,7 @@ from pathlib import Path
 
 from academic_twin import knowledge_base
 from academic_twin.graph import CourseGraph
+from academic_twin.planner import Term, plan
 from academic_twin.rule_engine import Record, Status, audit
 
 ROOT = Path(__file__).parent.parent
@@ -49,12 +50,40 @@ class Curriculum114Test(unittest.TestCase):
         graph = CourseGraph(KB)
         self.assertIn("IM3028", graph.ancestors("IM4001"))
 
-    def test_full_record_with_unverified_electives_is_warning(self):
+    def test_full_record_with_im_electives_passes(self):
+        # 說明投影片：IM 課號選修即本系選修，不再標 Warning
         records = [course(c) for c in COLLEGE_AND_DEPT] + common_requirements()
         records += [Record(f"IM9{i:03}", "本系選修", 3, 85, "117-1") for i in range(7)]  # 21 學分
         report = audit(KB, records)
         self.assertEqual(report.total_credits, 84 + 25 + 21)
-        self.assertEqual(report.status, Status.WARNING)
+        self.assertEqual(report.credit_breakdown["本系選修"], 21 + 6)  # 含 IM1013、IM3029
+        self.assertEqual(report.credit_breakdown["外系認列"], 3)  # MA1006
+        self.assertEqual(report.status, Status.PASS)
+
+    def test_selective_course_only_needs_to_be_taken(self):
+        # 說明投影片：必選課「一定要修過，但不通過沒關係」；不及格沒有學分
+        passed = audit(KB, [course("IM1013"), course("IM3029"), course("MA1006")])
+        failed = audit(KB, [course("IM1013", grade=40), course("IM3029"), course("MA1006")])
+        self.assertTrue(result(failed, "R3").satisfied)
+        self.assertEqual(result(passed, "R11").have - result(failed, "R11").have, 3)
+        self.assertFalse(result(audit(KB, [course("IM1013"), course("IM3029")]), "R3").satisfied)
+
+    def test_dept_elective_needs_16_credits(self):
+        base = [course(c) for c in COLLEGE_AND_DEPT] + common_requirements()
+        short = audit(KB, base + [Record(f"IM9{i:03}", "本系選修", 3, 85, "117-1") for i in range(3)])
+        self.assertEqual((result(short, "R11").have, result(short, "R11").satisfied), (6 + 9, False))
+        self.assertEqual(short.status, Status.FAIL)
+
+    def test_ma1006_shares_outside_cap(self):
+        records = [course("MA1006")] + [Record(f"EC{i:04}", "外系", 3, 85, "117-1") for i in range(4)]
+        self.assertEqual(audit(KB, records).credit_breakdown["外系認列"], 12)
+
+    def test_failed_selective_does_not_block_planning(self):
+        report = audit(KB, [course("MA1005", term="114-1"), course("IM1013", grade=40, term="114-1")])
+        p = plan(KB, CourseGraph(KB), report, Term(114, 2))
+        self.assertEqual(p.unplaceable, [])
+        self.assertNotIn("IM1013", p.targets)
+        self.assertEqual(p.term_of("IM1023"), Term(114, 2))
 
     def test_outside_credits_capped_at_12(self):
         records = [course(c) for c in COLLEGE_AND_DEPT] + common_requirements()
@@ -97,7 +126,7 @@ class Curriculum114Test(unittest.TestCase):
         students = app.load_students(app.STUDENTS_PATH)
         statuses = {sid: audit(KB, recs).status for sid, recs in students.items()}
         self.assertEqual(statuses, {
-            "S001": Status.WARNING,
+            "S001": Status.PASS,
             "S002": Status.FAIL,
             "S003": Status.MANUAL_REVIEW,
             "S004": Status.FAIL,

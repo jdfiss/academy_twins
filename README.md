@@ -8,6 +8,7 @@
 - **AI 不負責最終資格判定**：所有判定由規則引擎處理
 - **每個判定都能回溯到規章條文**
 - **規則庫看不懂的不猜**：不確定的紀錄標為 Warning 或 Manual Review，交由系辦確認
+- **人工決定可追溯**：系辦只能覆核引擎無法判定的紀錄，每個決定記下覆核人、時間、規則版本與理由
 
 ## 快速開始
 只需要 Python 3.10+，不用安裝任何套件。
@@ -36,6 +37,7 @@ data/sources/                 官方應修科目表與課程地圖 PDF
 academic_twin/
   knowledge_base.py           載入並驗證規則庫
   rule_engine.py              畢業資格判定：Pass / Warning / Fail / Manual Review
+  reviews.py                  人工覆核紀錄（存 data/reviews/，含學生資料，不進版控）
   graph.py                    先修關係 DAG：影響範圍、瓶頸課
   planner.py                  學期排課與 What-if 延畢分析
   api.py                      引擎結果 → JSON（給網頁與之後的 LLM 層）
@@ -45,7 +47,7 @@ web.py, web/index.html        網頁介面
 
 ## 已知限制
 - 官方文件沒有正式擋修規定；圖中的先修關係是由建議修課學期推論的「建議先修」，只用於排課，不影響畢業判定
-- 本系選修課程目錄（課號、學分）尚未建檔，不在規則庫的 IM 課號暫以本系選修計並標為 Warning
+- 必選課只檢查有無修過（不論成績）；本系選修以 IM 課號認定，非 IM 課號的本系認列需人工覆核
 - 其他待確認的解讀見 `python app.py --assumptions` 或網頁「規則來源」分頁
 
 ## 資料來源

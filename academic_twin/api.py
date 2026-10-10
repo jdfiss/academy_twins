@@ -12,22 +12,26 @@ from .graph import CourseGraph
 from .planner import Plan, Scenario, Term, explain_delay, plan
 from .records import RecordsError, parse_records
 from .roster import check_roster, parse_roster
-from .rule_engine import AuditReport, Record, audit
+from .reviews import ACTIONS, ReviewEntry, ReviewStore
+from .rule_engine import CATEGORY, AuditReport, Record, audit, classify
 
 ROOT = Path(__file__).parent.parent
 KB_PATH = ROOT / "data" / "curriculum_im_114.json"
 STUDENTS_PATH = ROOT / "data" / "students" / "sample_students.csv"
 ROSTER_PATH = ROOT / "data" / "students" / "sample_roster.csv"
+REVIEWS_PATH = ROOT / "data" / "reviews" / "decisions.json"  # 含學生資料，不進版控
 
 
 class AcademicTwinService:
     def __init__(self, kb_path: Path = KB_PATH, students_path: Path = STUDENTS_PATH,
-                 roster_path: Path = ROSTER_PATH):
+                 roster_path: Path = ROSTER_PATH, reviews_path: Path | None = None):
+        """reviews_path 為 None 時覆核紀錄只存在記憶體；網頁與命令列傳 REVIEWS_PATH。"""
         self.kb = knowledge_base.load(kb_path)
         # 規則版本：學年度 + 規則庫檔案雜湊，規則庫一改版本就不同
         digest = hashlib.sha256(kb_path.read_bytes()).hexdigest()[:12]
         self.rule_version = f"{self.kb.cohort}-{digest}"
         self.graph = CourseGraph(self.kb)
+        self.reviews = ReviewStore(reviews_path)
         self.load_data(
             (students_path.name, students_path.read_text(encoding="utf-8-sig")),
             (roster_path.name, roster_path.read_text(encoding="utf-8-sig")),
@@ -74,7 +78,7 @@ class AcademicTwinService:
     def _report(self, sid: str) -> AuditReport:
         if sid not in self.students:
             raise KeyError(f"找不到學生 {sid}")
-        return audit(self.kb, self.students[sid])
+        return audit(self.kb, self.students[sid], self.reviews.decisions(sid))
 
     def _next_term(self, sid: str) -> Term:
         return max(Term.parse(r.term) for r in self.students[sid]).next()
@@ -88,6 +92,8 @@ class AcademicTwinService:
             "max_credits_per_term": kb.max_credits_per_term,
             "sources": kb.sources,
             "assumptions": kb.assumptions,
+            "categories": list(kb.categories),
+            "review_actions": ACTIONS,
             "courses": [self.course(c) for c in self.graph.order],
             "edges": [
                 {"from": p, "to": c, "soft": self.graph.is_soft(p, c)}
@@ -127,6 +133,7 @@ class AcademicTwinService:
                 "satisfied": sum(r.satisfied for r in report.results),
                 "requirements": len(report.results),
                 "reasons": reasons,
+                "reviewed": len(t.reviewed),
             })
         return rows
 
@@ -141,7 +148,7 @@ class AcademicTwinService:
         )
 
     EXPORT_FIELDS = ["student_id", "status", "total_credits", "satisfied", "requirements", "reasons",
-                     "rule_version", "audited_at"]
+                     "reviewed", "rule_version", "audited_at"]
 
     def export_csv(self, audited_at: datetime | None = None) -> str:
         """批次審查結果 + 名單異常匯出成 CSV；每列附規則版本與審查時間。"""
@@ -153,7 +160,7 @@ class AcademicTwinService:
             writer.writerow({
                 "student_id": row["id"], "status": row["status"], "total_credits": row["total_credits"],
                 "satisfied": row["satisfied"], "requirements": row["requirements"],
-                "reasons": "；".join(row["reasons"]) or "全部符合",
+                "reasons": "；".join(row["reasons"]) or "全部符合", "reviewed": row["reviewed"],
                 "rule_version": self.rule_version, "audited_at": stamp,
             })
         for a in self.roster_anomalies():
@@ -163,10 +170,30 @@ class AcademicTwinService:
             })
         return out.getvalue()
 
+    # ---------- 人工覆核 ----------
+    def _review_entry(self, e: ReviewEntry) -> dict:
+        return {"code": e.code, "term": e.term, "action": e.action, "category": e.category, "label": e.label,
+                "reviewer": e.reviewer, "note": e.note, "decided_at": e.decided_at, "rule_version": e.rule_version,
+                "outdated": e.rule_version != self.rule_version}
+
+    def add_review(self, sid: str, code: str, term: str, action: str, reviewer: str,
+                   category: str = "", note: str = "") -> dict:
+        """記下覆核決定並回傳重新審查後的學生資料。只接受引擎無法判定的紀錄。"""
+        if sid not in self.students:
+            raise KeyError(f"找不到學生 {sid}")
+        raw = classify(self.kb, self.students[sid])
+        if (code, term) not in {(r.code, r.term) for r in raw.review + raw.dept_unverified}:
+            raise ValueError(f"{code}（{term}）不是待覆核的紀錄；規則庫能判定的紀錄不能人工改判")
+        if action == CATEGORY and category not in self.kb.categories:
+            raise ValueError(f"類別「{category}」不在規則庫")
+        self.reviews.add(sid, code, term, action, reviewer, self.rule_version, category, note)
+        return self.student(sid)
+
     def student(self, sid: str) -> dict:
         report = self._report(sid)
         t = report.transcript
         kb = self.kb
+        current = self.reviews.current(sid)
 
         def rec(r: Record) -> dict:
             return {"code": r.code, "name": r.name, "credits": r.credits, "grade": r.grade,
@@ -197,6 +224,10 @@ class AcademicTwinService:
                 "dept_unverified": [rec(r) for r in t.dept_unverified],
                 "failed": [rec(r) for r in t.failed],
             },
+            "reviews": [
+                {**rec(r), **self._review_entry(current[(r.code, r.term)])} for r, _ in t.reviewed
+            ],
+            "review_history": [self._review_entry(e) for e in reversed(self.reviews.history(sid))],
             "records": [rec(r) for r in sorted(self.students[sid], key=lambda r: (r.term, r.code))],
             "remaining_courses": [
                 self.course(c) for c in kb.courses if c not in t.passed

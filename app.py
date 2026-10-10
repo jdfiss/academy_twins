@@ -19,10 +19,11 @@ import sys
 from pathlib import Path
 
 from academic_twin import knowledge_base
-from academic_twin.api import AcademicTwinService
+from academic_twin.api import REVIEWS_PATH, AcademicTwinService
 from academic_twin.graph import CourseGraph
 from academic_twin.planner import Plan, Scenario, Term, explain_delay, plan
 from academic_twin.records import RecordsError, load_students
+from academic_twin.reviews import ReviewStore
 from academic_twin.roster import RosterCheck, check_roster, load_roster
 from academic_twin.rule_engine import AuditReport, Status, audit
 
@@ -39,7 +40,7 @@ def course_label(kb, code: str) -> str:
     return f"{code} {kb.courses[code].name}"
 
 
-def print_student(kb, sid: str, report: AuditReport) -> None:
+def print_student(kb, sid: str, report: AuditReport, reviews: ReviewStore) -> None:
     print(f"\n學生 {sid}　{kb.program} {kb.cohort} 學年度入學　總學分 {report.total_credits}")
     print(f"判定：{STATUS_LABEL[report.status]}")
     print("學分採計：" + "、".join(f"{k} {v}" for k, v in report.credit_breakdown.items()) + "\n")
@@ -64,6 +65,9 @@ def print_student(kb, sid: str, report: AuditReport) -> None:
         print(f"  ⚠ {rec.code} {rec.name}（{rec.term}）不在規則庫，暫以本系選修 {rec.credits} 學分計，請系辦確認")
     for rec in t.failed:
         print(f"  ! {rec.code} {rec.name}（{rec.term}）不及格，尚未重修通過")
+    for rec, _ in t.reviewed:
+        e = reviews.current(sid)[(rec.code, rec.term)]
+        print(f"  ✓ {rec.code} {rec.name}（{rec.term}）已覆核：{e.label}（{e.reviewer}，{e.decided_at}）")
 
 
 def print_batch(kb, reports: dict[str, AuditReport], check: RosterCheck) -> None:
@@ -164,6 +168,7 @@ def main(argv: list[str]) -> None:
             print(f"  {i}. {a}")
         return
 
+    reviews = ReviewStore(REVIEWS_PATH)
     try:
         students = load_students(args.records)
     except FileNotFoundError:
@@ -178,9 +183,9 @@ def main(argv: list[str]) -> None:
         except ValueError as e:
             sys.exit(str(e))
         check = check_roster(roster_ids, students, blank_rows)
-        print_batch(kb, {sid: audit(kb, students[sid]) for sid in check.to_audit}, check)
+        print_batch(kb, {sid: audit(kb, students[sid], reviews.decisions(sid)) for sid in check.to_audit}, check)
         if args.export:
-            service = AcademicTwinService(KB_PATH, args.records, args.roster)
+            service = AcademicTwinService(KB_PATH, args.records, args.roster, REVIEWS_PATH)
             args.export.write_text(service.export_csv(), encoding="utf-8-sig")
             print(f"\n已匯出 {args.export}（規則版本 {service.rule_version}）")
         return
@@ -188,8 +193,8 @@ def main(argv: list[str]) -> None:
     sid = args.student
     if sid not in students:
         sys.exit(f"找不到學生 {sid}")
-    report = audit(kb, students[sid])
-    print_student(kb, sid, report)
+    report = audit(kb, students[sid], reviews.decisions(sid))
+    print_student(kb, sid, report, reviews)
     if not (args.plan or args.skip or args.away):
         return
 

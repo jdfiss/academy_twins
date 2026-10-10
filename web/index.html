@@ -108,6 +108,12 @@ svg .edge.hot { stroke: var(--accent); opacity: 1; stroke-width: 2; }
 .side { position: sticky; top: 110px; }
 ol.assume li { margin-bottom: 8px; }
 .empty { color: var(--muted); padding: 20px; text-align: center; }
+.review-form { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.review-form select, .review-form input { padding: 3px 8px; font-size: 12.5px; min-width: 0; }
+.review-form input.note { flex: 1 1 160px; }
+.review-form button { padding: 3px 12px; font-size: 12.5px; }
+.issue.reviewed { background: var(--bg); border: 1px solid var(--line); }
+.issue .outdated { color: var(--warn); }
 .upload { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: end; }
 .upload label { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); gap: 3px; min-width: 0; }
 .upload input[type=file] { max-width: 100%; }
@@ -185,7 +191,16 @@ ol.assume li { margin-bottom: 8px; }
         </div>
         <div class="card" id="issues-card">
           <h3>需要注意</h3>
+          <div id="reviewer-row" class="small muted" style="margin-bottom: 8px">
+            覆核人 <input id="reviewer" placeholder="姓名" style="padding: 3px 8px; font-size: 12.5px; width: 120px">
+            <span>系辦對無法自動判定的紀錄做決定，存檔後立即重新審查。</span>
+          </div>
           <div id="issues"></div>
+          <div id="review-msg"></div>
+          <details id="review-history-box" style="margin-top: 8px">
+            <summary>覆核歷程（<span id="review-history-count"></span> 筆）</summary>
+            <div id="review-history" class="small" style="margin-top: 6px"></div>
+          </details>
         </div>
         <div class="card">
           <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
@@ -307,7 +322,7 @@ function renderBatch() {
       <td>${chip(s.status)}</td>
       <td><div>${s.total_credits}</div><div class="meter ${pct >= 100 ? "ok" : ""}"><div style="width:${pct}%"></div></div></td>
       <td class="hide-sm">${s.satisfied} / ${s.requirements}</td>
-      <td class="small">${s.reasons.map(esc).join("<br>") || '<span class="muted">全部符合</span>'}</td>
+      <td class="small">${s.reasons.map(esc).join("<br>") || '<span class="muted">全部符合</span>'}${s.reviewed ? `<div class="muted">已人工覆核 ${s.reviewed} 筆</div>` : ""}</td>
     </tr>`;
   }).join("") || `<tr><td colspan="5" class="empty">沒有符合的學生</td></tr>`;
   document.querySelectorAll("#batch-rows tr[data-id]").forEach((tr) =>
@@ -340,11 +355,23 @@ async function loadStudent(id) {
 
   // 需要注意
   const iss = s.issues, out = [];
-  iss.review.forEach((r) => out.push(`<div class="issue MANUAL_REVIEW">🔍 <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}，類別「${esc(r.category)}」）需人工判斷如何採計</div>`));
+  iss.review.forEach((r) => out.push(`<div class="issue MANUAL_REVIEW">🔍 <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}，類別「${esc(r.category)}」）需人工判斷如何採計${reviewForm(r)}</div>`));
   iss.failed.forEach((r) => out.push(`<div class="issue FAIL">✘ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）${r.grade} 分不及格，尚未重修通過</div>`));
-  iss.dept_unverified.forEach((r) => out.push(`<div class="issue WARNING">⚠ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）不在規則庫，暫以本系選修 ${r.credits} 學分計</div>`));
+  iss.dept_unverified.forEach((r) => out.push(`<div class="issue WARNING">⚠ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）不在規則庫，暫以本系選修 ${r.credits} 學分計${reviewForm(r)}</div>`));
+  s.reviews.forEach((r) => out.push(`<div class="issue reviewed">✓ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）已覆核：<b>${esc(r.label)}</b>
+    <div class="muted small">${esc(r.reviewer)}・${esc(r.decided_at)}${r.note ? `・${esc(r.note)}` : ""}
+      ${r.outdated ? `<span class="outdated">・決定時的規則版本為 ${esc(r.rule_version)}，規則庫已更新，建議再確認</span>` : ""}</div>
+    <div class="review-form" data-code="${esc(r.code)}" data-term="${esc(r.term)}">
+      <input class="note" placeholder="撤銷原因（選填）"><button class="ghost" data-action="revoke">撤銷決定</button></div></div>`));
   $("#issues").innerHTML = out.join("");
-  $("#issues-card").style.display = out.length ? "" : "none";
+  $("#issues-card").style.display = out.length || s.review_history.length ? "" : "none";
+  $("#reviewer-row").style.display = iss.review.length || iss.dept_unverified.length || s.reviews.length ? "" : "none";
+  $("#review-msg").innerHTML = "";
+  $("#review-history-box").style.display = s.review_history.length ? "" : "none";
+  $("#review-history-count").textContent = s.review_history.length;
+  $("#review-history").innerHTML = s.review_history.map((e) =>
+    `<div style="margin-bottom: 4px">${esc(e.decided_at)}・${esc(e.reviewer)}：${esc(e.code)}（${esc(e.term)}）${esc(e.label)}${e.note ? `・${esc(e.note)}` : ""}</div>`).join("");
+  document.querySelectorAll("#issues .review-form button").forEach((b) => b.addEventListener("click", () => submitReview(s.id, b)));
 
   // 畢業條件
   const ok = s.requirements.filter((r) => r.satisfied).length;
@@ -522,6 +549,41 @@ function renderRules() {
   $("#sources").innerHTML = Object.entries(META.sources).map(([k, v]) => `<li>${esc(v)} <span class="muted small">(${k})</span></li>`).join("");
   $("#assumptions").innerHTML = META.assumptions.map((a) => `<li>${esc(a)}</li>`).join("");
 }
+
+// ---------- 人工覆核 ----------
+function reviewForm(r) {
+  const options = [["dept_elective", "確認為本系選修"], ["outside", "外系認列"], ["exclude", "不採計"]]
+    .concat(META.categories.map((c) => [`category:${c}`, `歸入「${c}」`]));
+  return `<div class="review-form" data-code="${esc(r.code)}" data-term="${esc(r.term)}">
+    <select><option value="">選擇採計方式…</option>${options.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join("")}</select>
+    <input class="note" placeholder="依據或備註（選填）">
+    <button class="primary" data-action="decide">確認</button></div>`;
+}
+
+async function submitReview(sid, button) {
+  const form = button.closest(".review-form"), msg = $("#review-msg");
+  const reviewer = $("#reviewer").value.trim();
+  const choice = button.dataset.action === "revoke" ? "revoke" : form.querySelector("select").value;
+  const fail = (text) => { msg.innerHTML = `<div class="small" style="color: var(--fail); margin-top: 6px">${esc(text)}</div>`; };
+  if (!reviewer) return fail("請先填寫覆核人。");
+  if (!choice) return fail("請選擇採計方式。");
+  try { localStorage.setItem("twin-reviewer", reviewer); } catch {}
+  const [action, category = ""] = choice.split(/:(.*)/);
+  try {
+    await api(`/api/students/${encodeURIComponent(sid)}/reviews`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: form.dataset.code, term: form.dataset.term, action, category, reviewer,
+                             note: form.querySelector("input.note").value }),
+    });
+    BATCH = await api("/api/students");
+    renderBatch();
+    $("#student-select").innerHTML = BATCH.map((s) => `<option value="${esc(s.id)}">${esc(s.id)}（${STATUS[s.status]}）</option>`).join("");
+    await loadStudent(sid);
+  } catch (e) {
+    fail(e.message);
+  }
+}
+try { $("#reviewer").value = localStorage.getItem("twin-reviewer") || ""; } catch {}
 
 // ---------- 資料上傳 ----------
 function renderSource(src) {

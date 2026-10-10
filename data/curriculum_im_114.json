@@ -3,23 +3,26 @@
   "cohort": 114,
   "sources": {
     "IM-114-TABLE": "資管系應修科目表（114學年度入學新生適用）",
-    "IM-MAP-114": "資管系大學部課程地圖（114學年度入學適用）"
+    "IM-MAP-114": "資管系大學部課程地圖（114學年度入學適用）",
+    "IM-SLIDE": "資管系「應修科目表說明」投影片（未標年度，內容與 114 應修科目表備註一致）"
   },
   "source_urls": {
     "IM-114-TABLE": "https://im.mgt.ncu.edu.tw/download/course/rules/114學年應修科目表.pdf",
     "IM-MAP-114": "https://im.mgt.ncu.edu.tw/download/course/courseMaps/國立中央大學資訊管理學系課程地圖(114學年度適用)_v20250715.pdf"
   },
   "assumptions": [
-    "必選課 IM1013 初階程式設計、IM3029 網頁程式設計、MA1006 微積分(下) 的學分數應修科目表未列，暫以 3 學分計。",
+    "必選課 IM3029 網頁程式設計、MA1006 微積分(下) 的學分數應修科目表未列，暫以 3 學分計（IM1013 依 111 畢審說明為 3 學分）。",
+    "必選課『一定要修過，但不通過沒關係』（說明投影片）：有修課紀錄即符合，不論成績；停修是否算修過待確認。",
     "課程的開課學期取自應修科目表的『建議修課學期』；IM1013 依課程地圖列一年級、暫定上學期；IM3029 課程地圖列二年級、上下學期皆可。",
     "應修科目表與課程地圖皆無正式擋修規定；soft_prereqs 是依建議學期與年級順序推論的『建議先修』，只用於排課，不影響畢業判定。",
     "體育『一上至三上各 0 學分』解讀為需修滿 5 學期；服務學習『一上 0 學分＋一下至四下 0 學分』解讀為需修 2 門。",
     "『通識核心必修四大領域中至少須修習一個領域』暫以『至少修 1 門通識核心課程』判定，領域細節待補。",
-    "本系選修課程目錄（課號、學分）尚未建檔：不在規則庫的 IM 課號一律暫以本系選修計，並標為 Warning 供系辦確認。",
-    "國文、外文、通識超過最低要求的學分，視為外系學分計入 12 學分上限（通識超修另受 4 學分上限）。"
+    "本系選修以 IM 課號認定（111 畢審說明 19120；說明投影片）：不在規則庫的 IM 課號一律算本系選修；非 IM 課號可否認列待確認，需要時以人工覆核處理。",
+    "國文、外文超過最低要求的學分，以及第二外語，暫視為外系學分計入 12 學分上限（文件未寫明）；通識超修最多 4 學分、企業實習最多 3 學分，皆含在 12 學分內（科目表備註二-2）。"
   ],
   "passing_grade": 60,
   "dept_prefixes": ["IM"],
+  "dept_prefix_is_elective": true,
   "max_credits_per_term": 25,
   "categories": {
     "國文": "",
@@ -60,9 +63,9 @@
     {"code": "IM4001", "name": "資訊系統發展專題II",   "credits": 3, "type": "required", "terms": ["fall"],   "soft_prereqs": ["IM3028"]},
     {"code": "IM4048", "name": "管理資訊系統",         "credits": 3, "type": "required", "terms": ["fall"]},
 
-    {"code": "IM1013", "name": "初階程式設計",         "credits": 3, "type": "selective", "terms": ["fall"]},
-    {"code": "IM3029", "name": "網頁程式設計",         "credits": 3, "type": "selective", "terms": ["fall", "spring"], "soft_prereqs": ["IM1023"]},
-    {"code": "MA1006", "name": "微積分(下)",           "credits": 3, "type": "selective", "terms": ["spring"], "soft_prereqs": ["MA1005"]}
+    {"code": "IM1013", "name": "初階程式設計",         "credits": 3, "type": "selective", "terms": ["fall"], "counts_as": "dept_elective"},
+    {"code": "IM3029", "name": "網頁程式設計",         "credits": 3, "type": "selective", "terms": ["fall", "spring"], "soft_prereqs": ["IM1023"], "counts_as": "dept_elective"},
+    {"code": "MA1006", "name": "微積分(下)",           "credits": 3, "type": "selective", "terms": ["spring"], "soft_prereqs": ["MA1005"], "counts_as": "outside"}
   ],
   "requirements": [
     {
@@ -82,10 +85,10 @@
     },
     {
       "id": "R3",
-      "kind": "all_of",
-      "title": "必選課",
+      "kind": "taken_all",
+      "title": "必選課（須修過，不需及格）",
       "courses": ["IM1013", "IM3029", "MA1006"],
-      "source": {"doc": "IM-114-TABLE", "ref": "備註 二-3"}
+      "source": {"doc": "IM-114-TABLE", "ref": "備註 二-3；說明投影片「必選課定義」"}
     },
     {
       "id": "R4",
@@ -134,6 +137,13 @@
       "categories": ["服務學習"],
       "n": 2,
       "source": {"doc": "IM-114-TABLE", "ref": "共同必修：服務學習課程"}
+    },
+    {
+      "id": "R11",
+      "kind": "dept_elective_credits",
+      "title": "本系選修 16 學分（IM 課號選修，含通過的 IM1013、IM3029）",
+      "min_credits": 16,
+      "source": {"doc": "IM-114-TABLE", "ref": "備註 二-2；說明投影片「本系選修 16 學分」"}
     },
     {
       "id": "R10",
