@@ -16,6 +16,8 @@
 python web.py                              # 網頁介面 http://localhost:8000
 python app.py                              # 系辦批次畢審（含應屆名單比對）
 python app.py --roster 名單.csv            # 指定應屆名單（需有 student_id 欄）
+python app.py --records 修課紀錄.csv       # 指定修課紀錄（先做格式檢查，有錯整份不收）
+python app.py --export 結果.csv            # 批次畢審結果匯出 CSV（附規則版本與審查時間）
 python app.py S002                         # 單一學生畢業進度
 python app.py S002 --plan                  # 排出到畢業的修課路徑
 python app.py S002 --skip IM2011@116-1     # What-if：116-1 不修資料與檔案結構

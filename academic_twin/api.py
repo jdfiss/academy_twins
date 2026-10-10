@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 import csv
-from collections import defaultdict
+import hashlib
+import io
+from datetime import datetime
 from pathlib import Path
 
 from . import knowledge_base
 from .graph import CourseGraph
 from .planner import Plan, Scenario, Term, explain_delay, plan
-from .roster import check_roster, load_roster
+from .records import RecordsError, parse_records
+from .roster import check_roster, parse_roster
 from .rule_engine import AuditReport, Record, audit
 
 ROOT = Path(__file__).parent.parent
@@ -17,25 +20,51 @@ STUDENTS_PATH = ROOT / "data" / "students" / "sample_students.csv"
 ROSTER_PATH = ROOT / "data" / "students" / "sample_roster.csv"
 
 
-def load_students(path: Path) -> dict[str, list[Record]]:
-    students: dict[str, list[Record]] = defaultdict(list)
-    with path.open(encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            students[row["student_id"]].append(
-                Record(row["code"], row["name"], int(row["credits"]), float(row["grade"]), row["term"],
-                       row.get("category") or "")
-            )
-    return dict(students)
-
-
 class AcademicTwinService:
     def __init__(self, kb_path: Path = KB_PATH, students_path: Path = STUDENTS_PATH,
                  roster_path: Path = ROSTER_PATH):
         self.kb = knowledge_base.load(kb_path)
+        # 規則版本：學年度 + 規則庫檔案雜湊，規則庫一改版本就不同
+        digest = hashlib.sha256(kb_path.read_bytes()).hexdigest()[:12]
+        self.rule_version = f"{self.kb.cohort}-{digest}"
         self.graph = CourseGraph(self.kb)
-        self.students = load_students(students_path)
-        roster_ids, blank_rows = load_roster(roster_path)
-        self.roster = check_roster(roster_ids, self.students, blank_rows)
+        self.load_data(
+            (students_path.name, students_path.read_text(encoding="utf-8-sig")),
+            (roster_path.name, roster_path.read_text(encoding="utf-8-sig")),
+        )
+
+    def load_data(self, records: tuple[str, str] | None = None, roster: tuple[str, str] | None = None) -> None:
+        """換掉修課紀錄及／或應屆名單（各為 (檔名, CSV 文字)）。
+
+        兩份都檢查完才一起套用：任何一份有錯就丟 RecordsError，現有資料保持不變。
+        """
+        errors: list[str] = []
+        students, records_name = getattr(self, "students", None), getattr(self, "records_name", None)
+        roster_parsed, roster_name = getattr(self, "_roster_parsed", None), getattr(self, "roster_name", None)
+        if records:
+            try:
+                students, records_name = parse_records(records[1]), records[0]
+            except RecordsError as e:
+                errors += [f"修課紀錄 {records[0]}：{msg}" for msg in e.errors]
+        if roster:
+            try:
+                roster_parsed, roster_name = parse_roster(roster[1], roster[0]), roster[0]
+            except ValueError as e:
+                errors.append(str(e))
+        if errors:
+            raise RecordsError(errors)
+        self.students, self.records_name = students, records_name
+        self._roster_parsed, self.roster_name = roster_parsed, roster_name
+        self.roster = check_roster(roster_parsed[0], students, roster_parsed[1])
+
+    def data_source(self) -> dict:
+        return {
+            "records": self.records_name,
+            "records_count": sum(len(v) for v in self.students.values()),
+            "students": len(self.students),
+            "roster": self.roster_name,
+            "roster_count": len(self.roster.to_audit) + len(self.roster.no_records),
+        }
 
     # ---------- 共用 ----------
     def course(self, code: str) -> dict:
@@ -110,6 +139,29 @@ class AcademicTwinService:
             + [{"id": sid, "kind": "duplicate", "message": "應屆名單重複列出"} for sid in r.duplicates]
             + [{"id": None, "kind": "blank", "message": f"名單第 {line} 行學號空白"} for line in r.blank_rows]
         )
+
+    EXPORT_FIELDS = ["student_id", "status", "total_credits", "satisfied", "requirements", "reasons",
+                     "rule_version", "audited_at"]
+
+    def export_csv(self, audited_at: datetime | None = None) -> str:
+        """批次審查結果 + 名單異常匯出成 CSV；每列附規則版本與審查時間。"""
+        stamp = (audited_at or datetime.now()).isoformat(timespec="seconds")
+        out = io.StringIO()
+        writer = csv.DictWriter(out, fieldnames=self.EXPORT_FIELDS, lineterminator="\n")
+        writer.writeheader()
+        for row in self.batch():
+            writer.writerow({
+                "student_id": row["id"], "status": row["status"], "total_credits": row["total_credits"],
+                "satisfied": row["satisfied"], "requirements": row["requirements"],
+                "reasons": "；".join(row["reasons"]) or "全部符合",
+                "rule_version": self.rule_version, "audited_at": stamp,
+            })
+        for a in self.roster_anomalies():
+            writer.writerow({
+                "student_id": a["id"] or "", "status": f"ROSTER_{a['kind'].upper()}", "reasons": a["message"],
+                "rule_version": self.rule_version, "audited_at": stamp,
+            })
+        return out.getvalue()
 
     def student(self, sid: str) -> dict:
         report = self._report(sid)

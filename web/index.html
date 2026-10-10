@@ -61,7 +61,7 @@ select, input { font: inherit; color: var(--ink); background: var(--panel); bord
   border-radius: 8px; padding: 6px 10px; }
 button.primary { font: inherit; border: 0; background: var(--accent); color: #fff; border-radius: 8px; padding: 7px 16px;
   cursor: pointer; font-weight: 600; }
-button.ghost { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px;
+button.ghost, a.ghost { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px;
   padding: 6px 12px; cursor: pointer; }
 .student-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 16px; }
 .big { font-size: 34px; font-weight: 700; line-height: 1; }
@@ -108,6 +108,11 @@ svg .edge.hot { stroke: var(--accent); opacity: 1; stroke-width: 2; }
 .side { position: sticky; top: 110px; }
 ol.assume li { margin-bottom: 8px; }
 .empty { color: var(--muted); padding: 20px; text-align: center; }
+.upload { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: end; }
+.upload label { display: flex; flex-direction: column; font-size: 12.5px; color: var(--muted); gap: 3px; min-width: 0; }
+.upload input[type=file] { max-width: 100%; }
+.upload-errors { margin: 10px 0 0; padding: 10px 12px 10px 30px; border-radius: 8px; font-size: 13px;
+  color: var(--fail); background: var(--fail-soft); max-height: 220px; overflow-y: auto; }
 @media (max-width: 900px) {
   .two { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); }
   .hide-sm { display: none; } main { padding: 16px; } .side { position: static; }
@@ -131,9 +136,24 @@ ol.assume li { margin-bottom: 8px; }
 <main>
   <!-- 系辦畢審 -->
   <section class="view active" id="view-batch">
+    <div class="card" style="margin-bottom: 16px">
+      <h2>資料來源 <span class="muted small" id="data-source"></span></h2>
+      <div class="upload">
+        <label>修課紀錄 CSV<input type="file" id="records-file" accept=".csv,text/csv"></label>
+        <label>應屆名單 CSV<input type="file" id="roster-file" accept=".csv,text/csv"></label>
+        <button class="primary" id="upload-btn">上傳並重新審查</button>
+        <button class="ghost" id="reset-btn">還原示例資料</button>
+      </div>
+      <div class="muted small" style="margin-top: 8px">
+        修課紀錄欄位：student_id,code,name,credits,grade,term,category（category 可空白）；名單需有 student_id 欄。
+        可只換其中一份。資料只存在這次執行的記憶體中，關掉伺服器就回到示例資料。
+      </div>
+      <div id="upload-msg"></div>
+    </div>
     <div class="grid stats" id="stats"></div>
     <div class="card">
-      <h2>批次畢業資格審查 <span class="muted small">點一列看該生細節</span></h2>
+      <h2>批次畢業資格審查 <span class="muted small">點一列看該生細節</span>
+        <a class="ghost small" href="/api/export.csv" download style="float: right; text-decoration: none; padding: 4px 12px">匯出 CSV</a></h2>
       <table>
         <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th>原因</th></tr></thead>
         <tbody id="batch-rows"></tbody>
@@ -249,10 +269,10 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&l
 const chip = (status) => `<span class="chip ${status}">${STATUS[status]}</span>`;
 const courseTag = (c, cls = "") => `<span class="course ${cls}"><span class="code">${esc(c.code)}</span>${esc(c.name)}</span>`;
 
-async function api(path) {
-  const res = await fetch(path);
+async function api(path, options) {
+  const res = await fetch(path, options);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  if (!res.ok) throw Object.assign(new Error(data.error || res.statusText), { details: data.errors || [] });
   return data;
 }
 
@@ -282,8 +302,8 @@ function renderBatch() {
   const rows = BATCH.filter((s) => !statusFilter || s.status === statusFilter);
   $("#batch-rows").innerHTML = rows.map((s) => {
     const pct = Math.min(100, (s.total_credits / 128) * 100);
-    return `<tr data-id="${s.id}">
-      <td><b>${s.id}</b></td>
+    return `<tr data-id="${esc(s.id)}">
+      <td><b>${esc(s.id)}</b></td>
       <td>${chip(s.status)}</td>
       <td><div>${s.total_credits}</div><div class="meter ${pct >= 100 ? "ok" : ""}"><div style="width:${pct}%"></div></div></td>
       <td class="hide-sm">${s.satisfied} / ${s.requirements}</td>
@@ -503,18 +523,61 @@ function renderRules() {
   $("#assumptions").innerHTML = META.assumptions.map((a) => `<li>${esc(a)}</li>`).join("");
 }
 
+// ---------- 資料上傳 ----------
+function renderSource(src) {
+  $("#data-source").textContent =
+    `修課紀錄 ${src.records}（${src.students} 位、${src.records_count} 筆）・應屆名單 ${src.roster}（${src.roster_count} 位）`;
+}
+
+async function loadData() {
+  let roster, src;
+  [BATCH, roster, src] = await Promise.all([api("/api/students"), api("/api/roster-anomalies"), api("/api/data-source")]);
+  renderSource(src);
+  renderRoster(roster);
+  $("#student-select").innerHTML = BATCH.map((s) => `<option value="${esc(s.id)}">${esc(s.id)}（${STATUS[s.status]}）</option>`).join("");
+  statusFilter = null;
+  renderBatch();
+  const first = BATCH.find((s) => s.status === "FAIL") || BATCH[0];
+  if (first) await loadStudent(first.id);
+}
+
+async function sendData(path, payload) {
+  const msg = $("#upload-msg");
+  msg.innerHTML = `<div class="muted small" style="margin-top: 8px">處理中…</div>`;
+  try {
+    await api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    await loadData();
+    msg.innerHTML = `<div class="small" style="margin-top: 8px; color: var(--pass)">已套用，審查結果已更新。</div>`;
+    $("#records-file").value = $("#roster-file").value = "";
+  } catch (e) {
+    msg.innerHTML = `<div class="small" style="margin-top: 8px; color: var(--fail)"><b>${esc(e.message)}</b>，目前資料維持不變。</div>`
+      + (e.details?.length ? `<ul class="upload-errors">${e.details.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : "");
+  }
+}
+
+const readFile = async (input) => {
+  const f = input.files[0];
+  return f ? { name: f.name, text: await f.text() } : null;
+};
+
+$("#upload-btn").addEventListener("click", async () => {
+  const records = await readFile($("#records-file")), roster = await readFile($("#roster-file"));
+  if (!records && !roster) {
+    $("#upload-msg").innerHTML = `<div class="small" style="margin-top: 8px; color: var(--fail)">請先選擇至少一個檔案。</div>`;
+    return;
+  }
+  await sendData("/api/upload", { records, roster });
+});
+$("#reset-btn").addEventListener("click", () => sendData("/api/reset", {}));
+
 // ---------- 啟動 ----------
 (async function init() {
-  let roster;
-  [META, BATCH, roster] = await Promise.all([api("/api/meta"), api("/api/students"), api("/api/roster-anomalies")]);
-  renderRoster(roster);
+  META = await api("/api/meta");
   $("#program").textContent = `${META.program}・${META.cohort} 學年度入學・規則庫依官方應修科目表`;
   $("#cap").textContent = META.max_credits_per_term;
-  $("#student-select").innerHTML = BATCH.map((s) => `<option value="${s.id}">${s.id}（${STATUS[s.status]}）</option>`).join("");
-  renderBatch();
   renderGraph();
   renderRules();
-  await loadStudent(BATCH.find((s) => s.status === "FAIL")?.id || BATCH[0].id);
+  await loadData();
   let saved = null;
   try { saved = localStorage.getItem("twin-view"); } catch {}
   if (saved) show(saved);

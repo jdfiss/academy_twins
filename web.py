@@ -12,9 +12,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from academic_twin.api import AcademicTwinService
+from academic_twin.api import ROSTER_PATH, STUDENTS_PATH, AcademicTwinService
+from academic_twin.records import RecordsError
 
 STATIC = Path(__file__).parent / "web"
+MAX_UPLOAD = 20 * 1024 * 1024
 service = AcademicTwinService()
 
 
@@ -33,8 +35,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(service.meta())
             if route == ["students"]:
                 return self._json(service.batch())
+            if route == ["data-source"]:
+                return self._json(service.data_source())
             if route == ["roster-anomalies"]:
                 return self._json(service.roster_anomalies())
+            if route == ["export.csv"]:
+                return self._csv(service.export_csv(), f"audit_{service.rule_version}.csv")
             if len(route) == 2 and route[0] == "students":
                 return self._json(service.student(route[1]))
             if len(route) == 3 and route[0] == "students" and route[2] == "simulate":
@@ -52,10 +58,49 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
 
+    def do_POST(self):
+        """上傳資料只放在記憶體，重開伺服器就回到示例資料。
+
+        POST /api/upload  {"records": {"name", "text"}?, "roster": {"name", "text"}?}
+        POST /api/reset   回到示例資料
+        """
+        route = urlparse(self.path).path.strip("/")
+        length = int(self.headers.get("Content-Length") or 0)
+        if length > MAX_UPLOAD:
+            return self._json({"error": "檔案太大（上限 20 MB）"}, 413)
+        try:
+            body = json.loads(self.rfile.read(length) or b"{}")
+            if route == "api/upload":
+                files = {k: (body[k]["name"], body[k]["text"]) for k in ("records", "roster") if body.get(k)}
+                if not files:
+                    return self._json({"error": "沒有選擇檔案"}, 400)
+                service.load_data(**files)
+            elif route == "api/reset":
+                service.load_data(
+                    (STUDENTS_PATH.name, STUDENTS_PATH.read_text(encoding="utf-8-sig")),
+                    (ROSTER_PATH.name, ROSTER_PATH.read_text(encoding="utf-8-sig")),
+                )
+            else:
+                return self._json({"error": "not found"}, 404)
+            return self._json(service.data_source())
+        except RecordsError as e:
+            return self._json({"error": "資料格式錯誤，未套用", "errors": e.errors}, 400)
+        except (ValueError, KeyError, TypeError) as e:
+            return self._json({"error": f"上傳內容格式錯誤：{e}"}, 400)
+
     def _json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _csv(self, text: str, filename: str):
+        body = text.encode("utf-8-sig")  # 帶 BOM，Excel 才不會亂碼
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

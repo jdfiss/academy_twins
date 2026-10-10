@@ -3,6 +3,8 @@
 用法：
     python app.py                              # 系辦批次畢審（依應屆名單）
     python app.py --roster 名單.csv            # 指定應屆名單
+    python app.py --records 修課紀錄.csv      # 指定修課紀錄（會先做格式檢查）
+    python app.py --export 結果.csv            # 批次畢審結果匯出 CSV（附規則版本與時間）
     python app.py S002                         # 單一學生的畢業進度
     python app.py S002 --plan                  # 排出到畢業的修課計畫
     python app.py S002 --skip IM2001@114-1     # What-if：114-1 不修資料結構
@@ -13,16 +15,16 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 from academic_twin import knowledge_base
+from academic_twin.api import AcademicTwinService
 from academic_twin.graph import CourseGraph
 from academic_twin.planner import Plan, Scenario, Term, explain_delay, plan
+from academic_twin.records import RecordsError, load_students
 from academic_twin.roster import RosterCheck, check_roster, load_roster
-from academic_twin.rule_engine import AuditReport, Record, Status, audit
+from academic_twin.rule_engine import AuditReport, Status, audit
 
 ROOT = Path(__file__).parent
 KB_PATH = ROOT / "data" / "curriculum_im_114.json"
@@ -31,17 +33,6 @@ ROSTER_PATH = ROOT / "data" / "students" / "sample_roster.csv"
 
 STATUS_LABEL = {Status.PASS: "✅ Pass", Status.WARNING: "⚠️ Warning", Status.FAIL: "❌ Fail",
                 Status.MANUAL_REVIEW: "🔍 Manual Review"}
-
-
-def load_students(path: Path) -> dict[str, list[Record]]:
-    students: dict[str, list[Record]] = defaultdict(list)
-    with path.open(encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            students[row["student_id"]].append(
-                Record(row["code"], row["name"], int(row["credits"]), float(row["grade"]), row["term"],
-                       row.get("category") or "")
-            )
-    return dict(students)
 
 
 def course_label(kb, code: str) -> str:
@@ -156,6 +147,8 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--bottlenecks", action="store_true")
     parser.add_argument("--assumptions", action="store_true", help="列出規則庫中尚待確認的假設")
     parser.add_argument("--roster", type=Path, default=ROSTER_PATH, help="應屆名單 CSV（需有 student_id 欄）")
+    parser.add_argument("--records", type=Path, default=STUDENTS_PATH, help="修課紀錄 CSV")
+    parser.add_argument("--export", type=Path, help="批次畢審結果匯出成 CSV")
     args = parser.parse_args(argv)
 
     kb = knowledge_base.load(KB_PATH)
@@ -171,7 +164,12 @@ def main(argv: list[str]) -> None:
             print(f"  {i}. {a}")
         return
 
-    students = load_students(STUDENTS_PATH)
+    try:
+        students = load_students(args.records)
+    except FileNotFoundError:
+        sys.exit(f"找不到修課紀錄：{args.records}")
+    except RecordsError as e:
+        sys.exit(str(e))
     if not args.student:
         try:
             roster_ids, blank_rows = load_roster(args.roster)
@@ -180,7 +178,12 @@ def main(argv: list[str]) -> None:
         except ValueError as e:
             sys.exit(str(e))
         check = check_roster(roster_ids, students, blank_rows)
-        return print_batch(kb, {sid: audit(kb, students[sid]) for sid in check.to_audit}, check)
+        print_batch(kb, {sid: audit(kb, students[sid]) for sid in check.to_audit}, check)
+        if args.export:
+            service = AcademicTwinService(KB_PATH, args.records, args.roster)
+            args.export.write_text(service.export_csv(), encoding="utf-8-sig")
+            print(f"\n已匯出 {args.export}（規則版本 {service.rule_version}）")
+        return
 
     sid = args.student
     if sid not in students:
@@ -206,4 +209,5 @@ def main(argv: list[str]) -> None:
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     main(sys.argv[1:])

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import io
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,20 +20,23 @@ class RosterCheck:
         return len(self.no_records) + len(self.not_on_roster) + len(self.duplicates) + len(self.blank_rows)
 
 
-def load_roster(path: Path) -> tuple[list[str], list[int]]:
+def parse_roster(text: str, source: str = "應屆名單") -> tuple[list[str], list[int]]:
     """回傳名單學號（保留順序與重複）及學號空白的行號。CSV 須有 student_id 欄。"""
     ids, blank = [], []
-    with path.open(encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        if "student_id" not in (reader.fieldnames or []):
-            raise ValueError(f"應屆名單缺少 student_id 欄：{path}")
-        for row in reader:
-            sid = (row["student_id"] or "").strip()
-            if sid:
-                ids.append(sid)
-            else:
-                blank.append(reader.line_num)
+    reader = csv.DictReader(io.StringIO(text.lstrip("\ufeff")))
+    if "student_id" not in (reader.fieldnames or []):
+        raise ValueError(f"應屆名單缺少 student_id 欄：{source}")
+    for row in reader:
+        sid = (row["student_id"] or "").strip()
+        if sid:
+            ids.append(sid)
+        else:
+            blank.append(reader.line_num)
     return ids, blank
+
+
+def load_roster(path: Path) -> tuple[list[str], list[int]]:
+    return parse_roster(path.read_text(encoding="utf-8-sig"), str(path))
 
 
 def check_roster(roster_ids: list[str], record_ids, blank_rows: list[int] | None = None) -> RosterCheck:
