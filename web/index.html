@@ -68,6 +68,7 @@ button.ghost, a.ghost { font: inherit; border: 1px solid var(--line); background
 .two { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; }
 .req { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
 .req.bad { border-left: 4px solid var(--fail); } .req.ok { border-left: 4px solid var(--pass); }
+.req.pending { border-left: 4px solid var(--review); }
 .req-top { display: flex; justify-content: space-between; gap: 8px; }
 .req .cite { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .courses { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
@@ -151,7 +152,7 @@ ol.assume li { margin-bottom: 8px; }
         <button class="ghost" id="reset-btn">還原示例資料</button>
       </div>
       <div class="muted small" style="margin-top: 8px">
-        修課紀錄欄位：student_id,code,name,credits,grade,term,category（category 可空白）；名單需有 student_id 欄。
+        修課紀錄欄位：student_id,code,name,credits,grade,term,category（category 可空白）；名單需有 student_id 欄，可加選填的 english_passed 欄（Y／N，空白表示未知）與 cohort 欄（入學學年度，空白視為 114）。
         可只換其中一份。資料只存在這次執行的記憶體中，關掉伺服器就回到示例資料。
       </div>
       <div id="upload-msg"></div>
@@ -181,6 +182,7 @@ ol.assume li { margin-bottom: 8px; }
       <span id="student-status"></span>
       <div><span class="big" id="student-credits"></span> <span class="muted">/ 128 學分</span></div>
       <span class="muted small" id="student-next"></span>
+      <a class="ghost small" id="student-report" target="_blank" style="text-decoration: none; padding: 4px 12px">列印審查明細</a>
     </div>
     <div class="grid two">
       <div class="grid">
@@ -343,6 +345,7 @@ async function loadStudent(id) {
   $("#student-status").innerHTML = chip(s.status);
   $("#student-credits").textContent = s.total_credits;
   $("#student-next").textContent = `下一學期：${s.next_term}`;
+  $("#student-report").href = `/api/students/${encodeURIComponent(s.id)}/report`;
 
   // 學分採計
   const entries = Object.entries(s.credit_breakdown);
@@ -377,19 +380,22 @@ async function loadStudent(id) {
   const ok = s.requirements.filter((r) => r.satisfied).length;
   $("#req-summary").textContent = `${ok} / ${s.requirements.length} 符合`;
   $("#requirements").innerHTML = s.requirements
-    .slice().sort((a, b) => a.satisfied - b.satisfied)
+    .slice().sort((a, b) => a.satisfied - b.satisfied || b.pending - a.pending)
     .map((r) => {
       const pct = r.need ? Math.min(100, (r.have / r.need) * 100) : 100;
       const unit = r.kind.includes("credits") ? "學分" : "門";
       let detail = "";
-      if (!r.satisfied) {
+      if (r.pending) {
+        detail = `<div class="small" style="margin-top:6px">修課紀錄無法判斷，請確認是否已通過英檢（應屆名單 english_passed 欄）</div>`;
+      } else if (!r.satisfied) {
         detail = r.missing.length
           ? `<div class="small" style="margin-top:6px">缺：</div><div class="courses">${r.missing.map((c) => courseTag(c)).join("")}</div>`
           : `<div class="small" style="margin-top:6px">尚缺 ${r.shortfall} ${unit}</div>`;
       }
-      return `<div class="req ${r.satisfied ? "ok" : "bad"}">
-        <div class="req-top"><b>${r.satisfied ? "✔" : "✘"} ${esc(r.title)}</b><span class="muted small">${r.have} / ${r.need}</span></div>
-        <div class="meter ${r.satisfied ? "ok" : "bad"}" style="margin-top:6px"><div style="width:${pct}%"></div></div>
+      const state = r.satisfied ? "ok" : r.pending ? "pending" : "bad";
+      return `<div class="req ${state}">
+        <div class="req-top"><b>${{ ok: "✔", pending: "?", bad: "✘" }[state]} ${esc(r.title)}</b><span class="muted small">${r.have} / ${r.need}${r.detail ? `・${esc(r.detail)}` : ""}</span></div>
+        <div class="meter ${state === "pending" ? "" : state}" style="margin-top:6px"><div style="width:${pct}%"></div></div>
         ${detail}
         <div class="cite">依據：${esc(r.citation)}</div>
       </div>`;

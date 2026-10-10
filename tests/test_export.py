@@ -34,5 +34,25 @@ class ExportTest(unittest.TestCase):
                                 AcademicTwinService().rule_version)
 
 
+class ReportTest(unittest.TestCase):
+    def test_report_has_verdict_requirements_and_version(self):
+        service = AcademicTwinService()
+        html = service.report_html("S003", audited_at=datetime(2026, 10, 11, 9, 0))
+        for text in ("S003", "需人工判斷（Manual Review）", "R12", "？ 待確認", service.rule_version,
+                     "2026-10-11T09:00:00", "XFER-01"):
+            self.assertIn(text, html)
+
+    def test_report_escapes_uploaded_text(self):
+        service = AcademicTwinService()
+        service.load_data(records=("x.csv", "student_id,code,name,credits,grade,term\nS1,IM9001,<script>,3,80,114-1\n"),
+                          roster=("r.csv", "student_id\nS1\n"))
+        html = service.report_html("S1")
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_unknown_student_raises(self):
+        with self.assertRaises(KeyError):
+            AcademicTwinService().report_html("S999")
+
 if __name__ == "__main__":
     unittest.main()

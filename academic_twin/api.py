@@ -7,13 +7,13 @@ import io
 from datetime import datetime
 from pathlib import Path
 
-from . import knowledge_base
+from . import knowledge_base, report
 from .graph import CourseGraph
 from .planner import Plan, Scenario, Term, explain_delay, plan
 from .records import RecordsError, parse_records
 from .roster import check_roster, parse_roster
 from .reviews import ACTIONS, ReviewEntry, ReviewStore
-from .rule_engine import CATEGORY, AuditReport, Record, audit, classify
+from .rule_engine import CATEGORY, AuditReport, Record, audit, classify, reasons
 
 ROOT = Path(__file__).parent.parent
 KB_PATH = ROOT / "data" / "curriculum_im_114.json"
@@ -59,7 +59,8 @@ class AcademicTwinService:
             raise RecordsError(errors)
         self.students, self.records_name = students, records_name
         self._roster_parsed, self.roster_name = roster_parsed, roster_name
-        self.roster = check_roster(roster_parsed[0], students, roster_parsed[1])
+        self.roster = check_roster(roster_parsed.ids, students, roster_parsed.blank_rows,
+                                   roster_parsed.cohorts, self.kb.cohort)
 
     def data_source(self) -> dict:
         return {
@@ -67,7 +68,7 @@ class AcademicTwinService:
             "records_count": sum(len(v) for v in self.students.values()),
             "students": len(self.students),
             "roster": self.roster_name,
-            "roster_count": len(self.roster.to_audit) + len(self.roster.no_records),
+            "roster_count": self.roster.roster_size,
         }
 
     # ---------- 共用 ----------
@@ -78,7 +79,8 @@ class AcademicTwinService:
     def _report(self, sid: str) -> AuditReport:
         if sid not in self.students:
             raise KeyError(f"找不到學生 {sid}")
-        return audit(self.kb, self.students[sid], self.reviews.decisions(sid))
+        return audit(self.kb, self.students[sid], self.reviews.decisions(sid),
+                     self._roster_parsed.english_passed.get(sid))
 
     def _next_term(self, sid: str) -> Term:
         return max(Term.parse(r.term) for r in self.students[sid]).next()
@@ -121,18 +123,13 @@ class AcademicTwinService:
         for sid in self.roster.to_audit:
             report = self._report(sid)
             t = report.transcript
-            reasons = [f"{r.requirement.id} {r.requirement.title}" for r in report.results if not r.satisfied]
-            if t.review:
-                reasons.insert(0, f"{len(t.review)} 筆紀錄需人工判斷")
-            if t.dept_unverified and not reasons:
-                reasons.append(f"{len(t.dept_unverified)} 門本系選修未在規則庫核對")
             rows.append({
                 "id": sid,
                 "status": report.status.value,
                 "total_credits": report.total_credits,
                 "satisfied": sum(r.satisfied for r in report.results),
                 "requirements": len(report.results),
-                "reasons": reasons,
+                "reasons": reasons(report),
                 "reviewed": len(t.reviewed),
             })
         return rows
@@ -143,6 +140,9 @@ class AcademicTwinService:
         return (
             [{"id": sid, "kind": "no_records", "message": "在應屆名單上，但沒有任何修課紀錄，未審查"} for sid in r.no_records]
             + [{"id": sid, "kind": "not_on_roster", "message": "有修課紀錄，但不在應屆名單，未審查"} for sid in r.not_on_roster]
+            + [{"id": sid, "kind": "other_cohort",
+                "message": f"名單入學年度為 {c}，系統只有 {self.kb.cohort} 學年度規則庫，未審查"}
+               for sid, c in r.other_cohort.items()]
             + [{"id": sid, "kind": "duplicate", "message": "應屆名單重複列出"} for sid in r.duplicates]
             + [{"id": None, "kind": "blank", "message": f"名單第 {line} 行學號空白"} for line in r.blank_rows]
         )
@@ -211,6 +211,8 @@ class AcademicTwinService:
                     "kind": r.requirement.kind,
                     "title": r.requirement.title,
                     "satisfied": r.satisfied,
+                    "pending": r.pending,
+                    "detail": r.detail,
                     "have": r.have,
                     "need": r.need,
                     "shortfall": r.shortfall,
@@ -233,6 +235,10 @@ class AcademicTwinService:
                 self.course(c) for c in kb.courses if c not in t.passed
             ],
         }
+
+    def report_html(self, sid: str, audited_at: datetime | None = None) -> str:
+        """單一學生審查明細（可列印）。"""
+        return report.render(self.student(sid), self.kb.program, self.kb.cohort, self.rule_version, audited_at)
 
     # ---------- 路徑模擬 ----------
     def _plan_dict(self, p: Plan) -> dict:

@@ -30,7 +30,7 @@ class Source:
 class Requirement:
     id: str
     kind: str  # all_of / taken_all / n_of / credits_from / category_credits / category_count /
-    #            dept_elective_credits / total_credits
+    #            dept_elective_credits / english_threshold / total_credits
     title: str
     source: Source
     courses: tuple[str, ...] = ()
@@ -38,6 +38,9 @@ class Requirement:
     n: int = 0
     min_credits: int = 0
     course_type: str | None = None
+    # category_count 附加條件：課名含 name_contains 的至少 name_min 門（例如體育須含 2 學期大一體育）
+    name_contains: str = ""
+    name_min: int = 0
     # 預設一門課只能計入一條規則；總學分與類別規則例外
     exclusive: bool = True
 
@@ -111,6 +114,8 @@ def load(path: str | Path) -> KnowledgeBase:
                 n=r.get("n", 0),
                 min_credits=r.get("min_credits", 0),
                 course_type=r.get("course_type"),
+                name_contains=r.get("name_contains", ""),
+                name_min=r.get("name_min", 0),
                 exclusive=r.get("exclusive", kind in ("all_of", "taken_all", "n_of", "credits_from")),
             )
         )

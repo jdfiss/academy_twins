@@ -7,6 +7,7 @@
     python app.py --export 結果.csv            # 批次畢審結果匯出 CSV（附規則版本與時間）
     python app.py S002                         # 單一學生的畢業進度
     python app.py S002 --plan                  # 排出到畢業的修課計畫
+    python app.py S002 --report 明細.html      # 單一學生審查明細（可列印）
     python app.py S002 --skip IM2001@114-1     # What-if：114-1 不修資料結構
     python app.py S002 --away 115-1            # What-if：115-1 出國交換
     python app.py --course IM2001              # 這門不修會卡到哪些課
@@ -25,7 +26,7 @@ from academic_twin.planner import Plan, Scenario, Term, explain_delay, plan
 from academic_twin.records import RecordsError, load_students
 from academic_twin.reviews import ReviewStore
 from academic_twin.roster import RosterCheck, check_roster, load_roster
-from academic_twin.rule_engine import AuditReport, Status, audit
+from academic_twin.rule_engine import AuditReport, Status, audit, reasons
 
 ROOT = Path(__file__).parent
 KB_PATH = ROOT / "data" / "curriculum_im_114.json"
@@ -45,9 +46,13 @@ def print_student(kb, sid: str, report: AuditReport, reviews: ReviewStore) -> No
     print(f"判定：{STATUS_LABEL[report.status]}")
     print("學分採計：" + "、".join(f"{k} {v}" for k, v in report.credit_breakdown.items()) + "\n")
     for r in report.results:
-        mark = "✔" if r.satisfied else "✘"
-        print(f"  {mark} [{r.requirement.id}] {r.requirement.title}　({r.have}/{r.need})")
-        if not r.satisfied:
+        mark = "✔" if r.satisfied else "?" if r.pending else "✘"
+        detail = f"，{r.detail}" if r.detail else ""
+        print(f"  {mark} [{r.requirement.id}] {r.requirement.title}　({r.have}/{r.need}{detail})")
+        if r.pending:
+            print("      修課紀錄無法判斷；請確認是否已通過英檢（名單 english_passed 欄）")
+            print(f"      依據：{r.citation}")
+        elif not r.satisfied:
             options = '、'.join(course_label(kb, c) for c in r.missing)
             if r.requirement.kind == "n_of":
                 print(f"      尚需 {r.shortfall} 門，可從中選：{options}")
@@ -71,20 +76,13 @@ def print_student(kb, sid: str, report: AuditReport, reviews: ReviewStore) -> No
 
 
 def print_batch(kb, reports: dict[str, AuditReport], check: RosterCheck) -> None:
-    roster_size = len(check.to_audit) + len(check.no_records)
-    print(f"系辦批次畢審：{kb.program} {kb.cohort} 學年度，應屆名單 {roster_size} 位，審查 {len(reports)} 位\n")
+    print(f"系辦批次畢審：{kb.program} {kb.cohort} 學年度，應屆名單 {check.roster_size} 位，審查 {len(reports)} 位\n")
     for sid, report in reports.items():
-        reasons = [f"{r.requirement.id} {r.requirement.title}" for r in report.results if not r.satisfied]
-        t = report.transcript
-        if t.review:
-            reasons.insert(0, f"{len(t.review)} 筆紀錄需人工判斷")
-        if t.dept_unverified and not reasons:
-            reasons.append(f"{len(t.dept_unverified)} 門本系選修未在規則庫核對")
-        print(f"  {sid}  {STATUS_LABEL[report.status]:<18} {'；'.join(reasons) or '全部符合'}")
-    print_roster_anomalies(check)
+        print(f"  {sid}  {STATUS_LABEL[report.status]:<18} {'；'.join(reasons(report)) or '全部符合'}")
+    print_roster_anomalies(check, kb.cohort)
 
 
-def print_roster_anomalies(check: RosterCheck) -> None:
+def print_roster_anomalies(check: RosterCheck, cohort: int) -> None:
     if not check.anomalies:
         print("\n名單比對：無異常")
         return
@@ -93,6 +91,8 @@ def print_roster_anomalies(check: RosterCheck) -> None:
         print(f"  ! {sid}  在應屆名單上，但沒有任何修課紀錄，未審查")
     for sid in check.not_on_roster:
         print(f"  ? {sid}  有修課紀錄，但不在應屆名單，未審查")
+    for sid, c in check.other_cohort.items():
+        print(f"  ! {sid}  名單入學年度為 {c}，系統只有 {cohort} 學年度規則庫，未審查")
     for sid in check.duplicates:
         print(f"  ? {sid}  應屆名單重複列出")
     for line in check.blank_rows:
@@ -150,9 +150,11 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--course", help="查這門課的先修與後續影響")
     parser.add_argument("--bottlenecks", action="store_true")
     parser.add_argument("--assumptions", action="store_true", help="列出規則庫中尚待確認的假設")
-    parser.add_argument("--roster", type=Path, default=ROSTER_PATH, help="應屆名單 CSV（需有 student_id 欄）")
+    parser.add_argument("--roster", type=Path, default=ROSTER_PATH,
+                        help="應屆名單 CSV（需有 student_id 欄；選填 english_passed 欄：Y／N）")
     parser.add_argument("--records", type=Path, default=STUDENTS_PATH, help="修課紀錄 CSV")
     parser.add_argument("--export", type=Path, help="批次畢審結果匯出成 CSV")
+    parser.add_argument("--report", type=Path, help="單一學生審查明細匯出成 HTML（可列印）")
     args = parser.parse_args(argv)
 
     kb = knowledge_base.load(KB_PATH)
@@ -175,15 +177,17 @@ def main(argv: list[str]) -> None:
         sys.exit(f"找不到修課紀錄：{args.records}")
     except RecordsError as e:
         sys.exit(str(e))
+    try:
+        roster = load_roster(args.roster)
+    except FileNotFoundError:
+        sys.exit(f"找不到應屆名單：{args.roster}")
+    except ValueError as e:
+        sys.exit(str(e))
+    english = roster.english_passed
     if not args.student:
-        try:
-            roster_ids, blank_rows = load_roster(args.roster)
-        except FileNotFoundError:
-            sys.exit(f"找不到應屆名單：{args.roster}")
-        except ValueError as e:
-            sys.exit(str(e))
-        check = check_roster(roster_ids, students, blank_rows)
-        print_batch(kb, {sid: audit(kb, students[sid], reviews.decisions(sid)) for sid in check.to_audit}, check)
+        check = check_roster(roster.ids, students, roster.blank_rows, roster.cohorts, kb.cohort)
+        print_batch(kb, {sid: audit(kb, students[sid], reviews.decisions(sid), english.get(sid))
+                         for sid in check.to_audit}, check)
         if args.export:
             service = AcademicTwinService(KB_PATH, args.records, args.roster, REVIEWS_PATH)
             args.export.write_text(service.export_csv(), encoding="utf-8-sig")
@@ -193,8 +197,12 @@ def main(argv: list[str]) -> None:
     sid = args.student
     if sid not in students:
         sys.exit(f"找不到學生 {sid}")
-    report = audit(kb, students[sid], reviews.decisions(sid))
+    report = audit(kb, students[sid], reviews.decisions(sid), english.get(sid))
     print_student(kb, sid, report, reviews)
+    if args.report:
+        service = AcademicTwinService(KB_PATH, args.records, args.roster, REVIEWS_PATH)
+        args.report.write_text(service.report_html(sid), encoding="utf-8")
+        print(f"\n已匯出審查明細 {args.report}")
     if not (args.plan or args.skip or args.away):
         return
 

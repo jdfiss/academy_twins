@@ -43,6 +43,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._csv(service.export_csv(), f"audit_{service.rule_version}.csv")
             if len(route) == 2 and route[0] == "students":
                 return self._json(service.student(route[1]))
+            if len(route) == 3 and route[0] == "students" and route[2] == "report":
+                body = service.report_html(route[1]).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                return self.wfile.write(body)
             if len(route) == 3 and route[0] == "students" and route[2] == "simulate":
                 return self._json(service.simulate(
                     route[1],

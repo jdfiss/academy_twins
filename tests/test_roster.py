@@ -27,13 +27,31 @@ class RosterTest(unittest.TestCase):
 
     def test_load_roster_reports_blank_ids_with_line_numbers(self):
         path = self.write("student_id,name\nS001,甲\n,乙\n S002 ,丙\n")
-        ids, blank = load_roster(path)
-        self.assertEqual(ids, ["S001", "S002"])
-        self.assertEqual(blank, [3])
+        roster = load_roster(path)
+        self.assertEqual(roster.ids, ["S001", "S002"])
+        self.assertEqual(roster.blank_rows, [3])
 
     def test_load_roster_accepts_excel_bom(self):
         path = self.write("﻿student_id\nS001\n")
-        self.assertEqual(load_roster(path)[0], ["S001"])
+        self.assertEqual(load_roster(path).ids, ["S001"])
+
+    def test_english_passed_column_is_optional_and_validated(self):
+        roster = load_roster(self.write("student_id,english_passed\nS001,Y\nS002,\nS003,否\n"))
+        self.assertEqual(roster.english_passed, {"S001": True, "S003": False})
+        with self.assertRaises(ValueError) as ctx:
+            load_roster(self.write("student_id,english_passed\nS001,maybe\n"))
+        self.assertIn("第 2 行", str(ctx.exception))
+
+    def test_other_cohort_students_reported_not_audited(self):
+        service = AcademicTwinService(roster_path=self.write("student_id,cohort\nS001,114\nS002,113\nS003,\n"))
+        self.assertEqual([r["id"] for r in service.batch()], ["S001", "S003"])  # 空白視為 114
+        anomalies = {(a["id"], a["kind"]) for a in service.roster_anomalies()}
+        self.assertIn(("S002", "other_cohort"), anomalies)
+        self.assertEqual(service.data_source()["roster_count"], 3)
+
+    def test_cohort_must_be_a_year(self):
+        with self.assertRaises(ValueError):
+            load_roster(self.write("student_id,cohort\nS001,一一四\n"))
 
     def test_load_roster_requires_student_id_column(self):
         with self.assertRaises(ValueError):

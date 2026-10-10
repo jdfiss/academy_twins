@@ -54,6 +54,8 @@ class RequirementResult:
     missing: list[str] = field(default_factory=list)
     have: int = 0  # 已達成數量（門數或學分，依規則種類）
     need: int = 0
+    pending: bool = False  # 修課紀錄無法判斷、需外部資料確認（例如英檢是否已通過）
+    detail: str = ""  # 附加條件的說明（例如「大一體育 1／2 學期」）
 
     @property
     def shortfall(self) -> int:
@@ -182,17 +184,23 @@ def credit_breakdown(kb: KnowledgeBase, t: Transcript) -> dict[str, int]:
     return breakdown
 
 
-def audit(kb: KnowledgeBase, records: list[Record], decisions: Decisions | None = None) -> AuditReport:
+def audit(kb: KnowledgeBase, records: list[Record], decisions: Decisions | None = None,
+          english_passed: bool | None = None) -> AuditReport:
+    """english_passed：語言中心英檢審核結果（名單提供）；None 表示不知道。"""
     t = classify(kb, records, decisions)
     breakdown = credit_breakdown(kb, t)
     total = sum(breakdown.values())
     consumed: set[str] = set()
-    results = [_evaluate(kb, req, t, consumed, total) for req in kb.requirements]
+    results = [_evaluate(kb, req, t, consumed, total, english_passed) for req in kb.requirements]
 
+    # 類別不明的紀錄可能改變其他規則結果，所以優先人工判斷；
+    # 待確認的外部條件（英檢）補不了其他缺漏，所以有明確缺漏時直接 Fail
     if t.review:
         status = Status.MANUAL_REVIEW
-    elif not all(r.satisfied for r in results):
+    elif not all(r.satisfied for r in results if not r.pending):
         status = Status.FAIL
+    elif any(r.pending for r in results):
+        status = Status.MANUAL_REVIEW
     elif t.dept_unverified:
         status = Status.WARNING
     else:
@@ -201,8 +209,20 @@ def audit(kb: KnowledgeBase, records: list[Record], decisions: Decisions | None 
     return AuditReport(status, results, t, total, breakdown)
 
 
+def reasons(report: AuditReport) -> list[str]:
+    """批次清單上的一行原因：需人工判斷的紀錄、未符合的規則（待確認的另外標示）、未核對的本系課。"""
+    t = report.transcript
+    out = [f"{r.requirement.id} {r.requirement.title}" + ("（待確認）" if r.pending else "")
+           for r in report.results if not r.satisfied]
+    if t.review:
+        out.insert(0, f"{len(t.review)} 筆紀錄需人工判斷")
+    if t.dept_unverified and not out:
+        out.append(f"{len(t.dept_unverified)} 門本系選修未在規則庫核對")
+    return out
+
+
 def _evaluate(kb: KnowledgeBase, req: Requirement, t: Transcript, consumed: set[str],
-              total: int) -> RequirementResult:
+              total: int, english_passed: bool | None = None) -> RequirementResult:
     available = [c for c in t.passed if not (req.exclusive and c in consumed)]
     cite = kb.cite(req.source)
 
@@ -219,6 +239,13 @@ def _evaluate(kb: KnowledgeBase, req: Requirement, t: Transcript, consumed: set[
     elif req.kind == "dept_elective_credits":
         have = dept_elective_credits(kb, t)
         result = RequirementResult(req, cite, have >= req.min_credits, [], have=have, need=req.min_credits)
+
+    elif req.kind == "english_threshold":  # 英檢通過，或指定類別（進修英文）及格達一定學分
+        matched = [r for r in t.categorized if any(kb.in_category(r.category, c) for c in req.categories)]
+        have = sum(r.credits for r in matched)
+        satisfied = english_passed is True or have >= req.min_credits
+        result = RequirementResult(req, cite, satisfied, [r.code for r in matched], have=have,
+                                   need=req.min_credits, pending=not satisfied and english_passed is None)
 
     elif req.kind == "n_of":
         used = [c for c in req.courses if c in available][: req.n]
@@ -244,7 +271,12 @@ def _evaluate(kb: KnowledgeBase, req: Requirement, t: Transcript, consumed: set[
             have, need = sum(r.credits for r in matched), req.min_credits
         else:
             have, need = len(matched), req.n
-        result = RequirementResult(req, cite, have >= need, used, have=have, need=need)
+        ok, detail = have >= need, ""
+        if req.name_contains:
+            named = sum(req.name_contains in r.name for r in matched)
+            ok = ok and named >= req.name_min
+            detail = f"{req.name_contains} {named}／{req.name_min}"
+        result = RequirementResult(req, cite, ok, used, have=have, need=need, detail=detail)
 
     elif req.kind == "total_credits":
         result = RequirementResult(req, cite, total >= req.min_credits, available,
