@@ -22,7 +22,10 @@
 ## 資料與基本操作
 
 - `data/curriculum_im_114.json`：114 年度規則，含來源連結與待確認假設。
-- `data/sources/im_114_table.pdf`、`data/sources/im_114_coursemap.pdf`：原始來源。
+- `data/sources/im_114_table.pdf`、`data/sources/im_114_coursemap.pdf`：114 應修科目表與課程地圖。
+- `data/sources/im_requirements_slide.jpg`：應修科目表說明投影片（必選課定義、本系／外系選修學分）。
+- `data/sources/im_111_audit_guide.pdf`：111 學年畢業審核表說明（中文字無法直接抽取，需轉成圖片閱讀）。
+- `data/sources/im_113_coursemap.pdf`：113 學年度課程地圖。
 - `data/students/sample_students.csv`：匿名示例紀錄。
 - `data/students/sample_roster.csv`：示例應屆名單，含一位無修課紀錄的 S005 以示範異常清單。
 - `tests/fixtures/curriculum_sample.json`：測試示例規則。

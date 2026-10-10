@@ -34,7 +34,7 @@ python -m unittest discover -s tests -t .  # 測試
 ```
 data/curriculum_im_114.json   規則庫：課程、畢業規則（附條文出處）、學分認列政策
 data/students/                範例學生修課紀錄（虛構）
-data/sources/                 官方應修科目表與課程地圖 PDF
+data/sources/                 應修科目表、課程地圖、說明投影片、111 畢審說明
 academic_twin/
   knowledge_base.py           載入並驗證規則庫
   rule_engine.py              畢業資格判定：Pass / Warning / Fail / Manual Review
