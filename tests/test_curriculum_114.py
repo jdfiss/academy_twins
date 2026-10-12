@@ -155,6 +155,30 @@ class Curriculum114Test(unittest.TestCase):
         self.assertTrue(result(report, "R7").satisfied)
         self.assertEqual(result(report, "R6").have, 3)
 
+    def test_gened_category_from_course_code(self):
+        # 成績單沒填類別：CC 開頭算通識核心並依第 3 碼分領域，GS 開頭算通識選修
+        records = [Record("CC0416", "法律的世界", 2, 80, "115-1"), Record("GS1234", "通識選修", 3, 80, "115-1")]
+        report = audit(KB, records)
+        self.assertTrue(result(report, "R7").satisfied)
+        self.assertEqual(result(report, "R7").detail, "已修：社會思潮與現象")
+        self.assertEqual(result(report, "R6").have, 5)
+        self.assertNotIn("外系認列", report.credit_breakdown)
+
+    def test_course_code_refines_generic_core_category(self):
+        report = audit(KB, [cat("CC0109", 3, "通識核心"), cat("CC0201", 3, "通識")])
+        self.assertEqual(result(report, "R7").have, 2)
+        self.assertEqual(result(report, "R7").detail, "已修：人文與思想、自然科學")
+
+    def test_core_without_known_domain_still_counts(self):
+        report = audit(KB, [cat("GC-1", 3, "通識核心")])
+        self.assertTrue(result(report, "R7").satisfied)
+        self.assertEqual(result(report, "R7").detail, "已修：類別未細分")
+
+    def test_explicit_non_gened_category_kept(self):
+        report = audit(KB, [cat("CC0109", 3, "外文")])
+        self.assertEqual(result(report, "R5").have, 3)
+        self.assertFalse(result(report, "R7").satisfied)
+
     def test_pe_counted_by_semesters(self):
         report = audit(KB, [cat(f"PE-{i}", 0, "體育") for i in range(4)])
         r8 = result(report, "R8")

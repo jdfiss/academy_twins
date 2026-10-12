@@ -9,7 +9,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
 from .knowledge_base import KnowledgeBase, Requirement
@@ -103,6 +103,9 @@ def classify(kb: KnowledgeBase, records: list[Record], decisions: Decisions | No
         if r.code in seen:  # 重複通過同一課號只算一次
             continue
         seen.add(r.code)
+        category = kb.category_of(r.code, r.category)
+        if category != r.category:
+            r = replace(r, category=category)
         if r.code in kb.courses:
             t.passed.append(r.code)
         elif r.category and r.category in kb.categories:
@@ -272,6 +275,11 @@ def _evaluate(kb: KnowledgeBase, req: Requirement, t: Transcript, consumed: set[
         else:
             have, need = len(matched), req.n
         ok, detail = have >= need, ""
+        subs = [c for c, parent in kb.categories.items() if parent in req.categories]
+        if req.kind == "category_count" and subs:  # 例如通識核心列出已修的領域
+            found = sorted({next((s for s in subs if kb.in_category(r.category, s)), "類別未細分")
+                            for r in matched})
+            detail = "已修：" + "、".join(found) if found else ""
         if req.name_contains:
             named = sum(req.name_contains in r.name for r in matched)
             ok = ok and named >= req.name_min

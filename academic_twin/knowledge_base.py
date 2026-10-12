@@ -65,6 +65,8 @@ class KnowledgeBase:
     courses: dict[str, Course]
     requirements: list[Requirement] = field(default_factory=list)
     categories: dict[str, str] = field(default_factory=dict)  # 類別 → 上層類別（如 通識核心 → 通識）
+    # 課號開頭 → 類別（如 CC01 → 人文與思想）；最長的開頭優先
+    code_categories: dict[str, str] = field(default_factory=dict)
     credit_policy: CreditPolicy = field(default_factory=CreditPolicy)
     assumptions: list[str] = field(default_factory=list)
     # True：本系課號不在規則庫一律算本系選修（已確認規則）；False：暫算本系選修但標 Warning 待核對
@@ -72,6 +74,14 @@ class KnowledgeBase:
 
     def cite(self, source: Source) -> str:
         return f"{self.sources.get(source.doc, source.doc)} {source.ref}"
+
+    def category_of(self, code: str, category: str = "") -> str:
+        """紀錄的類別：依課號推得的類別比紀錄上的更細（或紀錄沒填）時採課號的，否則照紀錄。"""
+        prefixes = [p for p in self.code_categories if code.startswith(p)]
+        if not prefixes:
+            return category
+        derived = self.code_categories[max(prefixes, key=len)]
+        return derived if not category or self.in_category(derived, category) else category
 
     def in_category(self, category: str, target: str) -> bool:
         """category 是否屬於 target（含上層類別）。"""
@@ -138,6 +148,7 @@ def load(path: str | Path) -> KnowledgeBase:
         courses=courses,
         requirements=requirements,
         categories=raw.get("categories", {}),
+        code_categories=raw.get("code_categories", {}),
         credit_policy=policy,
         assumptions=raw.get("assumptions", []),
         dept_prefix_is_elective=raw.get("dept_prefix_is_elective", False),
@@ -164,6 +175,9 @@ def _validate(kb: KnowledgeBase) -> None:
                 errors.append(f"{r.id} 引用的類別 {cat} 未定義")
         if r.source.doc not in kb.sources:
             errors.append(f"{r.id} 的來源 {r.source.doc} 未定義")
+    for prefix, cat in kb.code_categories.items():
+        if cat not in kb.categories:
+            errors.append(f"課號開頭 {prefix} 對應的類別 {cat} 未定義")
     policy = kb.credit_policy
     for cat in list(policy.category_caps) + list(policy.excluded):
         if cat not in kb.categories:
