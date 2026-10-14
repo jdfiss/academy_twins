@@ -1,6 +1,6 @@
 # 兩組分工計畫
 
-更新日期：2026-10-14。架構以 [專案設計與主要流程](PROJECT_DESIGN.md) 為準；工作項目對應 [實作狀態](IMPLEMENTATION_STATUS.md) 的待建置優先序。本文是分工提案，交接格式等細節由兩組在第 1 週確認後定稿。
+更新日期：2026-10-14。架構以 [專案設計與主要流程](PROJECT_DESIGN.md) 為準；工作項目對應 [實作狀態](IMPLEMENTATION_STATUS.md) 的待建置優先序。本文是兩組（含各自的 AI agent）的工作準則，協作流程見[協作規則](#協作規則)；交接格式細節由兩組在第 1 週確認後定稿。
 
 ## 分組原則
 
@@ -85,6 +85,7 @@
 | [系辦端業務需求](OFFICE_REQUIREMENTS.md)、[畢業規則確認清單](OFFICE_QUESTIONS.md) | A |
 | [學生端需求](STUDENT_REQUIREMENTS.md) | B |
 | [專案設計與主要流程](PROJECT_DESIGN.md)、[實作狀態](IMPLEMENTATION_STATUS.md)、本文件 | 共用；各組完成項目時更新自己的段落 |
+| `AGENTS.md`、`CLAUDE.md`（AI agent 工作準則）、`.github/`（CI、PR 範本） | 專案負責人 |
 
 ## 各組工作項目
 
@@ -283,17 +284,164 @@ flowchart TD
 
 ## 協作規則
 
-| 規則 | 內容 |
+本節是兩組（含各自使用的 AI agent）共同遵守的工作規則。與其他文件或個人習慣衝突時，以本節為準；本節沒寫到的情況，先問專案負責人。
+
+### 角色
+
+| 角色 | 職責 |
 |---|---|
-| 檔案主人 | 依[檔案歸屬](#檔案歸屬)；修改對方檔案須發 PR，由主人組至少一人審查 |
-| 共用檔案 | `api.py` 共用部分、`app.py`、共用前端外框的修改以小 PR 進行，並通知另一組 |
-| 交接格式變更 | 任何欄位新增、改名、刪除都要兩組同意，並同步更新本文件[交接格式](#交接格式) |
-| 測試不得破 | PR 合併前全部測試須通過（目前 82 項，GitHub Actions `.github/workflows/tests.yml` 自動執行）；不得為了通過而刪改對方的測試 |
-| 兩端一致性 | 一致性測試列為例行測試；任一組的改動導致兩端判定不同，視為阻擋合併 |
-| 判定只在核心 | 學生端、說明、AI 皆不得自行計算學分或改判；需要新判定時向 A 組提出 |
-| 分支 | 各組在自己的功能分支開發，經 PR 合併回 `main` |
-| 文件同步 | 功能完成後由完成的組更新 [實作狀態](IMPLEMENTATION_STATUS.md)；需求變動更新各自的需求文件 |
-| 真實資料 | 真實學生資料不進 repo；示例資料一律去識別化 |
+| 專案負責人 | 維護 `main`、本文件與共用檔案；設定 GitHub 分支保護；仲裁跨組爭議與交接格式變更；審查共用檔案的 PR |
+| 各組對接人 | 每組指定一位；審查本組檔案的 PR、確認交接格式、向負責人回報進度與阻礙 |
+| 組員 | 在自己的分支開發，經 PR 合併；遵守檔案歸屬 |
+
+### 分支
+
+- `main` 永遠是可執行、測試全過的版本。分組開工後，**程式改動一律經 PR 合併**，不直接 push 到 `main`。負責人修正文件錯字等小改動可直接 push，但不得包含程式。
+- **短分支、常合併**：一個工作項目一條分支，做完就合併並刪除。分支存活以**一週內**為目標；超過一週還沒做完的，拆成更小的項目，先合併能用的部分。
+- **不使用長期的組別分支**（例如一直開著的 `team-a`）。兩組透過頻繁合併回 `main` 交換成果，不要等到最後才一次合併。
+- 分支命名：`<組別>/<簡短英文描述>`，組別用小寫 `a`、`b`；跨組或負責人的工作用 `shared/`。
+
+| 範例 | 用途 |
+|---|---|
+| `a/cohort-rules` | A 組：規則依入學年度取用 |
+| `a/repeatable-courses` | A 組：可重複修習課程 |
+| `b/explain` | B 組：白話說明 |
+| `b/student-flags-ui` | B 組：誤判提示畫面 |
+| `shared/contract-v2` | 交接格式變更（兩組共同） |
+
+### 日常流程
+
+```bash
+# 1. 開始新項目：先拿 main 的最新版，再開分支
+git switch main
+git pull
+git switch -c a/cohort-rules
+
+# 2. 開發中：小步 commit；每天至少同步一次 main，及早發現衝突
+git add <檔案>
+git commit
+git fetch origin
+git merge origin/main          # 有衝突就在自己分支上解決，見「衝突處理」
+
+# 3. 推送前：本機跑測試
+python -m unittest discover -s tests -t .
+git push -u origin a/cohort-rules
+
+# 4. 到 GitHub 發 PR（base: main），等 CI 與審查通過後合併，然後刪除分支
+```
+
+- 開新分支前一定先 `git pull`，才能用到對方組已合併的成果。
+- 同步 `main` 用 `git merge origin/main`。不要對已推送的分支 `rebase`，也不要 `git push --force`，以免覆蓋別人的 commit。
+
+### Commit 訊息
+
+- 沿用 repo 現有風格：第一行用英文祈使句簡述做了什麼（50 字元內，例如 `Load rules by cohort year`），空一行後說明原因與影響。
+- 一個 commit 只做一件事；格式調整和功能改動不要混在同一個 commit。
+- AI agent 產生的 commit 保留工具的共同作者標記（`Co-Authored-By`），方便追溯。
+
+### Pull Request
+
+| 項目 | 規定 |
+|---|---|
+| 大小 | 以一個工作項目為單位，盡量讓審查者 30 分鐘內看得完；過大就拆 |
+| 標題 | 英文祈使句，同 commit 第一行 |
+| 說明 | 依下方範本填寫 |
+| 審查者 | 改到哪組的檔案，就由哪組對接人審查；改到共用檔案（[檔案歸屬](#檔案歸屬)標「共用」或「變更需通知」者）加請負責人；交接格式變更需兩組對接人都核准 |
+| 合併條件 | CI（GitHub Actions）通過，且至少一位審查者核准 |
+| 合併方式 | 使用「Squash and merge」，讓 `main` 上一個 PR 只對應一個 commit；合併後刪除分支 |
+| 合併者 | 條件達成後由 PR 作者自行合併 |
+| 回應時限 | 審查者原則上兩個工作天內回應；卡住時通知負責人 |
+
+PR 說明範本（已放在 `.github/pull_request_template.md`，在 GitHub 發 PR 時會自動帶入）：
+
+```markdown
+## 做了什麼
+（一到三句）
+
+## 對應工作項目
+TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
+
+## 影響範圍
+- 改到的檔案屬於：A 組／B 組／共用
+- 是否改動交接格式：否／是（附 TEAM_PLAN.md 交接格式的修改）
+
+## 如何驗證
+- [ ] `python -m unittest discover -s tests -t .` 全過
+- [ ] 網頁或命令列手動確認：（步驟）
+
+## 待確認
+（需要承辦人或另一組確認的事）
+```
+
+### 檔案歸屬與跨組修改
+
+- 每個檔案的主人見[檔案歸屬](#檔案歸屬)。只改自己組的檔案；需要改對方的檔案時，二選一：
+  1. 請對方組改（開 GitHub Issue 或在溝通管道提出）；
+  2. 自己改，但 PR 必須由對方組審查，並在說明中寫明原因。
+- 共用檔案（`api.py` 的 `CoreService`、`app.py`、`web.py`、`web/index.html`、`web/assets/common.*`）的改動以小 PR 進行，並請負責人審查。
+- 新增檔案時，在 PR 說明寫明歸屬哪一組；合併後由負責人補進[檔案歸屬](#檔案歸屬)表。
+
+### 交接格式變更
+
+[交接格式](#交接格式)是兩組唯一的正式介面，變更流程如下：
+
+1. 提案組開 `shared/` 分支，在同一個 PR 內一起修改：本文件的[交接格式](#交接格式)一節、`academic_twin/api.py` 的 `student()`、`web/assets/demo-twin.json`、`tests/test_contract.py`。
+2. 兩組對接人都核准後才能合併。
+3. 新增欄位時，不要同時改名或刪除舊欄位。確實需要改名或刪除時，先加新欄位，等另一組改用後，再另發 PR 移除舊欄位。
+
+### 測試
+
+- PR 合併前全部測試須通過（目前 82 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
+- 新功能要附測試，放在自己組的測試檔；新增測試檔時在 PR 說明寫明歸屬。
+- **不得為了讓測試通過而刪除或放寬對方組的測試**。對方的測試若與新需求衝突，先找對方組討論，由對方修改。
+- `tests/test_contract.py` 的兩端一致性測試失敗，一律視為阻擋合併：同一份資料在兩端必須得到相同判定。
+
+### 判定只在核心
+
+- 學分計算、規則判定、`flags` 與 `actions` 的偵測都只在 A 組的審查核心（`knowledge_base.py`、`rule_engine.py`）。
+- 學生端、白話說明、AI 只能引用審查結果，不得自行計算學分，也不得改變 `status`、`satisfied`。需要新的判定時，向 A 組提出。
+
+### 衝突處理
+
+- 在自己的分支上執行 `git merge origin/main` 解決衝突，不要在 `main` 上解。
+- 衝突發生在**對方組的檔案**時，以對方的版本為準，再把自己需要的改動加回去；不確定時找對方組一起看。
+- 解完衝突後重跑全部測試，再推送。
+
+### 文件同步
+
+- 功能合併時，由完成的組在同一個 PR 內更新 [實作狀態](IMPLEMENTATION_STATUS.md)。
+- 需求變動時，更新各自的需求文件（A：[系辦端業務需求](OFFICE_REQUIREMENTS.md)；B：[學生端需求](STUDENT_REQUIREMENTS.md)）。
+- 工作項目完成或調整時，更新本文件[各組工作項目](#各組工作項目)的表格。
+
+### 資料與隱私
+
+- 真實學生資料（成績、學號、儀表板匯出檔）**不得進 repo**，也不得貼進 PR、Issue 或 AI 對話。
+- 示例資料一律虛構或去識別化；`data/reviews/` 已列入 `.gitignore`。
+- 不要 commit 金鑰、密碼或 `.env` 等設定檔。
+
+### AI agent 使用規則
+
+組員使用 Claude Code、Codex 等 AI agent 時，agent 必須遵守本文件。repo 根目錄的 `AGENTS.md`（Codex 等工具讀取）與 `CLAUDE.md`（Claude Code 讀取）會要求 agent 開工前先讀本文件。組員要確保：
+
+- agent 知道自己屬於哪一組：分支名稱的 `a/`、`b/` 前綴即組別。不在組別分支上時，agent 應先問人。
+- agent 只改本組檔案；需要改對方檔案、共用檔案或交接格式時，停下來告知組員，依本節流程處理。
+- agent 不直接 push 到 `main`、不 force push、不刪改對方組的測試。
+- agent 不讀取、也不產生真實學生資料。
+- agent 產生的程式碼要由組員看過並跑過測試才 commit；PR 的審查責任在人，不在 agent。
+
+### 溝通
+
+- 需求、阻礙、跨組請求優先開 GitHub Issue，標題加上 `[A]`、`[B]` 或 `[共用]` 方便追蹤；即時討論用哪個通訊管道由負責人決定。
+- 要問承辦人的問題彙整到 [畢業規則確認清單](OFFICE_QUESTIONS.md)，由 A 組對接人統一詢問。
+- 兩組每週同步一次（形式由負責人決定），各組報告：已完成項目、下週項目、需要對方交付的東西。
+
+### 負責人的一次性設定
+
+分組開工前，負責人在 GitHub 完成：
+
+1. Settings → Branches → 為 `main` 新增保護規則：勾選「Require a pull request before merging」（至少 1 位核准）與「Require status checks to pass before merging」，必要檢查選 `test`。
+2. Settings → General → Pull Requests：只勾「Allow squash merging」，並勾選「Automatically delete head branches」。
+3. 把兩組組員加入 repo 的 Collaborators（寫入權限）。
 
 ## 待決事項與追蹤
 
