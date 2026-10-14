@@ -43,6 +43,9 @@ class Requirement:
     name_min: int = 0
     # 預設一門課只能計入一條規則；總學分與類別規則例外
     exclusive: bool = True
+    # 校務系統畢審儀表板的規則代碼（全校共用）與本系章則用語；尚未對照時留空
+    system_code: str = ""
+    regulation_term: str = ""
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,8 @@ def load(path: str | Path) -> KnowledgeBase:
                 name_contains=r.get("name_contains", ""),
                 name_min=r.get("name_min", 0),
                 exclusive=r.get("exclusive", kind in ("all_of", "taken_all", "n_of", "credits_from")),
+                system_code=r.get("system_code", ""),
+                regulation_term=r.get("regulation_term", ""),
             )
         )
 

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>系辦畢審・Academic Twin</title>
+<link rel="stylesheet" href="assets/common.css">
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><a href="./">NCU <span>Academic Twin</span></a></div>
+    <span class="side-tag">系辦端</span>
+    <div class="sub" id="program"></div>
+  </div>
+  <nav>
+    <button data-view="batch" class="active">系辦畢審</button>
+    <button data-view="student">學生明細</button>
+    <button data-view="rules">規則來源</button>
+  </nav>
+</header>
+
+<!-- 系辦端（A 組）。共用外框與樣式見 assets/common.*，變更需通知 B 組 -->
+<main>
+  <!-- 系辦畢審 -->
+  <section class="view active" id="view-batch">
+    <div class="card" style="margin-bottom: 16px">
+      <h2>資料來源 <span class="muted small" id="data-source"></span></h2>
+      <div class="upload">
+        <label>修課紀錄 CSV<input type="file" id="records-file" accept=".csv,text/csv"></label>
+        <label>應屆名單 CSV<input type="file" id="roster-file" accept=".csv,text/csv"></label>
+        <button class="primary" id="upload-btn">上傳並重新審查</button>
+        <button class="ghost" id="reset-btn">還原示例資料</button>
+      </div>
+      <div class="muted small" style="margin-top: 8px">
+        修課紀錄欄位：student_id,code,name,credits,grade,term,category（category 可空白）；名單需有 student_id 欄，可加選填的 english_passed 欄（Y／N，空白表示未知）與 cohort 欄（入學學年度，空白視為 114）。
+        可只換其中一份。資料只存在這次執行的記憶體中，關掉伺服器就回到示例資料。
+      </div>
+      <div id="upload-msg"></div>
+    </div>
+    <div class="grid stats" id="stats"></div>
+    <div class="card">
+      <h2>批次畢業資格審查 <span class="muted small">點一列看該生細節</span>
+        <a class="ghost small" href="/api/export.csv" download style="float: right; text-decoration: none; padding: 4px 12px">匯出 CSV</a></h2>
+      <table>
+        <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th>原因</th></tr></thead>
+        <tbody id="batch-rows"></tbody>
+      </table>
+    </div>
+    <div class="card" id="roster-card" style="margin-top: 16px">
+      <h2>名單異常 <span class="muted small">應屆名單與修課紀錄比對，以下學生未納入審查</span></h2>
+      <table>
+        <thead><tr><th>學號</th><th>問題</th></tr></thead>
+        <tbody id="roster-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 學生明細：審查結果與人工覆核 -->
+  <section class="view" id="view-student">
+    <div class="student-head">
+      <label class="muted small">學生 <select id="student-select"></select></label>
+      <span id="student-status"></span>
+      <div><span class="big" id="student-credits"></span> <span class="muted">/ 128 學分</span></div>
+      <a class="ghost small" id="student-report" target="_blank" style="text-decoration: none; padding: 4px 12px">列印審查明細</a>
+      <a class="ghost small" id="student-twin" target="_blank" style="text-decoration: none; padding: 4px 12px">學生端畫面</a>
+    </div>
+    <div class="grid two">
+      <div class="grid">
+        <div class="card">
+          <h3>學分採計</h3>
+          <div class="stack" id="breakdown-bar"></div>
+          <div class="legend" id="breakdown-legend"></div>
+        </div>
+        <div class="card" id="issues-card">
+          <h3>需要注意</h3>
+          <div id="reviewer-row" class="small muted" style="margin-bottom: 8px">
+            覆核人 <input id="reviewer" placeholder="姓名" style="padding: 3px 8px; font-size: 12.5px; width: 120px">
+            <span>系辦對無法自動判定的紀錄做決定，存檔後立即重新審查。</span>
+          </div>
+          <div id="issues"></div>
+          <div id="review-msg"></div>
+          <details id="review-history-box" style="margin-top: 8px">
+            <summary>覆核歷程（<span id="review-history-count"></span> 筆）</summary>
+            <div id="review-history" class="small" style="margin-top: 6px"></div>
+          </details>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
+          <div id="requirements"></div>
+        </div>
+        <div class="card">
+          <details>
+            <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
+            <table style="margin-top:8px">
+              <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
+              <tbody id="records"></tbody>
+            </table>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 規則來源 -->
+  <section class="view" id="view-rules">
+    <div class="grid">
+      <div class="card"><h2>規則來源</h2><ul id="sources"></ul></div>
+      <div class="card">
+        <h2>尚待系辦確認的假設</h2>
+        <p class="muted small">以下是官方文件沒寫清楚、規則庫暫時採用的解讀。所有正式判定仍以規則條文為準。</p>
+        <ol class="assume" id="assumptions"></ol>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="assets/common.js"></script>
+<script src="assets/office.js"></script>
+</body>
+</html>

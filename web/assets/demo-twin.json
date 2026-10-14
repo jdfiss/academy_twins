@@ -1,0 +1,711 @@
+{
+  "id": "S002",
+  "status": "FAIL",
+  "cohort": "114",
+  "rule_version": "114-924be9eca67f",
+  "trial": true,
+  "total_credits": 53,
+  "credit_breakdown": {
+    "院系必修": 30,
+    "本系選修": 6,
+    "國文": 5,
+    "外文": 6,
+    "通識": 3,
+    "外系認列": 3
+  },
+  "next_term": "115-2",
+  "requirements": [
+    {
+      "id": "R1",
+      "kind": "all_of",
+      "title": "系訂必修（18 門 54 學分）",
+      "satisfied": false,
+      "pending": false,
+      "detail": "",
+      "have": 5,
+      "need": 18,
+      "shortfall": 13,
+      "missing": [
+        {
+          "code": "IM2011",
+          "name": "資料與檔案結構",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "fall"
+          ]
+        },
+        {
+          "code": "IM2002",
+          "name": "資料庫管理",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "spring"
+          ]
+        },
+        {
+          "code": "IM3061",
+          "name": "企業資料通訊",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "spring"
+          ]
+        },
+        {
+          "code": "IM3059",
+          "name": "行銷學",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "fall"
+          ]
+        },
+        {
+          "code": "IM3069",
+          "name": "系統分析與設計",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "fall"
+          ]
+        },
+        {
+          "code": "IM3003",
+          "name": "作業研究I",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "fall"
+          ]
+        },
+        {
+          "code": "IM3070",
+          "name": "組織行為",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "fall"
+          ]
+        },
+        {
+          "code": "IM3078",
+          "name": "人工智慧與機器學習",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "spring"
+          ]
+        },
+        {
+          "code": "IM2037",
+          "name": "演算法",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "spring"
+          ]
+        },
+        {
+          "code": "IM3031",
+          "name": "電子商務",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "spring"
+          ]
+        },
+        {
+          "code": "IM3028",
+          "name": "資訊系統發展專題I",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "spring"
+          ]
+        },
+        {
+          "code": "IM4001",
+          "name": "資訊系統發展專題II",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "fall"
+          ]
+        },
+        {
+          "code": "IM4048",
+          "name": "管理資訊系統",
+          "credits": 3,
+          "type": "required",
+          "terms": [
+            "fall"
+          ]
+        }
+      ],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 系訂必修",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R2",
+      "kind": "all_of",
+      "title": "院訂必修（21 學分）",
+      "satisfied": false,
+      "pending": false,
+      "detail": "",
+      "have": 5,
+      "need": 7,
+      "shortfall": 2,
+      "missing": [
+        {
+          "code": "MT2042",
+          "name": "統計學(下)",
+          "credits": 3,
+          "type": "college",
+          "terms": [
+            "spring"
+          ]
+        },
+        {
+          "code": "MT1012",
+          "name": "經濟學(下)",
+          "credits": 3,
+          "type": "college",
+          "terms": [
+            "spring"
+          ]
+        }
+      ],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 院訂必修",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R3",
+      "kind": "taken_all",
+      "title": "必選課（須修過，不需及格）",
+      "satisfied": true,
+      "pending": false,
+      "detail": "",
+      "have": 3,
+      "need": 3,
+      "shortfall": 0,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 備註 二-3；說明投影片「必選課定義」",
+      "system_code": null,
+      "regulation_term": "必選"
+    },
+    {
+      "id": "R4",
+      "kind": "category_credits",
+      "title": "共同必修：國文 5 學分",
+      "satisfied": true,
+      "pending": false,
+      "detail": "",
+      "have": 5,
+      "need": 5,
+      "shortfall": 0,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 共同必修：國文",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R5",
+      "kind": "category_credits",
+      "title": "共同必修：外文 6 學分（不得以第二外語抵免）",
+      "satisfied": true,
+      "pending": false,
+      "detail": "",
+      "have": 6,
+      "need": 6,
+      "shortfall": 0,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 共同必修：外文；備註 一-2",
+      "system_code": "（示意）A02",
+      "regulation_term": "共同必修"
+    },
+    {
+      "id": "R6",
+      "kind": "category_credits",
+      "title": "共同必修：通識 14 學分",
+      "satisfied": false,
+      "pending": false,
+      "detail": "",
+      "have": 3,
+      "need": 14,
+      "shortfall": 11,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 共同必修：通識課程",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R7",
+      "kind": "category_count",
+      "title": "通識核心：至少修習一個領域",
+      "satisfied": true,
+      "pending": false,
+      "detail": "已修：人文與思想",
+      "have": 1,
+      "need": 1,
+      "shortfall": 0,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 備註 一-4；共同必修科目選修辦法第七條",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R8",
+      "kind": "category_count",
+      "title": "體育：5 學期（0 學分），須含大一體育上下 2 學期",
+      "satisfied": false,
+      "pending": false,
+      "detail": "大一體育 2／2",
+      "have": 3,
+      "need": 5,
+      "shortfall": 2,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 共同必修：體育課程；111 畢審說明第 14 點（大一體育上下兩學期）",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R9",
+      "kind": "category_count",
+      "title": "服務學習：2 門（0 學分）",
+      "satisfied": false,
+      "pending": false,
+      "detail": "",
+      "have": 1,
+      "need": 2,
+      "shortfall": 1,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 共同必修：服務學習課程",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R11",
+      "kind": "dept_elective_credits",
+      "title": "本系選修 16 學分（IM 課號選修，含通過的 IM1013、IM3029）",
+      "satisfied": false,
+      "pending": false,
+      "detail": "",
+      "have": 6,
+      "need": 16,
+      "shortfall": 10,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 備註 二-2；說明投影片「本系選修 16 學分」",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R12",
+      "kind": "english_threshold",
+      "title": "英文畢業門檻（英檢達標，或進修英文及格 4 學分）",
+      "satisfied": false,
+      "pending": true,
+      "detail": "",
+      "have": 0,
+      "need": 4,
+      "shortfall": 4,
+      "missing": [],
+      "citation": "中央大學語言中心〈大學部英外文畢業門檻〉公告及英文能力鑑定審核申請表（1151 學期起適用） 管理學院通過標準；註(2) 進修英文",
+      "system_code": null,
+      "regulation_term": null
+    },
+    {
+      "id": "R10",
+      "kind": "total_credits",
+      "title": "最低畢業學分 128",
+      "satisfied": false,
+      "pending": false,
+      "detail": "",
+      "have": 53,
+      "need": 128,
+      "shortfall": 75,
+      "missing": [],
+      "citation": "資管系應修科目表（114學年度入學新生適用） 備註 二-1",
+      "system_code": null,
+      "regulation_term": null
+    }
+  ],
+  "issues": {
+    "review": [],
+    "dept_unverified": [],
+    "failed": [
+      {
+        "code": "IM2011",
+        "name": "資料與檔案結構",
+        "credits": 3,
+        "grade": 52.0,
+        "term": "115-1",
+        "category": ""
+      }
+    ]
+  },
+  "reviews": [],
+  "records": [
+    {
+      "code": "CH-1",
+      "name": "國文(上)",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": "國文"
+    },
+    {
+      "code": "EN-1",
+      "name": "大一英文(上)",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": "外文"
+    },
+    {
+      "code": "IM1001",
+      "name": "計算機概論I",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": ""
+    },
+    {
+      "code": "IM1013",
+      "name": "初階程式設計",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": ""
+    },
+    {
+      "code": "MA1005",
+      "name": "微積分",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": ""
+    },
+    {
+      "code": "MT1021",
+      "name": "企業概論",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": ""
+    },
+    {
+      "code": "MT1031",
+      "name": "會計學(上)",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": ""
+    },
+    {
+      "code": "PE-1",
+      "name": "大一體育",
+      "credits": 0,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": "體育"
+    },
+    {
+      "code": "SL-1",
+      "name": "服務學習(一)",
+      "credits": 0,
+      "grade": 80.0,
+      "term": "114-1",
+      "category": "服務學習"
+    },
+    {
+      "code": "CH-2",
+      "name": "國文(下)",
+      "credits": 2,
+      "grade": 80.0,
+      "term": "114-2",
+      "category": "國文"
+    },
+    {
+      "code": "EN-2",
+      "name": "大一英文(下)",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-2",
+      "category": "外文"
+    },
+    {
+      "code": "IM1018",
+      "name": "資訊管理導論",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-2",
+      "category": ""
+    },
+    {
+      "code": "IM1023",
+      "name": "程式設計",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-2",
+      "category": ""
+    },
+    {
+      "code": "MA1006",
+      "name": "微積分(下)",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-2",
+      "category": ""
+    },
+    {
+      "code": "MT1032",
+      "name": "會計學(下)",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "114-2",
+      "category": ""
+    },
+    {
+      "code": "PE-2",
+      "name": "大一體育",
+      "credits": 0,
+      "grade": 80.0,
+      "term": "114-2",
+      "category": "體育"
+    },
+    {
+      "code": "CC0109",
+      "name": "亞洲藝術",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "115-1",
+      "category": "通識核心"
+    },
+    {
+      "code": "IM2011",
+      "name": "資料與檔案結構",
+      "credits": 3,
+      "grade": 52.0,
+      "term": "115-1",
+      "category": ""
+    },
+    {
+      "code": "IM2046",
+      "name": "作業系統",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "115-1",
+      "category": ""
+    },
+    {
+      "code": "IM3029",
+      "name": "網頁程式設計",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "115-1",
+      "category": ""
+    },
+    {
+      "code": "MT1011",
+      "name": "經濟學(上)",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "115-1",
+      "category": ""
+    },
+    {
+      "code": "MT2041",
+      "name": "統計學(上)",
+      "credits": 3,
+      "grade": 80.0,
+      "term": "115-1",
+      "category": ""
+    },
+    {
+      "code": "PE-3",
+      "name": "體育",
+      "credits": 0,
+      "grade": 80.0,
+      "term": "115-1",
+      "category": "體育"
+    }
+  ],
+  "remaining_courses": [
+    {
+      "code": "MT2042",
+      "name": "統計學(下)",
+      "credits": 3,
+      "type": "college",
+      "terms": [
+        "spring"
+      ]
+    },
+    {
+      "code": "MT1012",
+      "name": "經濟學(下)",
+      "credits": 3,
+      "type": "college",
+      "terms": [
+        "spring"
+      ]
+    },
+    {
+      "code": "IM2011",
+      "name": "資料與檔案結構",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "fall"
+      ]
+    },
+    {
+      "code": "IM2002",
+      "name": "資料庫管理",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "spring"
+      ]
+    },
+    {
+      "code": "IM3061",
+      "name": "企業資料通訊",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "spring"
+      ]
+    },
+    {
+      "code": "IM3059",
+      "name": "行銷學",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "fall"
+      ]
+    },
+    {
+      "code": "IM3069",
+      "name": "系統分析與設計",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "fall"
+      ]
+    },
+    {
+      "code": "IM3003",
+      "name": "作業研究I",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "fall"
+      ]
+    },
+    {
+      "code": "IM3070",
+      "name": "組織行為",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "fall"
+      ]
+    },
+    {
+      "code": "IM3078",
+      "name": "人工智慧與機器學習",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "spring"
+      ]
+    },
+    {
+      "code": "IM2037",
+      "name": "演算法",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "spring"
+      ]
+    },
+    {
+      "code": "IM3031",
+      "name": "電子商務",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "spring"
+      ]
+    },
+    {
+      "code": "IM3028",
+      "name": "資訊系統發展專題I",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "spring"
+      ]
+    },
+    {
+      "code": "IM4001",
+      "name": "資訊系統發展專題II",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "fall"
+      ]
+    },
+    {
+      "code": "IM4048",
+      "name": "管理資訊系統",
+      "credits": 3,
+      "type": "required",
+      "terms": [
+        "fall"
+      ]
+    }
+  ],
+  "flags": [
+    {
+      "type": "overflow",
+      "requirement_ids": [
+        "R5"
+      ],
+      "courses": [],
+      "credits": 2,
+      "message": "（示意）外文超修 2 學分，校務系統不會自動移入其他類別"
+    },
+    {
+      "type": "substitution_pending",
+      "requirement_ids": [
+        "R1"
+      ],
+      "courses": [
+        "IM2011"
+      ],
+      "credits": 3,
+      "message": "（示意）IM2011 已停開，尚無抵修紀錄"
+    }
+  ],
+  "actions": [
+    {
+      "type": "substitution",
+      "title": "（示意）辦理 IM2011 抵修",
+      "office": "待確認",
+      "requirement_ids": [
+        "R1"
+      ],
+      "courses": [
+        "IM2011"
+      ],
+      "from_flag": "substitution_pending"
+    }
+  ],
+  "_demo": "交接格式範例（docs/TEAM_PLAN.md）：flags、actions、system_code、regulation_term 為示意資料，不是真實判定"
+}

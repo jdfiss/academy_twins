@@ -1,6 +1,6 @@
 ﻿# 現有實作與待建置項目
 
-更新日期：2026-10-14。依目前程式整理；測試 72 項通過。
+更新日期：2026-10-14。依目前程式整理；測試 82 項通過。
 
 ## 現有能力
 
@@ -17,7 +17,9 @@
 | 資料上傳 | 網頁「資料來源」可上傳修課紀錄與應屆名單（可只換一份），命令列 `--records`／`--roster`；修課紀錄逐列檢查欄位、學分、成績、學期格式，有錯整份不收並列出行號（`academic_twin/records.py`） |
 | 人工覆核 | 學生頁對 Manual Review／Warning 紀錄選擇採計方式（歸入類別、本系選修、外系認列、不採計），需填覆核人，存檔後立即重審；可撤銷，歷程只增不改；規則庫版本變動時標示「建議再確認」。規則庫能判定的紀錄不接受覆核（`academic_twin/reviews.py`，存 `data/reviews/decisions.json`） |
 | 結果匯出 | 批次審查結果與名單異常匯出 CSV，每列附規則版本（學年度＋規則庫雜湊）與審查時間；命令列 `--export`、網頁「匯出 CSV」 |
-| 測試程式 | `tests/test_rule_engine.py`、`tests/test_planner.py`、`tests/test_curriculum_114.py`、`tests/test_roster.py`、`tests/test_export.py`、`tests/test_records.py`、`tests/test_reviews.py` |
+| 雙端拆分 | 網頁分為系辦端 `web/office.html`（批次畢審、學生明細與覆核、規則來源）與學生端 `web/student.html`（我的進度試算、修課規劃與 What-if、先修關係圖）；API 分為共用核心 `api.py`、`office_api.py`、`student_api.py`；分工見 [兩組分工計畫](TEAM_PLAN.md) |
+| 交接格式 | `student()` 輸出 `cohort`、`rule_version`、`trial`、每條要求的 `system_code`／`regulation_term`、`flags`、`actions`（`rule_engine.py` 的 `Flag`、`Action`）。偵測尚未實作，目前 `flags`、`actions` 為空、代碼為 `null`；示意資料在 `web/assets/demo-twin.json`（`student.html?demo`） |
+| 測試程式 | `tests/test_rule_engine.py`、`tests/test_planner.py`、`tests/test_curriculum_114.py`、`tests/test_roster.py`、`tests/test_export.py`、`tests/test_records.py`、`tests/test_reviews.py`、`tests/test_contract.py`（交接格式與兩端一致性）；GitHub Actions 於 push 與 PR 時自動執行 |
 
 ## 資料與基本操作
 

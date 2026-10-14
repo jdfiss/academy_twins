@@ -15,7 +15,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 from academic_twin.api import REVIEWS_PATH, ROSTER_PATH, STUDENTS_PATH, AcademicTwinService
 from academic_twin.records import RecordsError
 
-STATIC = Path(__file__).parent / "web"
+STATIC = (Path(__file__).parent / "web").resolve()
+CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
+                 ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8"}
 MAX_UPLOAD = 20 * 1024 * 1024
 service = AcademicTwinService(reviews_path=REVIEWS_PATH)
 
@@ -26,13 +28,13 @@ class Handler(BaseHTTPRequestHandler):
         parts = [unquote(p) for p in url.path.strip("/").split("/") if p]
         query = parse_qs(url.query)
         try:
-            if not parts or parts == ["index.html"]:
-                return self._file(STATIC / "index.html", "text/html; charset=utf-8")
-            if parts[0] != "api":
-                return self._json({"error": "not found"}, 404)
+            if not parts or parts[0] != "api":
+                return self._static(parts or ["index.html"])
             route = parts[1:]
+            # ---------- 共用 ----------
             if route == ["meta"]:
                 return self._json(service.meta())
+            # ---------- 系辦端（A 組） ----------
             if route == ["students"]:
                 return self._json(service.batch())
             if route == ["data-source"]:
@@ -50,6 +52,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 return self.wfile.write(body)
+            # ---------- 學生端（B 組） ----------
+            if route == ["twin"]:
+                return self._json(service.twin_ids())
+            if len(route) == 2 and route[0] == "twin":
+                return self._json(service.twin(route[1]))
             if len(route) == 3 and route[0] == "students" and route[2] == "simulate":
                 return self._json(service.simulate(
                     route[1],
@@ -133,6 +140,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _static(self, parts: list[str]):
+        """web/ 底下的檔案；不允許跳出 web/。"""
+        path = STATIC.joinpath(*parts).resolve()
+        if not path.is_relative_to(STATIC) or not path.is_file() or path.suffix not in CONTENT_TYPES:
+            return self._json({"error": "not found"}, 404)
+        return self._file(path, CONTENT_TYPES[path.suffix])
 
     def _file(self, path: Path, content_type: str):
         body = path.read_bytes()

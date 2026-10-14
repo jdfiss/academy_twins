@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>學生 Academic Twin</title>
+<link rel="stylesheet" href="assets/common.css">
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><a href="./">NCU <span>Academic Twin</span></a></div>
+    <span class="side-tag">學生端</span>
+    <div class="sub" id="program"></div>
+  </div>
+  <nav>
+    <button data-view="progress" class="active">我的進度</button>
+    <button data-view="plan">修課規劃與 What-if</button>
+    <button data-view="graph">先修關係圖</button>
+  </nav>
+</header>
+
+<!-- 學生端（B 組）。共用外框與樣式見 assets/common.*，變更需通知 A 組 -->
+<main>
+  <div class="student-head">
+    <label class="muted small">學生 <select id="student-select"></select></label>
+    <span id="student-status"></span>
+    <span class="trial" id="trial-badge" title="學生端結果為試算，正式結果以系辦審查為準">試算</span>
+    <div><span class="big" id="student-credits"></span> <span class="muted">/ 128 學分</span></div>
+    <span class="muted small" id="student-next"></span>
+  </div>
+
+  <!-- 我的進度 -->
+  <section class="view active" id="view-progress">
+    <div class="grid two">
+      <div class="grid">
+        <div class="card">
+          <h3>學分採計</h3>
+          <div class="stack" id="breakdown-bar"></div>
+          <div class="legend" id="breakdown-legend"></div>
+        </div>
+        <div class="card">
+          <h3>可能是校務系統誤判 <span class="muted small">不一定真的缺修</span></h3>
+          <div id="flags"></div>
+        </div>
+        <div class="card">
+          <h3>需要找承辦人辦理</h3>
+          <div id="actions"></div>
+        </div>
+        <div class="card" id="issues-card">
+          <h3>需要注意</h3>
+          <div id="issues"></div>
+        </div>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
+          <div id="requirements"></div>
+        </div>
+        <div class="card">
+          <details>
+            <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
+            <table style="margin-top:8px">
+              <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
+              <tbody id="records"></tbody>
+            </table>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 修課規劃與 What-if -->
+  <section class="view" id="view-plan">
+    <div class="grid">
+        <div class="card">
+          <h3>到畢業的修課路徑</h3>
+          <div class="muted small" style="margin-bottom:8px">每學期上限 <span id="cap"></span> 學分；先排先修鏈最長的課。順序依「建議先修」，非正式擋修。</div>
+          <div class="timeline" id="base-plan"></div>
+        </div>
+        <div class="card">
+          <h3>What-if 模擬</h3>
+          <div class="whatif">
+            <label>如果這門課
+              <select id="skip-course"><option value="">（不設定）</option></select></label>
+            <label>在這學期不修
+              <select id="skip-term"></select></label>
+            <label>出國交換學期
+              <select id="away-term"><option value="">（不設定）</option></select></label>
+            <label>交換可抵學分
+              <input id="away-credits" type="number" value="15" min="0" max="25" style="width:80px"></label>
+            <button class="primary" id="run-sim">模擬</button>
+            <button class="ghost" id="reset-sim">清除</button>
+          </div>
+          <div id="sim-result"><div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div></div>
+        </div>
+    </div>
+  </section>
+
+  <!-- 先修關係圖 -->
+  <section class="view" id="view-graph">
+    <div class="grid">
+      <div class="card">
+        <h2>先修關係圖 <span class="muted small">實線＝正式擋修，虛線＝建議先修（推論）；點課程看影響範圍</span></h2>
+        <div class="graph-wrap"><svg id="dag"></svg></div>
+        <h3 style="margin-top:16px">其他課程（無先修關係）</h3>
+        <div class="courses" id="isolated"></div>
+      </div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start">
+        <div class="card" id="impact-card"><div class="muted">點選左邊任一門課。</div></div>
+        <div class="card">
+          <h3>瓶頸課排行</h3>
+          <table><tbody id="bottlenecks"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="assets/common.js"></script>
+<script src="assets/student.js"></script>
+</body>
+</html>

@@ -78,6 +78,36 @@ class Transcript:
     attempted: set[str] = field(default_factory=set)  # 有修課紀錄的課號（含不及格），必選課用
 
 
+# 校務系統可能誤判的情況（見 docs/TEAM_PLAN.md 交接格式）
+OVERFLOW, REPEATABLE, SUBSTITUTION_PENDING = "overflow", "repeatable", "substitution_pending"
+FLAG_KINDS = (OVERFLOW, REPEATABLE, SUBSTITUTION_PENDING)
+
+
+@dataclass(frozen=True)
+class Flag:
+    """校務系統可能誤判、但不一定是真的缺修的項目；只提示，不改變判定。"""
+    type: str  # FLAG_KINDS 之一
+    message: str  # 簡短事實描述；給學生看的白話說明由學生端組成
+    requirement_ids: tuple[str, ...] = ()
+    courses: tuple[str, ...] = ()
+    credits: int = 0
+
+
+# 需辦理事項的種類
+SUBSTITUTION, TRANSFER_CREDIT, MANUAL_RECOGNITION = "substitution", "transfer_credit", "manual_recognition"
+
+
+@dataclass(frozen=True)
+class Action:
+    """學生需找承辦單位辦理的事項（抵修、抵免、人工認列…）。"""
+    type: str
+    title: str
+    office: str = "待確認"  # 承辦單位或承辦人
+    requirement_ids: tuple[str, ...] = ()
+    courses: tuple[str, ...] = ()
+    from_flag: str | None = None  # 由哪一種 flag 推得
+
+
 @dataclass
 class AuditReport:
     status: Status
@@ -85,6 +115,9 @@ class AuditReport:
     transcript: Transcript
     total_credits: int
     credit_breakdown: dict[str, int]
+    # 尚未實作偵測，目前一律為空；由審查核心（A 組）產生，兩端呈現
+    flags: list[Flag] = field(default_factory=list)
+    actions: list[Action] = field(default_factory=list)
 
     @property
     def passed_courses(self) -> list[str]:

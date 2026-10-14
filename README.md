@@ -14,7 +14,7 @@
 只需要 Python 3.10+，不用安裝任何套件。
 
 ```bash
-python web.py                              # 網頁介面 http://localhost:8000
+python web.py                              # 網頁介面 http://localhost:8000（系辦端 office.html、學生端 student.html）
 python app.py                              # 系辦批次畢審（含應屆名單比對）
 python app.py --roster 名單.csv            # 指定應屆名單（需有 student_id 欄；選填 english_passed：Y／N、cohort：入學年度）
 python app.py --records 修課紀錄.csv       # 指定修課紀錄（先做格式檢查，有錯整份不收）
@@ -41,10 +41,17 @@ academic_twin/
   reviews.py                  人工覆核紀錄（存 data/reviews/，含學生資料，不進版控）
   graph.py                    先修關係 DAG：影響範圍、瓶頸課
   planner.py                  學期排課與 What-if 延畢分析
-  api.py                      引擎結果 → JSON（給網頁與之後的 LLM 層）
+  api.py                      共用核心與交接格式 student()（引擎結果 → JSON）
+  office_api.py               系辦端 API：批次審查、名單異常、匯出、覆核、明細
+  student_api.py              學生端 API：試算、修課路徑、What-if、課程影響
 app.py                        命令列介面
-web.py, web/index.html        網頁介面
+web.py                        網頁伺服器
+web/office.html               系辦端頁面（assets/office.js）
+web/student.html              學生端頁面（assets/student.js；?demo 讀交接格式範例）
+web/assets/common.*           兩端共用樣式與呈現
 ```
+
+兩組分工與交接格式見 [docs/TEAM_PLAN.md](docs/TEAM_PLAN.md)。
 
 ## 已知限制
 - 官方文件沒有正式擋修規定；圖中的先修關係是由建議修課學期推論的「建議先修」，只用於排課，不影響畢業判定
