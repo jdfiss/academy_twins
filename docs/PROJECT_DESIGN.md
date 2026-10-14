@@ -107,7 +107,7 @@ flowchart TD
 
 ## 學生端流程
 
-詳細需求見 [學生端需求](STUDENT_REQUIREMENTS.md)，目前尚待建置。
+學生端即專案最初的「學業分身」：除了現在的審查結果，還往後推演修課路徑與情境影響。網頁「學生 Academic Twin」與命令列已有畢業進度、到畢業的修課路徑、What-if（某課某學期不修、出國交換）、課程影響範圍與瓶頸課；白話說明、誤判提示與需辦理事項尚待建置。詳細需求見 [學生端需求](STUDENT_REQUIREMENTS.md)。
 
 ```mermaid
 flowchart TD
