@@ -35,7 +35,7 @@
 | `academic_twin/report.py` | A | 系辦可列印的審查明細 |
 | `academic_twin/graph.py` | B | 課程關係、瓶頸、循環檢查 |
 | `academic_twin/planner.py` | B | 修課路徑規劃與情境 |
-| 白話說明模組（新增，如 `academic_twin/explain.py`） | B | 依審查結果產生學生看得懂的說明；不改判定 |
+| 白話說明（`web/assets/student.js` 的 `EXPLAIN`） | B | 依審查結果產生學生看得懂的說明；不改判定。放在前端是為了不改動交接格式 |
 | `academic_twin/api.py` | A（共用，變更需通知 B） | `CoreService`：載入資料、`_report`、`rule_version`、`meta`、交接格式 `student()`；`AcademicTwinService` 組合兩端 |
 | `academic_twin/office_api.py` | A | `OfficeMixin`：`data_source`、`batch`、`roster_anomalies`、`export_csv`、`add_review`、`report_html` |
 | `academic_twin/student_api.py` | B | `StudentMixin`：`twin_ids`、`twin`（學生端試算）、`course_impact`、`simulate` |
@@ -112,7 +112,7 @@
 | 優先 | 項目 | 產出 | 驗收條件 | 依賴 |
 |---|---|---|---|---|
 | 0 | 依 stub 建學生頁骨架 | **已完成骨架**：學生頁有誤判提示區、需辦理事項區與「試算」標示；白話說明留有 `explain()` 掛點 | `student.html?demo` 可顯示示意資料 | — |
-| 1 | 白話說明 | 每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名 | 每條要求都有說明；說明內容只引用審查結果，不自行計算或更改判定；附規章依據 | 無（可先以 114 規則庫撰寫） |
+| 1 | 白話說明 | **已完成**：`web/assets/student.js` 的 `EXPLAIN` 模板，掛在 `explain()`。每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名 | 每條要求都有說明；說明內容只引用審查結果，不自行計算或更改判定；附規章依據 | 無（可先以 114 規則庫撰寫） |
 | 1 | 兩端一致性測試 | 基本版已在 `tests/test_contract.py`；隨依年度載入、覆核同步等功能擴充情境 | 同一份資料在兩端判定完全相同；納入每次測試 | — |
 | 1 | 規劃器改用入學年度規則 | 規劃與 What-if 使用學生自己年度的規則庫 | 112 入學學生的推演使用 112 規則；開課學期為推估時明確標示 | A 組完成依年度載入 |
 | 2 | 誤判提示呈現 | 依 `flags` 分開呈現「疑似校務系統誤判」與「真正缺修」 | 不讓學生誤以為一定不能畢業，也不保證一定能畢業（[學生端驗收條件](STUDENT_REQUIREMENTS.md#個人修業進度)） | A 組產生 flags |
