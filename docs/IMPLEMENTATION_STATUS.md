@@ -19,6 +19,7 @@
 | 結果匯出 | 批次審查結果與名單異常匯出 CSV，每列附規則版本（學年度＋規則庫雜湊）與審查時間；命令列 `--export`、網頁「匯出 CSV」 |
 | 雙端拆分 | 網頁分為系辦端 `web/office.html`（批次畢審、學生明細與覆核、規則來源）與學生端 `web/student.html`（我的進度試算、修課規劃與 What-if、先修關係圖）；API 分為共用核心 `api.py`、`office_api.py`、`student_api.py`；分工見 [兩組分工計畫](TEAM_PLAN.md) |
 | 交接格式 | `student()` 輸出 `cohort`、`rule_version`、`trial`、每條要求的 `system_code`／`regulation_term`、`flags`、`actions`（`rule_engine.py` 的 `Flag`、`Action`）。偵測尚未實作，目前 `flags`、`actions` 為空、代碼為 `null`；示意資料在 `web/assets/demo-twin.json`（`student.html?demo`） |
+| 誤判提示與需辦理事項 | 學生端「我的進度」依 `flags` 的 `type`（超修、可重複修習、可辦理抵修）組成白話說明，與真正缺修分開呈現並註明不代表一定不能或一定能畢業；`actions` 列出事項、承辦單位（未確認時標示「承辦單位待確認」）、相關要求與課程；畢業條件逐條標出相關提示與事項。只引用審查結果，不改判定（`web/assets/student.js` 的 `FLAG_TEXT`、`renderFlags`、`renderActions`、`flagNote`）。A 組偵測完成前以 `student.html?demo` 顯示示意資料 |
 | 測試程式 | `tests/test_rule_engine.py`、`tests/test_planner.py`、`tests/test_curriculum_114.py`、`tests/test_roster.py`、`tests/test_export.py`、`tests/test_records.py`、`tests/test_reviews.py`、`tests/test_contract.py`（交接格式與兩端一致性）；GitHub Actions 於 push 與 PR 時自動執行 |
 
 ## 資料與基本操作

@@ -24,21 +24,82 @@ async function loadStudent(id) {
   renderFlags(s);
   renderActions(s);
   renderIssues(s);
-  renderRequirements(s, explain);
+  renderRequirements(s, (r) => explain(r) + flagNote(s, r));
   renderRecords(s);
   await loadPlan(s.id);
 }
 
+// ---------- 誤判提示與需辦理事項 ----------
+// flags、actions 的偵測與內容由 A 組產生；這裡只依 type 組成白話說明，不改 status、satisfied，也不自行計算學分
+
+// 課號 → 「課號 課名」；課名只取審查結果裡已有的資料
+function courseLabel(s, code) {
+  const all = [...s.records, ...s.remaining_courses, ...s.requirements.flatMap((r) => r.missing)];
+  const c = all.find((x) => x.code === code);
+  return c ? `${c.code} ${c.name}` : code;
+}
+
+const reqTitle = (s, id) => s.requirements.find((r) => r.id === id)?.title ?? id;
+const joinCourses = (s, codes) => codes.map((c) => courseLabel(s, c)).join("、");
+const joinReqs = (s, ids) => ids.map((id) => `「${reqTitle(s, id)}」`).join("、");
+
+// 白話說明：依 TEAM_PLAN.md〈三種 flag 的意義〉的「學生端應傳達」
+const FLAG_TEXT = {
+  overflow: {
+    label: "超修學分",
+    text: (s, f) => `這一類課多修了 ${f.credits} 學分。校務系統「一個蘿蔔一個坑」，不會自動把多的學分移到其他類別，所以其他類別可能看起來還缺；這部分可能可以請承辦人人工移入其他類別。`,
+    note: (s, f) => `這一類超修 ${f.credits} 學分，可能可以請承辦人移入其他類別。`,
+  },
+  repeatable: {
+    label: "可重複修習",
+    text: (s, f) => `${joinCourses(s, f.courses)} 可以重複修習，你修了不只一次。校務系統第二次起不計學分，可能因此顯示學分不足；這是系統限制，不一定真的缺學分，請找承辦人確認。`,
+    note: (s, f) => `${joinCourses(s, f.courses)} 重複修習的學分，校務系統可能沒有算進來，請找承辦人確認。`,
+  },
+  substitution_pending: {
+    label: "可辦理抵修",
+    text: (s, f) => `${joinCourses(s, f.courses)} 已停開，可以用其他課抵修。辦理抵修之前，系統會一直把這門課列為「缺」；這是停開造成的，不是你漏修，請先辦理抵修。`,
+    note: (s, f) => `其中 ${joinCourses(s, f.courses)} 已停開，可辦理抵修；辦理前系統會顯示缺課。`,
+  },
+};
+
+const ACTION_TYPES = { substitution: "抵修", transfer_credit: "抵免", manual_recognition: "人工認列" };
+
 function renderFlags(s) {
-  $("#flags").innerHTML = s.flags.map((f) => `<div class="issue WARNING">⚑ ${esc(f.message)}
-      ${f.courses.length ? `<div class="muted small">相關課程：${f.courses.map(esc).join("、")}</div>` : ""}</div>`).join("")
-    || `<div class="muted small">沒有偵測到校務系統可能誤判的項目。（超修、可重複修習、待辦抵修的偵測建置中）</div>`;
+  $("#flags").innerHTML = s.flags.length
+    ? s.flags.map((f) => {
+        const t = FLAG_TEXT[f.type];
+        return `<div class="issue WARNING">⚑ <b>${esc(t?.label ?? f.type)}</b>
+          <div style="color:var(--ink);margin-top:4px">${esc(t ? t.text(s, f) : f.message)}</div>
+          ${f.requirement_ids.length ? `<div class="muted small">相關要求：${esc(joinReqs(s, f.requirement_ids))}</div>` : ""}
+          ${t ? `<div class="muted small">系統偵測：${esc(f.message)}</div>` : ""}
+        </div>`;
+      }).join("")
+      + `<div class="muted small">以上是校務系統可能顯示有誤的項目，和「畢業條件」裡真正缺修的項目分開看。它們不代表你一定不能畢業，也不保證處理後就能畢業；結果以承辦人審查為準。</div>`
+    : `<div class="muted small">沒有偵測到校務系統可能誤判的項目。（超修、可重複修習、待辦抵修的偵測建置中）</div>`;
 }
 
 function renderActions(s) {
-  $("#actions").innerHTML = s.actions.map((a) => `<div class="issue">📋 <b>${esc(a.title)}</b>
-      <div class="muted small">承辦：${esc(a.office)}${a.courses.length ? `・相關課程：${a.courses.map(esc).join("、")}` : ""}</div></div>`).join("")
-    || `<div class="muted small">目前沒有需要辦理的事項。</div>`;
+  $("#actions").innerHTML = s.actions.map((a) => {
+    const kind = ACTION_TYPES[a.type];
+    const office = a.office === "待確認"
+      ? `<span style="color:var(--warn)">承辦單位待確認</span>`
+      : `承辦：<b>${esc(a.office)}</b>`;
+    return `<div class="issue" style="border:1px solid var(--line)">📋 <b>${esc(a.title)}</b>${kind ? ` <span class="terms">${kind}</span>` : ""}
+      <div class="small" style="margin-top:4px">${office}</div>
+      ${a.requirement_ids.length ? `<div class="muted small">相關要求：${esc(joinReqs(s, a.requirement_ids))}</div>` : ""}
+      ${a.courses.length ? `<div class="muted small">相關課程：${esc(joinCourses(s, a.courses))}</div>` : ""}
+    </div>`;
+  }).join("") || `<div class="muted small">目前沒有需要辦理的事項。</div>`;
+}
+
+// 畢業條件逐條下方：標出與此要求相關的誤判提示與需辦理事項，與真正缺修區分
+function flagNote(s, r) {
+  const flags = s.flags.filter((f) => f.requirement_ids.includes(r.id));
+  const actions = s.actions.filter((a) => a.requirement_ids.includes(r.id));
+  if (!flags.length && !actions.length) return "";
+  const lines = flags.map((f) => `⚑ ${esc(FLAG_TEXT[f.type]?.note(s, f) ?? f.message)}`)
+    .concat(actions.map((a) => `📋 需辦理：${esc(a.title)}（${a.office === "待確認" ? "承辦單位待確認" : `承辦：${esc(a.office)}`}）`));
+  return `<div class="issue WARNING small" style="margin:6px 0 0">${lines.join("<br>")}</div>`;
 }
 
 function renderIssues(s) {
