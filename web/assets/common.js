@@ -38,14 +38,14 @@ function setupTabs(storageKey) {
 }
 
 // ---------- 審查結果（交接格式 student()／twin()） ----------
-function renderBreakdown(s) {
+function renderBreakdown(s, target = 128) {
   const entries = Object.entries(s.credit_breakdown);
-  const total = Math.max(128, s.total_credits);
+  const total = Math.max(target, s.total_credits, 1);
   $("#breakdown-bar").innerHTML = entries.map(([k, v], i) =>
     `<div title="${esc(k)} ${v}" style="width:${(v / total) * 100}%;background:${BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]}"></div>`).join("");
   $("#breakdown-legend").innerHTML = entries.map(([k, v], i) =>
     `<span><i style="background:${BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]}"></i>${esc(k)} ${v}</span>`).join("")
-    + (s.total_credits < 128 ? `<span><i style="background:var(--line)"></i>尚缺 ${128 - s.total_credits}</span>` : "");
+    + (s.total_credits < target ? `<span><i style="background:var(--line)"></i>尚缺 ${target - s.total_credits}</span>` : "");
 }
 
 // extra(r)：各端在每條要求下加的內容（例如學生端的白話說明）

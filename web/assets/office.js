@@ -1,5 +1,6 @@
 // 系辦端（A 組）：批次畢審、名單異常、資料上傳、學生明細與人工覆核、規則來源
-let BATCH = [], statusFilter = null;
+let BATCH = [], statusFilter = null, flagFilter = "";
+const FLAG_LABELS = { overflow: "超修學分", repeatable: "可重複修習", substitution_pending: "待辦抵修" };
 const show = setupTabs("twin-office-view");
 
 // ---------- 批次畢審 ----------
@@ -15,20 +16,35 @@ function renderBatch() {
     statusFilter = statusFilter === el.dataset.status ? null : el.dataset.status;
     renderBatch();
   }));
-  const rows = BATCH.filter((s) => !statusFilter || s.status === statusFilter);
+  const rows = BATCH.filter((s) => {
+    if (statusFilter && s.status !== statusFilter) return false;
+    const flags = s.flags || [];
+    if (flagFilter === "any") return flags.length > 0;
+    if (flagFilter === "actions") return s.action_count > 0;
+    if (flagFilter === "none") return !flags.length && !s.action_count;
+    return !flagFilter || flags.some((f) => f.type === flagFilter);
+  });
+  $("#batch-filter-count").textContent = `顯示 ${rows.length} / ${BATCH.length} 位`;
   $("#batch-rows").innerHTML = rows.map((s) => {
-    const pct = Math.min(100, (s.total_credits / 128) * 100);
+    const pct = s.total_required ? Math.min(100, (s.total_credits / s.total_required) * 100) : 0;
     return `<tr data-id="${esc(s.id)}">
       <td><b>${esc(s.id)}</b></td>
       <td>${chip(s.status)}</td>
       <td><div>${s.total_credits}</div><div class="meter ${pct >= 100 ? "ok" : ""}"><div style="width:${pct}%"></div></div></td>
       <td class="hide-sm">${s.satisfied} / ${s.requirements}</td>
       <td class="small">${s.reasons.map(esc).join("<br>") || '<span class="muted">全部符合</span>'}${s.reviewed ? `<div class="muted">已人工覆核 ${s.reviewed} 筆</div>` : ""}</td>
+      <td class="small">${(s.flags || []).map((f) => `<div><b>${esc(FLAG_LABELS[f.type] || f.type)}</b>：${esc(f.message)}</div>`).join("") || '<span class="muted">無疑似誤判提示</span>'}
+        ${s.action_count ? `<div>需辦理 ${s.action_count} 項，點此列查看</div>` : ""}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="5" class="empty">沒有符合的學生</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="empty">沒有符合的學生</td></tr>`;
   document.querySelectorAll("#batch-rows tr[data-id]").forEach((tr) =>
     tr.addEventListener("click", () => { loadStudent(tr.dataset.id); show("student"); }));
 }
+
+$("#flag-filter").addEventListener("change", (e) => {
+  flagFilter = e.target.value;
+  renderBatch();
+});
 
 function renderRoster(rows) {
   $("#roster-rows").innerHTML = rows.map((a) =>
@@ -42,9 +58,11 @@ async function loadStudent(id) {
   const s = await api(`/api/students/${encodeURIComponent(id)}`);
   $("#student-status").innerHTML = chip(s.status);
   $("#student-credits").textContent = s.total_credits;
+  const target = s.requirements.find((r) => r.kind === "total_credits")?.need;
+  $("#student-total-target").textContent = target == null ? "學分（未設定總學分門檻）" : `/ ${target} 學分`;
   $("#student-report").href = `/api/students/${encodeURIComponent(s.id)}/report`;
   $("#student-twin").href = `student.html?id=${encodeURIComponent(s.id)}`;
-  renderBreakdown(s);
+  renderBreakdown(s, target ?? 0);
   renderIssues(s);
   renderRequirements(s);
   renderRecords(s);
@@ -55,7 +73,11 @@ function renderIssues(s) {
   iss.review.forEach((r) => out.push(`<div class="issue MANUAL_REVIEW">🔍 <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}，類別「${esc(r.category)}」）需人工判斷如何採計${reviewForm(r)}</div>`));
   iss.failed.forEach((r) => out.push(`<div class="issue FAIL">✘ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）${r.grade} 分不及格，尚未重修通過</div>`));
   iss.dept_unverified.forEach((r) => out.push(`<div class="issue WARNING">⚠ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）不在規則庫，暫以本系選修 ${r.credits} 學分計${reviewForm(r)}</div>`));
-  s.flags.forEach((f) => out.push(`<div class="issue WARNING">⚑ 校務系統可能誤判：${esc(f.message)}</div>`));
+  s.flags.forEach((f) => out.push(`<div class="issue WARNING">⚑ 待確認提示：<b>${esc(FLAG_LABELS[f.type] || f.type)}</b>：${esc(f.message)}
+    <div class="muted small">相關要求：${f.requirement_ids.map(esc).join("、") || "待確認"}；相關課程：${f.courses.map(esc).join("、") || "無"}</div></div>`));
+  s.actions.forEach((a) => out.push(`<div class="issue WARNING"><b>需辦理：${esc(a.title)}</b>
+    <div>承辦單位：${esc(a.office)}</div>
+    <div class="muted small">相關要求：${a.requirement_ids.map(esc).join("、") || "待確認"}；相關課程：${a.courses.map(esc).join("、") || "無"}</div></div>`));
   s.reviews.forEach((r) => out.push(`<div class="issue reviewed">✓ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）已覆核：<b>${esc(r.label)}</b>
     <div class="muted small">${esc(r.reviewer)}・${esc(r.decided_at)}${r.note ? `・${esc(r.note)}` : ""}
       ${r.outdated ? `<span class="outdated">・決定時的規則版本為 ${esc(r.rule_version)}，規則庫已更新，建議再確認</span>` : ""}</div>
@@ -132,6 +154,8 @@ async function loadData() {
   renderRoster(roster);
   fillStudentSelect();
   statusFilter = null;
+  flagFilter = "";
+  $("#flag-filter").value = "";
   renderBatch();
   const first = BATCH.find((s) => s.status === "FAIL") || BATCH[0];
   if (first) await loadStudent(first.id);
