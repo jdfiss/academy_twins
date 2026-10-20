@@ -104,8 +104,9 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `academic_twin/planner.py` | B | 修課路徑規劃與情境 |
 | 白話說明模組（新增，如 `academic_twin/explain.py`） | B | 依審查結果產生學生看得懂的說明；不改判定 |
 | 自然語言 What-if 模組（新增，如 `academic_twin/ask.py`） | B | AI 將學生問題轉成 `simulate` 參數；計算與回答依據只來自規劃器結果 |
-| AI 呼叫模組（新增，如 `academic_twin/llm.py`） | A（共用，變更需通知 B） | 以標準函式庫呼叫 AI 服務；兩組的 AI 功能共用；服務與金鑰依[待決事項](#待決事項與追蹤) |
-| 儀表板解析模組（新增，如 `academic_twin/dashboard.py`） | A | AI 解析儀表板 PDF 轉為 `Record`，經 `records.py` 驗證，標出待確認欄位 |
+| `academic_twin/llm.py` | A（共用，變更需通知 B） | 以標準函式庫呼叫 Gemini；金鑰讀環境變數或未進版控的 `.env`；主模型過載時改用備援模型；兩組的 AI 功能共用 |
+| `academic_twin/dashboard.py` | A | AI 解析儀表板 PDF 為待確認紀錄（附來源頁碼與原文）、檢查、與標準答案比對 |
+| `academic_twin/demo_dashboard.py` | A | 產生虛構儀表板 PDF 與標準答案（`data/samples/`） |
 | 規則草擬模組（新增，如 `academic_twin/rule_draft.py`） | A | AI 依章則草擬規則庫，經 `knowledge_base.py` 驗證，供承辦人確認 |
 | 系辦審查助理（新增，如 `academic_twin/office_agent.py`） | A | 以 `CoreService` 為工具的 agent；只讀審查結果，不改判定 |
 | `academic_twin/api.py` | A（共用，變更需通知 B） | `CoreService`：載入資料、`_report`、`rule_version`、`meta`、交接格式 `student()`；`AcademicTwinService` 組合兩端 |
@@ -136,6 +137,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_roster.py` | A |
 | `tests/test_reviews.py` | A |
 | `tests/test_export.py` | A |
+| `tests/test_dashboard.py` | A |
 | `tests/test_planner.py` | B |
 | `tests/test_contract.py`（交接格式與兩端一致性） | B 維護、A 審查；第 0 步已建立基本版 |
 | `tests/fixtures/curriculum_sample.json` | A（B 需新增測試情境時發 PR） |
@@ -170,7 +172,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | 優先 | 項目 | 產出 | 驗收條件 | 對應評分 | 依賴 |
 |---|---|---|---|---|---|
 | 0 | 交接格式與 stub | **已完成**：`student()` 已輸出全部新增欄位；尚未偵測前 `flags`、`actions` 為空陣列、`system_code`、`regulation_term` 為 `null`；示意資料放在 `web/assets/demo-twin.json`，不混入真實結果 | B 組可依 demo 檔開發畫面；欄位定義經兩組確認 | — | 無 |
-| 1 | AI 解析儀表板 | AI 讀取已宣告支援版型的儀表板 PDF，產生待確認紀錄與原文對照 | 符合「AI 輸入與啟用驗收」；量測修改前後正確率及漏列；確認後才轉為審查輸入 | 創新性、重要性、實證性 | 去識別化範例、AI 服務 |
+| 1 | AI 解析儀表板 | **已完成虛構版型**：AI 讀取已宣告支援版型的儀表板 PDF，產生待確認紀錄與原文對照；系辦頁可逐列修正、確認後送入審查；待接真實版型 | 符合「AI 輸入與啟用驗收」；量測修改前後正確率及漏列；確認後才轉為審查輸入 | 創新性、重要性、實證性 | 去識別化範例、AI 服務 |
 | 1 | 誤判偵測 flags | **已完成核心與虛構案例驗證**：引擎產生 `overflow`（超修）、`repeatable`（可重複修習）、`substitution_pending`（未辦抵修）及對應 `actions`；未標示的重複通過列人工覆核 | 每種類型均有應提示與不應提示的案例；兩端輸出一致；虛構清單明確標示，不計入實際誤判數。個人抵修登錄另行建置 | 重要性 | 正式可重複修習、停開與替代清單仍待承辦人確認 |
 | 1 | AI 草擬規則庫 | 先草擬單一年度、少數要求，附原文與差異供確認；再視來源擴展 112 | 依承辦人確認的答案量測錯漏與修正時間；草稿不得自動啟用，114 既有假設另列 | 創新性、可行性（擴散到其他系所） | AI 服務、正式規章與承辦人確認 |
 | 1 | 實證設計與資料取得 | 先約定人工答案、案例集合、原流程時間與量測方法，開發期間累積結果 | 第一階段確認資料可取得與量測可執行；功能測試與實務驗證分列 | 實證性 | 承辦人配合；先以虛構案例建立流程 |
@@ -483,7 +485,7 @@ TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
 
 ### 測試
 
-- PR 合併前全部測試須通過（目前 107 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
+- PR 合併前全部測試須通過（目前 123 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
 - 新功能要附測試，放在自己組的測試檔；新增測試檔時在 PR 說明寫明歸屬。
 - **不得為了讓測試通過而刪除或放寬對方組的測試**。對方的測試若與新需求衝突，先找對方組討論，由對方修改。
 - `tests/test_contract.py` 的兩端一致性測試失敗，一律視為阻擋合併：同一份資料在兩端必須得到相同判定。
