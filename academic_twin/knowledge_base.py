@@ -18,6 +18,10 @@ class Course:
     field: str | None = None
     # 通過後學分計入哪一塊：None = 院系必修；dept_elective = 本系選修；outside = 外系選修（必選課用）
     counts_as: str | None = None
+    # 停開與替代關係只用來提示待辦，不代表學生已獲准抵修。
+    discontinued: bool = False
+    replacement_courses: tuple[str, ...] = ()
+    substitution_office: str = "待確認"
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,8 @@ class KnowledgeBase:
     assumptions: list[str] = field(default_factory=list)
     # True：本系課號不在規則庫一律算本系選修（已確認規則）；False：暫算本系選修但標 Warning 待核對
     dept_prefix_is_elective: bool = False
+    # 可含不在課程清單的課號（例如依類別採計的體育）；各次修習須能以學期區分。
+    repeatable_courses: tuple[str, ...] = ()
 
     def cite(self, source: Source) -> str:
         return f"{self.sources.get(source.doc, source.doc)} {source.ref}"
@@ -95,6 +101,15 @@ class KnowledgeBase:
         return False
 
 
+def _course_codes(value: object, label: str) -> tuple[str, ...]:
+    """清單須明確列出課號，避免把字串拆成字元或誤用布林值。"""
+    if (not isinstance(value, list)
+            or any(not isinstance(c, str) or not c.strip() or c != c.strip() for c in value)
+            or len(value) != len(set(value))):
+        raise ValueError(f"規則庫有誤：{label} 必須是不重複的非空白課號陣列")
+    return tuple(value)
+
+
 def load(path: str | Path) -> KnowledgeBase:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
 
@@ -109,6 +124,9 @@ def load(path: str | Path) -> KnowledgeBase:
             soft_prereqs=tuple(c.get("soft_prereqs", [])),
             field=c.get("field"),
             counts_as=c.get("counts_as"),
+            discontinued=c.get("discontinued", False),
+            replacement_courses=_course_codes(c.get("replacement_courses", []), f"{c['code']} 的替代課程"),
+            substitution_office=c.get("substitution_office", "待確認"),
         )
         for c in raw["courses"]
     }
@@ -157,6 +175,7 @@ def load(path: str | Path) -> KnowledgeBase:
         credit_policy=policy,
         assumptions=raw.get("assumptions", []),
         dept_prefix_is_elective=raw.get("dept_prefix_is_elective", False),
+        repeatable_courses=_course_codes(raw.get("repeatable_courses", []), "repeatable_courses"),
     )
     _validate(kb)
     return kb
@@ -166,6 +185,15 @@ def _validate(kb: KnowledgeBase) -> None:
     """規則庫自我檢查：引用到不存在的課號／類別就直接報錯，避免規則悄悄失效。"""
     errors = []
     for c in kb.courses.values():
+        if not isinstance(c.discontinued, bool):
+            errors.append(f"{c.code} 的 discontinued 必須為布林值")
+        if not isinstance(c.substitution_office, str) or not c.substitution_office.strip():
+            errors.append(f"{c.code} 的抵修承辦單位不得空白；未確認時請填「待確認」")
+        if c.replacement_courses and not c.discontinued:
+            errors.append(f"{c.code} 尚未標為停開，不可設定停開替代課程")
+        for replacement in c.replacement_courses:
+            if replacement == c.code or replacement not in kb.courses:
+                errors.append(f"{c.code} 的替代課程 {replacement} 必須存在且不同於原課程")
         if c.counts_as not in (None, "dept_elective", "outside"):
             errors.append(f"{c.code} 的 counts_as「{c.counts_as}」不是 dept_elective 或 outside")
         for p in c.prereqs + c.soft_prereqs:

@@ -31,10 +31,15 @@ class OfficeMixin:
                 "id": sid,
                 "status": report.status.value,
                 "total_credits": report.total_credits,
+                "total_required": next((r.need for r in report.results
+                                        if r.requirement.kind == "total_credits"), None),
                 "satisfied": sum(r.satisfied for r in report.results),
                 "requirements": len(report.results),
                 "reasons": reasons(report),
                 "reviewed": len(t.reviewed),
+                "flags": [{"type": f.type, "message": f.message, "credits": f.credits} for f in report.flags],
+                "action_count": len(report.actions),
+                "actions": [{"title": a.title, "office": a.office} for a in report.actions],
             })
         return rows
 
@@ -52,7 +57,7 @@ class OfficeMixin:
         )
 
     EXPORT_FIELDS = ["student_id", "status", "total_credits", "satisfied", "requirements", "reasons",
-                     "reviewed", "rule_version", "audited_at"]
+                     "reviewed", "rule_version", "audited_at", "flag_types", "flag_messages", "actions"]
 
     def export_csv(self, audited_at: datetime | None = None) -> str:
         """批次審查結果 + 名單異常匯出成 CSV；每列附規則版本與審查時間。"""
@@ -66,6 +71,9 @@ class OfficeMixin:
                 "satisfied": row["satisfied"], "requirements": row["requirements"],
                 "reasons": "；".join(row["reasons"]) or "全部符合", "reviewed": row["reviewed"],
                 "rule_version": self.rule_version, "audited_at": stamp,
+                "flag_types": "；".join(dict.fromkeys(f["type"] for f in row["flags"])),
+                "flag_messages": "；".join(f["message"] for f in row["flags"]),
+                "actions": "；".join(f"{a['title']}（{a['office']}）" for a in row["actions"]),
             })
         for a in self.roster_anomalies():
             writer.writerow({

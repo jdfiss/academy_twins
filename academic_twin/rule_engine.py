@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from collections import Counter
 from enum import Enum
 
 from .knowledge_base import KnowledgeBase, Requirement
@@ -65,7 +66,7 @@ class RequirementResult:
 @dataclass
 class Transcript:
     """修課紀錄分類後的結果。"""
-    passed: list[str] = field(default_factory=list)  # 規則庫內的課號
+    passed: list[str] = field(default_factory=list)  # 規則庫內通過的課號；允許重複修習時保留各次
     categorized: list[Record] = field(default_factory=list)  # 有類別的課（國文、通識…）
     dept_elective: list[Record] = field(default_factory=list)  # 本系課號、不在規則庫，依規則算本系選修
     dept_unverified: list[Record] = field(default_factory=list)  # 本系課號、不在規則庫，認列方式未確認
@@ -76,6 +77,8 @@ class Transcript:
     excluded: list[Record] = field(default_factory=list)  # 系辦決定不採計
     reviewed: list[tuple[Record, Decision]] = field(default_factory=list)  # 套用了覆核決定的紀錄
     attempted: set[str] = field(default_factory=set)  # 有修課紀錄的課號（含不及格），必選課用
+    repeated: list[Record] = field(default_factory=list)  # 已採計的可重複修習，第二次起的紀錄
+    duplicate_review: list[Record] = field(default_factory=list)  # 未標示可重複修習，待覆核的第二次起紀錄
 
 
 # 校務系統可能誤判的情況（見 docs/TEAM_PLAN.md 交接格式）
@@ -115,7 +118,7 @@ class AuditReport:
     transcript: Transcript
     total_credits: int
     credit_breakdown: dict[str, int]
-    # 尚未實作偵測，目前一律為空；由審查核心（A 組）產生，兩端呈現
+    # 由審查核心（A 組）產生，兩端呈現；提示本身不改變判定。
     flags: list[Flag] = field(default_factory=list)
     actions: list[Action] = field(default_factory=list)
 
@@ -128,17 +131,33 @@ def classify(kb: KnowledgeBase, records: list[Record], decisions: Decisions | No
     t = Transcript()
     decisions = decisions or {}
     seen: set[str] = set()
+    offerings: set[tuple[str, tuple[int, ...]]] = set()
     for r in records:
+        offering = r.code, tuple(int(p) for p in r.term.split("-"))
+        if offering in offerings:
+            raise ValueError(f"{r.code}（{r.term}）修課紀錄重複，請先確認資料")
+        offerings.add(offering)
+    repeatable = set(kb.repeatable_courses)
+    counted: Counter[str] = Counter()
+    # 先保留最早的通過紀錄，輸入列順序不能決定哪次修習送人工覆核。
+    for r in sorted(records, key=lambda r: (tuple(int(p) for p in r.term.split("-")), r.code)):
         t.attempted.add(r.code)
         if r.grade < kb.passing_grade:
             t.failed.append(r)
             continue
-        if r.code in seen:  # 重複通過同一課號只算一次
-            continue
+        repeated = r.code in seen
         seen.add(r.code)
         category = kb.category_of(r.code, r.category)
         if category != r.category:
             r = replace(r, category=category)
+        if repeated and r.code not in repeatable:
+            decision = decisions.get((r.code, r.term))
+            if decision:
+                _apply(kb, t, r, decision)
+            else:
+                t.review.append(r)
+                t.duplicate_review.append(r)
+            continue
         if r.code in kb.courses:
             t.passed.append(r.code)
         elif r.category and r.category in kb.categories:
@@ -153,6 +172,10 @@ def classify(kb: KnowledgeBase, records: list[Record], decisions: Decisions | No
                 (t.review if r.category else t.dept_unverified).append(r)
         else:
             t.outside.append(r)
+        if r not in t.review and r not in t.excluded:
+            counted[r.code] += 1
+            if counted[r.code] > 1:
+                t.repeated.append(r)
     # 之後重修通過的課，不再列為不及格
     t.failed = [r for r in t.failed if r.code not in seen]
     return t
@@ -196,22 +219,12 @@ def credit_breakdown(kb: KnowledgeBase, t: Transcript) -> dict[str, int]:
     if unverified:
         breakdown["本系選修（未核對）"] = unverified
 
-    by_root: dict[str, int] = {}
-    for r in t.categorized:
-        root = root_category(kb, r.category)
-        by_root[root] = by_root.get(root, 0) + r.credits
-
-    required = {req.categories[0]: req.min_credits for req in kb.requirements if req.kind == "category_credits"}
     outside_pool = (sum(r.credits for r in t.outside)
                     + sum(kb.courses[c].credits for c in t.passed if kb.courses[c].counts_as == "outside"))
-    for cat, credits in by_root.items():
-        if cat in policy.excluded:
-            continue
-        counted = min(credits, required.get(cat, 0))
+    for cat, counted, overflow in _category_allocation(kb, t):
         if counted:
             breakdown[cat] = counted
-        excess = credits - counted
-        outside_pool += min(excess, policy.category_caps.get(cat, excess))
+        outside_pool += overflow
 
     if policy.outside_cap is not None:
         outside_pool = min(outside_pool, policy.outside_cap)
@@ -220,13 +233,89 @@ def credit_breakdown(kb: KnowledgeBase, t: Transcript) -> dict[str, int]:
     return breakdown
 
 
+def _category_allocation(kb: KnowledgeBase, t: Transcript) -> list[tuple[str, int, int]]:
+    """類別的採計與可移入外系學分池數量；總學分與 flag 共用同一份計算。"""
+    by_root: dict[str, int] = {}
+    for r in t.categorized:
+        root = root_category(kb, r.category)
+        by_root[root] = by_root.get(root, 0) + r.credits
+    required = {req.categories[0]: req.min_credits for req in kb.requirements if req.kind == "category_credits"}
+    allocations = []
+    for cat, credits in by_root.items():
+        if cat in kb.credit_policy.excluded:
+            continue
+        counted = min(credits, required.get(cat, 0))
+        excess = credits - counted
+        overflow = min(excess, kb.credit_policy.category_caps.get(cat, excess))
+        allocations.append((cat, counted, overflow))
+    return allocations
+
+
+def _related_requirements(kb: KnowledgeBase, records: list[Record]) -> tuple[str, ...]:
+    """提示引用受影響的要求；判定仍由逐條審查產生。"""
+    codes = {r.code for r in records}
+    categories = {r.category for r in records if r.category}
+    dept = any((r.code in kb.courses and kb.courses[r.code].counts_as == "dept_elective")
+               or (r.code not in kb.courses and not r.category and r.code.startswith(kb.dept_prefixes))
+               for r in records)
+    return tuple(req.id for req in kb.requirements
+                 if req.kind == "total_credits" or codes.intersection(req.courses)
+                 or (req.kind == "credits_from" and any(
+                     r.code in kb.courses and (not req.courses or r.code in req.courses)
+                     and (req.course_type is None or kb.courses[r.code].type == req.course_type)
+                     for r in records))
+                 or (req.kind == "dept_elective_credits" and dept)
+                 or any(kb.in_category(cat, target) for cat in categories for target in req.categories))
+
+
+def _detect_flags(kb: KnowledgeBase, t: Transcript,
+                  results: list[RequirementResult]) -> tuple[list[Flag], list[Action]]:
+    flags: list[Flag] = []
+    actions: list[Action] = []
+    for cat, _, overflow in _category_allocation(kb, t):
+        if overflow <= 0:
+            continue
+        records = [r for r in t.categorized if root_category(kb, r.category) == cat]
+        ids = _related_requirements(kb, records)
+        codes = tuple(sorted({r.code for r in records}))
+        flags.append(Flag(OVERFLOW, f"{cat}有 {overflow} 學分可納入外系學分池，仍受外系總上限與人工確認限制",
+                          ids, codes, overflow))
+        actions.append(Action(MANUAL_RECOGNITION, f"確認{cat}超修學分的人工認列", requirement_ids=ids,
+                              courses=codes, from_flag=OVERFLOW))
+    for code in sorted({r.code for r in t.repeated}):
+        extra = [r for r in t.repeated if r.code == code]
+        credits = sum(kb.courses[code].credits if code in kb.courses else r.credits for r in extra)
+        ids = _related_requirements(kb, extra)
+        flags.append(Flag(REPEATABLE, f"{code}允許重複修習，第二次起已按規則採計 {credits} 學分，需確認校務系統認列",
+                          ids, (code,), credits))
+        actions.append(Action(MANUAL_RECOGNITION, f"確認 {code} 重複修習認列", requirement_ids=ids,
+                              courses=(code,), from_flag=REPEATABLE))
+    missing = {code for result in results for code in result.missing}
+    for code in sorted(missing):
+        course = kb.courses[code]
+        alternatives = tuple(c for c in course.replacement_courses if c in t.passed)
+        if not course.discontinued or not alternatives:
+            continue
+        ids = tuple(r.requirement.id for r in results if code in r.missing)
+        codes = (code,) + alternatives
+        flags.append(Flag(SUBSTITUTION_PENDING,
+                          f"{code}已停開，已通過替代課程{'、'.join(alternatives)}，尚待辦理抵修；原要求仍列缺課",
+                          ids, codes, course.credits))
+        actions.append(Action(SUBSTITUTION, f"確認並辦理 {code} 抵修", course.substitution_office,
+                              ids, codes, SUBSTITUTION_PENDING))
+    for r in t.duplicate_review:
+        actions.append(Action(MANUAL_RECOGNITION, f"確認 {r.code}（{r.term}）重複通過是否採計",
+                              requirement_ids=_related_requirements(kb, [r]), courses=(r.code,)))
+    return flags, actions
+
+
 def audit(kb: KnowledgeBase, records: list[Record], decisions: Decisions | None = None,
           english_passed: bool | None = None) -> AuditReport:
     """english_passed：語言中心英檢審核結果（名單提供）；None 表示不知道。"""
     t = classify(kb, records, decisions)
     breakdown = credit_breakdown(kb, t)
     total = sum(breakdown.values())
-    consumed: set[str] = set()
+    consumed: Counter[str] = Counter()
     results = [_evaluate(kb, req, t, consumed, total, english_passed) for req in kb.requirements]
 
     # 類別不明的紀錄可能改變其他規則結果，所以優先人工判斷；
@@ -242,7 +331,8 @@ def audit(kb: KnowledgeBase, records: list[Record], decisions: Decisions | None 
     else:
         status = Status.PASS
 
-    return AuditReport(status, results, t, total, breakdown)
+    flags, actions = _detect_flags(kb, t, results)
+    return AuditReport(status, results, t, total, breakdown, flags, actions)
 
 
 def reasons(report: AuditReport) -> list[str]:
@@ -257,9 +347,18 @@ def reasons(report: AuditReport) -> list[str]:
     return out
 
 
-def _evaluate(kb: KnowledgeBase, req: Requirement, t: Transcript, consumed: set[str],
+def _evaluate(kb: KnowledgeBase, req: Requirement, t: Transcript, consumed: Counter[str],
               total: int, english_passed: bool | None = None) -> RequirementResult:
-    available = [c for c in t.passed if not (req.exclusive and c in consumed)]
+    # 排他採計以修習次數扣除；同課號的另一次合法修習仍可供後續學分規則使用。
+    available = list(t.passed)
+    if req.exclusive:
+        remaining = consumed.copy()
+        available = []
+        for code in t.passed:
+            if remaining[code]:
+                remaining[code] -= 1
+            else:
+                available.append(code)
     cite = kb.cite(req.source)
 
     if req.kind == "all_of":

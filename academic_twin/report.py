@@ -57,6 +57,15 @@ def render(data: dict, program: str, cohort: int, rule_version: str, audited_at:
         + ("<div class='cite'>決定時的規則版本與現行不同，建議再確認</div>" if r["outdated"] else "") + "</td></tr>"
         for r in data["reviews"]
     )
+    flags = "".join(
+        f"<li>{e(f['message'])}<div class='cite'>相關要求：{e('、'.join(f['requirement_ids']))}；"
+        f"相關課程：{e('、'.join(f['courses']))}</div></li>" for f in data.get("flags", [])
+    )
+    actions = "".join(
+        f"<li>{e(a['title'])}（承辦單位：{e(a['office'])}）<div class='cite'>"
+        f"相關要求：{e('、'.join(a['requirement_ids']))}；相關課程：{e('、'.join(a['courses']))}</div></li>"
+        for a in data.get("actions", [])
+    )
     records = "".join(
         f"<tr><td>{e(r['term'])}</td><td>{e(r['code'])}</td><td>{e(r['name'])}</td><td class='num'>{e(r['credits'])}</td>"
         f"<td class='num'>{e(r['grade'])}</td><td>{e(r['category'])}</td></tr>"
@@ -85,6 +94,12 @@ def render(data: dict, program: str, cohort: int, rule_version: str, audited_at:
 
 <h2>人工覆核紀錄</h2>
 {f"<table><thead><tr><th>紀錄</th><th>決定</th><th>覆核人</th><th>時間</th><th>備註</th></tr></thead><tbody>{reviews}</tbody></table>" if reviews else "<p>無</p>"}
+
+<h2>疑似誤判提示（待承辦人確認）</h2>
+{"<ul>" + flags + "</ul>" if flags else "<p>無</p>"}
+
+<h2>需辦理事項</h2>
+{"<ul>" + actions + "</ul>" if actions else "<p>無</p>"}
 
 <h2>修課紀錄（{len(data['records'])} 筆）</h2>
 <table><thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead><tbody>{records}</tbody></table>
