@@ -190,6 +190,94 @@ $("#upload-btn").addEventListener("click", async () => {
 });
 $("#reset-btn").addEventListener("click", () => sendData("/api/reset", {}));
 
+// ---------- AI 解析儀表板 ----------
+let DRAFT = null;
+const DASH_FIELDS = ["rule_code", "term", "code", "name", "credits", "grade"];
+
+function dashMsg(el, html, color = "var(--muted)") {
+  $(el).innerHTML = html ? `<div class="small" style="margin-top: 8px; color: ${color}">${html}</div>` : "";
+}
+
+function renderDraft() {
+  const d = DRAFT;
+  $("#dash-draft").hidden = false;
+  $("#dash-meta").textContent = `模型 ${d.model}・${d.generated_at}・提示 ${d.prompt_version}・版型 ${d.format}`;
+  $("#dash-cohort").value = d.cohort ?? "";
+  $("#dash-declared").textContent = `文件標示：應修 ${d.declared_required ?? "—"}、實得 ${d.declared_earned ?? "—"} 學分`;
+  $("#dash-exists").textContent = d.exists ? `；${d.student_id} 已有修課紀錄，確認後將以本次紀錄取代` : "";
+  const docIssues = d.issues.filter((i) => i.row === null);
+  const rowIssues = (i) => d.issues.filter((x) => x.row === i);
+  $("#dash-issues").innerHTML = docIssues.map((i) =>
+    `<div class="issue ${i.level === "error" ? "FAIL" : "WARNING"}">${i.level === "error" ? "✘" : "⚠"} ${esc(i.message)}</div>`).join("");
+  const cats = ["", ...d.categories];
+  $("#dash-rows").innerHTML = d.rows.map((r, i) => {
+    const iss = rowIssues(i);
+    const cls = iss.some((x) => x.level === "error") ? "has-error" : iss.length ? "has-warning" : "";
+    return `<tr class="${cls}" data-i="${i}">
+      <td>${i + 1}</td>
+      ${DASH_FIELDS.map((f) => `<td><input data-f="${f}" value="${esc(r[f] ?? "")}"></td>`).join("")}
+      <td><select data-f="category">${cats.map((c) => `<option ${c === r.category ? "selected" : ""} value="${esc(c)}">${esc(c || "依課號判斷")}</option>`).join("")}</select></td>
+      <td class="src">p.${esc(r.source_page ?? "?")}：${esc(r.source_text || "（無原文）")}${iss.map((x) => `<div class="row-issue">${x.level === "error" ? "✘" : "⚠"} ${esc(x.message)}</div>`).join("")}</td>
+      <td><button class="ghost small" data-del="${i}">刪除</button></td>
+    </tr>`;
+  }).join("");
+  document.querySelectorAll("#dash-rows input, #dash-rows select").forEach((el) => el.addEventListener("change", () => {
+    DRAFT.rows[el.closest("tr").dataset.i][el.dataset.f] = el.value;
+  }));
+  document.querySelectorAll("#dash-rows [data-del]").forEach((b) => b.addEventListener("click", () => {
+    DRAFT.rows.splice(Number(b.dataset.del), 1);
+    DRAFT.issues = [];  // 列號已變動，確認時由伺服器重新檢查
+    renderDraft();
+  }));
+  $("#dash-ack-row").hidden = !d.issues.some((i) => i.level === "warning");
+  $("#dash-checked").checked = $("#dash-ack").checked = false;
+}
+
+$("#dash-extract").addEventListener("click", async () => {
+  const file = $("#dash-file").files[0], sid = $("#dash-sid").value.trim();
+  if (!file || !sid) return dashMsg("#dash-msg", "請選擇 PDF 並填寫學號。", "var(--fail)");
+  dashMsg("#dash-msg", "AI 解析中，約需 30–90 秒…");
+  $("#dash-extract").disabled = true;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    DRAFT = await api("/api/dashboard/extract", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ student_id: sid, data: btoa(bin) }) });
+    const errors = DRAFT.issues.filter((i) => i.level === "error").length, warnings = DRAFT.issues.length - errors;
+    dashMsg("#dash-msg", `擷取 ${DRAFT.rows.length} 列；錯誤 ${errors}、警示 ${warnings}。結果為待確認草稿，尚未進入審查。`);
+    renderDraft();
+  } catch (e) {
+    dashMsg("#dash-msg", `<b>${esc(e.message)}</b>`, "var(--fail)");
+  } finally {
+    $("#dash-extract").disabled = false;
+  }
+});
+
+$("#dash-add").addEventListener("click", () => {
+  DRAFT.rows.push({ rule_code: "", term: "", code: "", name: "", credits: "", grade: "", category: "",
+    source_page: null, source_text: "（人工新增）" });
+  renderDraft();
+});
+
+$("#dash-confirm").addEventListener("click", async () => {
+  if (!$("#dash-checked").checked) return dashMsg("#dash-confirm-msg", "請先逐列對照原文並勾選確認。", "var(--fail)");
+  try {
+    const s = await api("/api/dashboard/confirm", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draft_id: DRAFT.draft_id, rows: DRAFT.rows, reviewer: $("#dash-reviewer").value,
+        cohort: $("#dash-cohort").value.trim(), acknowledge_warnings: $("#dash-ack").checked }) });
+    DRAFT = null;
+    $("#dash-draft").hidden = true;
+    dashMsg("#dash-msg", "");
+    await loadData();
+    await loadStudent(s.id);
+    show("student");
+  } catch (e) {
+    dashMsg("#dash-confirm-msg", `<b>${esc(e.message)}</b>`
+      + (e.details?.length ? `<ul class="upload-errors">${e.details.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : ""), "var(--fail)");
+  }
+});
+
 // ---------- 啟動 ----------
 (async function init() {
   await loadMeta();

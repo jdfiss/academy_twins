@@ -5,3 +5,4 @@ __pycache__/
 .idea/
 data/reviews/
 .env
+data/eval/
