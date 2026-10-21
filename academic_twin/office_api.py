@@ -7,7 +7,7 @@ import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 
-from . import dashboard, report
+from . import dashboard, report, rule_draft
 from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, classify, reasons
 
@@ -164,6 +164,19 @@ class OfficeMixin:
             rw.writerow([i, "" if english is None else ("Y" if english else "N"), cohorts.get(i, "")])
         source = f"{self.records_name}＋AI 解析 {sid}" if self.records_name else f"AI 解析 {sid}"
         self.load_data((source, out.getvalue()), (self.roster_name or "應屆名單", rout.getvalue()))
+
+    # ---------- AI 草擬規則（獨立存檔，確認也不啟用） ----------
+    def rule_draft_extract(self, pdf: bytes, year: int = 114) -> dict:
+        """公開應修科目表產生少量草稿；不接觸 self.kb 或審查資料。"""
+        return rule_draft.run_draft(pdf, year)
+
+    def rule_draft_check(self, draft_id: str, requirements: list[dict]) -> dict:
+        return rule_draft.review_draft(draft_id, requirements)
+
+    def rule_draft_confirm(self, draft_id: str, requirements: list[dict], reviewer: str,
+                           acknowledge: bool = False) -> dict:
+        """重新檢查並保存確認版本；後續由年度規則流程另外審核啟用。"""
+        return rule_draft.confirm(draft_id, requirements, reviewer, acknowledge)
 
     def report_html(self, sid: str, audited_at: datetime | None = None) -> str:
         """單一學生審查明細（可列印）。"""

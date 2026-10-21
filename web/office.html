@@ -37,6 +37,7 @@
   <nav>
     <button data-view="batch" class="active">系辦畢審</button>
     <button data-view="ingest">AI 解析儀表板</button>
+    <button data-view="rule-draft">AI 草擬規則</button>
     <button data-view="student">學生明細</button>
     <button data-view="rules">規則來源</button>
   </nav>
@@ -176,6 +177,41 @@
           </details>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- AI 規則草稿：獨立保存，確認只留紀錄，不啟用 -->
+  <section class="view" id="view-rule-draft">
+    <div class="card" style="margin-bottom: 16px">
+      <h2>AI 草擬規則 <span class="muted small">AI 草稿、未啟用</span></h2>
+      <p class="small">目前僅支援公開的 114 應修科目表（data/sources/im_114_table.pdf），草擬院訂必修清單、國文學分與最低畢業學分三項。PDF 內容會送至 Gemini。</p>
+      <div class="upload">
+        <label>公開應修科目表 PDF<input type="file" id="rule-file" accept=".pdf,application/pdf"></label>
+        <label>適用年度 <select id="rule-year"><option value="114">114</option></select></label>
+        <button class="primary" id="rule-extract">AI 草擬（未啟用）</button>
+        <a id="rule-source" target="_blank" rel="noopener" hidden>開啟所選原文 PDF</a>
+      </div>
+      <div id="rule-msg" role="status" aria-live="polite"></div>
+    </div>
+    <div class="card" id="rule-draft-panel" hidden>
+      <h2>AI 草稿、未啟用 <span class="muted small" id="rule-meta"></span></h2>
+      <p class="muted small">結構合法不代表規章解讀正確；114 現有 JSON 含待確認假設，差異皆為「需人工確認」。請逐項檢查原文、門檻、適用條件、例外與遺漏。這是少量要求草稿，不是完整規則庫。</p>
+      <div id="rule-issues" role="status"></div>
+      <div id="rule-requirements"></div>
+      <h3>與現有 114 JSON 的差異（僅限指定三項及草稿多列）</h3>
+      <div id="rule-diff"></div>
+      <details style="margin: 12px 0">
+        <summary>修正規則與來源（JSON，可補漏或刪除要求）</summary>
+        <label for="rule-editor" class="small">要求陣列，包含適用年度、來源頁次、逐字引用、條件與例外</label>
+        <textarea id="rule-editor" rows="16" style="width: 100%; box-sizing: border-box; font: inherit"></textarea>
+      </details>
+      <button class="ghost" id="rule-check">重新檢查修正內容與差異</button>
+      <div class="small" style="margin: 12px 0">
+        <label><input type="checkbox" id="rule-checked">已逐項核對原文、門檻、適用條件、例外、遺漏及差異，確認保存草稿（未啟用）</label>
+      </div>
+      <label>確認人 <input id="rule-reviewer" placeholder="姓名" style="padding: 4px 8px"></label>
+      <button class="primary" id="rule-confirm">確認存檔（未啟用）</button>
+      <div id="rule-confirm-msg" role="status" aria-live="polite"></div>
     </div>
   </section>
 

@@ -111,8 +111,11 @@ def _course_codes(value: object, label: str) -> tuple[str, ...]:
 
 
 def load(path: str | Path) -> KnowledgeBase:
-    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    return from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
+
+def from_dict(raw: dict) -> KnowledgeBase:
+    """以既有載入與驗證流程檢查記憶體中的規則；不寫檔、不啟用。"""
     courses = {
         c["code"]: Course(
             code=c["code"],

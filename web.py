@@ -83,6 +83,8 @@ class Handler(BaseHTTPRequestHandler):
         POST /api/students/<id>/reviews  {"code", "term", "action", "category"?, "reviewer", "note"?}
         POST /api/dashboard/extract  {"student_id", "data"（PDF 的 base64）}：AI 解析為待確認草稿
         POST /api/dashboard/confirm  {"draft_id", "rows", "reviewer", "cohort"?, "acknowledge_warnings"?}
+        POST /api/rule-drafts/extract  {"data"（公開 PDF 的 base64）, "year"}
+        POST /api/rule-drafts/check 或 confirm  {"draft_id", "requirements", "reviewer"?, "acknowledge"?}
         """
         route = urlparse(self.path).path.strip("/")
         length = int(self.headers.get("Content-Length") or 0)
@@ -130,6 +132,21 @@ class Handler(BaseHTTPRequestHandler):
                     str(body.get("draft_id") or ""), body["rows"], str(body.get("reviewer") or ""),
                     int(cohort) if cohort not in (None, "") else None, bool(body.get("acknowledge_warnings")),
                 ))
+            elif route == "api/rule-drafts/extract":
+                try:
+                    pdf = base64.b64decode(str(body.get("data") or ""), validate=True)
+                except (binascii.Error, ValueError):
+                    return self._json({"error": "PDF 內容無法讀取"}, 400)
+                return self._json(service.rule_draft_extract(pdf, body.get("year")))
+            elif route in ("api/rule-drafts/check", "api/rule-drafts/confirm"):
+                rows = body.get("requirements")
+                if not isinstance(rows, list) or not all(isinstance(r, dict) for r in rows):
+                    return self._json({"error": "requirements 需為要求陣列"}, 400)
+                draft_id = str(body.get("draft_id") or "")
+                if route.endswith("/check"):
+                    return self._json(service.rule_draft_check(draft_id, rows))
+                return self._json(service.rule_draft_confirm(
+                    draft_id, rows, str(body.get("reviewer") or ""), body.get("acknowledge") is True))
             elif route == "api/reset":
                 service.load_data(
                     (STUDENTS_PATH.name, STUDENTS_PATH.read_text(encoding="utf-8-sig")),
@@ -141,6 +158,8 @@ class Handler(BaseHTTPRequestHandler):
         except RecordsError as e:
             return self._json({"error": "資料格式錯誤，未套用", "errors": e.errors}, 400)
         except LLMError as e:
+            if route.startswith("api/rule-drafts/"):
+                return self._json({"error": f"AI 草擬暫時無法使用，草稿未確認、已啟用規則不變：{e}"}, 502)
             return self._json({"error": f"AI 解析暫時無法使用，可改用上傳修課紀錄 CSV：{e}"}, 502)
         except KeyError as e:
             return self._json({"error": str(e.args[0])}, 404)

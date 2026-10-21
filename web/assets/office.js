@@ -306,6 +306,121 @@ $("#dash-confirm").addEventListener("click", async () => {
   }
 });
 
+// ---------- AI 草擬規則（確認僅存檔，永不啟用） ----------
+let RULE_DRAFT = null, ruleNeedsCheck = false, ruleSourceUrl = null;
+const RULE_DIFF_LABELS = { same: "相同（仍須核對原文）", different: "欄位不同・需人工確認",
+  missing_in_draft: "草稿漏列・需人工確認", extra_in_draft: "草稿多列・需人工確認" };
+const rulePost = (action, body) => api('/api/rule-drafts/' + action, {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+});
+
+function renderRuleDraft(d) {
+  RULE_DRAFT = d;
+  ruleNeedsCheck = false;
+  $("#rule-draft-panel").hidden = false;
+  $("#rule-meta").textContent = '模型 ' + d.model + '・' + d.generated_at + '・提示 ' + d.prompt_version;
+  $("#rule-issues").innerHTML = d.issues.map((i) => '<div class="issue FAIL">' + esc(i.message) + '</div>').join("")
+    + (d.baseline_changed ? '<div class="issue WARNING">對照 JSON 在草擬後已改變，請重新核對全部差異。</div>' : "");
+  $("#rule-requirements").innerHTML = (Array.isArray(d.requirements) ? d.requirements : []).map((r) => {
+    if (!r || typeof r !== 'object') return '<div class="issue FAIL">要求格式錯誤，請修正。</div>';
+    return '<div class="issue WARNING"><b>' + esc(r.id) + ' ' + esc(r.title) + '</b>・AI 草稿、未啟用'
+      + '<div>適用年度：' + esc(r.applicable_year) + '；PDF 第 ' + esc(r.source_page) + ' 頁；位置：' + esc(r.source?.ref) + '</div>'
+      + '<blockquote style="white-space: pre-wrap">' + esc(r.source_quote) + '</blockquote>'
+      + '<div>門檻／清單：' + esc(JSON.stringify(r.courses ?? r.categories ?? [])) + '；最低學分：' + esc(r.min_credits ?? '依清單') + '</div>'
+      + '<div>適用條件：' + esc(r.applicability) + '</div><div>例外：' + esc(r.exceptions) + '</div>'
+      + '<div>核對事項：' + esc(r.review_notes) + '</div></div>';
+  }).join("");
+  $("#rule-diff").innerHTML = d.diff.map((r) => '<details class="small" style="margin-bottom: 8px"><summary>'
+    + esc(r.id) + '：' + esc(RULE_DIFF_LABELS[r.status]) + '</summary>'
+    + r.fields.map((f) => '<div style="overflow-wrap: anywhere">' + esc(f.field) + '：'
+      + esc(f.change === 'added' ? '（原無欄位）' : JSON.stringify(f.before)) + ' → '
+      + esc(f.change === 'removed' ? '（草稿無欄位）' : JSON.stringify(f.after)) + '</div>').join("") + '</details>').join("");
+  $("#rule-editor").value = JSON.stringify(d.requirements, null, 2);
+  $("#rule-checked").checked = false;
+  const confirmed = d.state === 'confirmed';
+  $("#rule-editor").disabled = $("#rule-check").disabled = $("#rule-confirm").disabled = confirmed;
+  $("#rule-checked").disabled = confirmed;
+}
+
+function invalidateRuleCheck() {
+  ruleNeedsCheck = true;
+  $("#rule-checked").checked = false;
+  dashMsg("#rule-confirm-msg", "內容已修改，請重新檢查後核對差異，再勾選確認。");
+}
+$("#rule-editor").addEventListener("input", invalidateRuleCheck);
+$("#rule-file").addEventListener("change", () => {
+  RULE_DRAFT = null;
+  $("#rule-draft-panel").hidden = true;
+  dashMsg("#rule-msg", "");
+  if (ruleSourceUrl) URL.revokeObjectURL(ruleSourceUrl);
+  const file = $("#rule-file").files[0];
+  ruleSourceUrl = file ? URL.createObjectURL(file) : null;
+  $("#rule-source").hidden = !file;
+  if (file) $("#rule-source").href = ruleSourceUrl;
+});
+
+$("#rule-extract").addEventListener("click", async () => {
+  const file = $("#rule-file").files[0];
+  if (!file) return dashMsg("#rule-msg", "請選擇公開 114 應修科目表 PDF。", "var(--fail)");
+  RULE_DRAFT = null;
+  $("#rule-draft-panel").hidden = true;
+  dashMsg("#rule-confirm-msg", "");
+  $("#rule-extract").disabled = $("#rule-file").disabled = true;
+  const start = Date.now();
+  const waiting = () => dashMsg("#rule-msg", 'AI 草擬中，已等待 ' + Math.round((Date.now() - start) / 1000) + ' 秒；結果為 AI 草稿、未啟用。');
+  waiting();
+  const timer = setInterval(waiting, 1000);
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const d = await rulePost('extract', { data: btoa(bin), year: Number($("#rule-year").value) });
+    renderRuleDraft(d);
+    dashMsg("#rule-msg", '已保存 AI 草稿、未啟用；結構錯誤 ' + d.issues.length + ' 項。請對照原文。');
+  } catch (e) {
+    dashMsg("#rule-msg", esc(e.message), "var(--fail)");
+  } finally {
+    clearInterval(timer);
+    $("#rule-extract").disabled = $("#rule-file").disabled = false;
+  }
+});
+
+$("#rule-check").addEventListener("click", async () => {
+  if (!RULE_DRAFT) return;
+  $("#rule-check").disabled = $("#rule-confirm").disabled = $("#rule-editor").disabled = true;
+  try {
+    const requirements = JSON.parse($("#rule-editor").value);
+    const d = await rulePost('check', { draft_id: RULE_DRAFT.draft_id, requirements });
+    renderRuleDraft(d);
+    dashMsg("#rule-confirm-msg", '已重新檢查；錯誤 ' + d.issues.length + ' 項，請重新核對並勾選確認。');
+  } catch (e) {
+    dashMsg("#rule-confirm-msg", esc(e.message), "var(--fail)");
+  } finally {
+    $("#rule-check").disabled = $("#rule-confirm").disabled = $("#rule-editor").disabled = false;
+  }
+});
+
+$("#rule-confirm").addEventListener("click", async () => {
+  if (!RULE_DRAFT || $("#rule-confirm").disabled) return;
+  if (ruleNeedsCheck || !$("#rule-checked").checked) return dashMsg("#rule-confirm-msg", "請重新檢查、核對原文與差異，再勾選確認。", "var(--fail)");
+  if (!$("#rule-reviewer").value.trim()) return dashMsg("#rule-confirm-msg", "請填寫確認人。", "var(--fail)");
+  $("#rule-confirm").disabled = $("#rule-check").disabled = $("#rule-editor").disabled = $("#rule-extract").disabled = $("#rule-file").disabled = true;
+  try {
+    const d = await rulePost('confirm', { draft_id: RULE_DRAFT.draft_id, requirements: JSON.parse($("#rule-editor").value),
+      reviewer: $("#rule-reviewer").value, acknowledge: true });
+    renderRuleDraft(d);
+    dashMsg("#rule-confirm-msg", '已確認存檔（AI 草稿、未啟用）：' + esc(d.confirmation.reviewer) + '・' + esc(d.confirmation.confirmed_at)
+      + '；修改 ' + d.confirmation.edited_field_count + ' 欄。檔案：data/eval/rule_drafts/' + esc(d.draft_id) + '.confirmed.json；後續另行審核啟用新版本。');
+  } catch (e) {
+    $("#rule-checked").checked = false;
+    dashMsg("#rule-confirm-msg", esc(e.message), "var(--fail)");
+  } finally {
+    const confirmed = RULE_DRAFT?.state === 'confirmed';
+    $("#rule-confirm").disabled = $("#rule-check").disabled = $("#rule-editor").disabled = confirmed;
+    $("#rule-extract").disabled = $("#rule-file").disabled = false;
+  }
+});
+
 // ---------- 啟動 ----------
 (async function init() {
   await loadMeta();
