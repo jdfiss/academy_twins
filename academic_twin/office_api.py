@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import csv
 import io
+import uuid
+from dataclasses import asdict, replace
 from datetime import datetime
 
-from . import report
+from . import dashboard, report
+from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, classify, reasons
 
 
@@ -96,6 +99,96 @@ class OfficeMixin:
         self.reviews.add(sid, code, term, action, reviewer, self.rule_version, category, note)
         return self.student(sid)
 
+    # ---------- AI 解析儀表板（結果待承辦人確認，確認前不進入審查） ----------
+    def dashboard_extract(self, pdf: bytes, student_id: str) -> dict:
+        """AI 擷取儀表板為草稿；草稿暫存於記憶體，只有確認後才會寫入修課紀錄。"""
+        sid = _student_id(student_id)
+        ext = dashboard.extract(pdf)
+        drafts = self.__dict__.setdefault("_dashboard_drafts", {})
+        draft_id = uuid.uuid4().hex
+        drafts[draft_id] = (sid, ext)
+        return {"draft_id": draft_id, "student_id": sid, "exists": sid in self.students,
+                **self._draft_view(ext, dashboard.check(ext, self.kb))}
+
+    def dashboard_confirm(self, draft_id: str, rows: list[dict], reviewer: str, cohort: int | None = None,
+                          acknowledge_warnings: bool = False) -> dict:
+        """承辦人修正並確認後，重新檢查，再以該生的紀錄取代或新增，並記錄修正量（不含課程內容）。"""
+        drafts = self.__dict__.get("_dashboard_drafts", {})
+        if draft_id not in drafts:
+            raise KeyError("找不到這份解析草稿，可能已確認或伺服器已重開，請重新解析")
+        if not reviewer.strip():
+            raise ValueError("請填寫確認人")
+        sid, ext = drafts[draft_id]
+        fields = dashboard.FIELDS + ["rule_code", "source_page", "source_text"]
+        edited = replace(ext, rows=[{k: r.get(k, "") for k in fields} for r in rows])
+        issues = dashboard.check(edited, self.kb)
+        errors = [i for i in issues if i.level == "error"]
+        if errors:
+            raise RecordsError([_issue_text(i) for i in errors])
+        if any(i.level == "warning" for i in issues) and not acknowledge_warnings:
+            raise RecordsError(["仍有警示未確認；請逐項對照原文後勾選「已確認警示」"]
+                               + [_issue_text(i) for i in issues if i.level == "warning"])
+        records = parse_records(dashboard.to_records_csv(sid, edited.rows))[sid]
+        self._replace_student(sid, records, cohort)
+        del drafts[draft_id]
+        dashboard.log_run({
+            "type": "confirm", "model": ext.model, "prompt_version": ext.prompt_version, "format": ext.format,
+            "generated_at": ext.generated_at, "confirmed_at": datetime.now().isoformat(timespec="seconds"),
+            **_edit_counts(ext.rows, edited.rows), "warnings_acknowledged": acknowledge_warnings,
+        })
+        return self.student(sid)
+
+    def _draft_view(self, ext: dashboard.Extraction, issues: list[dashboard.Issue]) -> dict:
+        return {"rows": ext.rows, "issues": [asdict(i) for i in issues], "cohort": ext.cohort,
+                "declared_required": ext.declared_required, "declared_earned": ext.declared_earned,
+                "model": ext.model, "generated_at": ext.generated_at, "prompt_version": ext.prompt_version,
+                "format": ext.format, "fallback_from": ext.fallback_from, "categories": sorted(set(dashboard.FORMATS[ext.format].values()) - {""})}
+
+    def _replace_student(self, sid: str, records: list, cohort: int | None) -> None:
+        """以確認後的紀錄取代該生既有紀錄並加入名單；經由 load_data 重新檢查，失敗時資料不變。"""
+        out = io.StringIO()
+        writer = csv.DictWriter(out, fieldnames=REQUIRED + ["category"], lineterminator="\n")
+        writer.writeheader()
+        for other, recs in {**self.students, sid: records}.items():
+            for r in recs:
+                writer.writerow({"student_id": other, "code": r.code, "name": r.name, "credits": r.credits,
+                                 "grade": f"{r.grade:g}", "term": r.term, "category": r.category})
+        roster = self._roster_parsed
+        cohorts = {**roster.cohorts, **({sid: cohort} if cohort else {})}
+        ids = roster.ids + ([] if sid in roster.ids else [sid])
+        rout = io.StringIO()
+        rw = csv.writer(rout, lineterminator="\n")
+        rw.writerow(["student_id", "english_passed", "cohort"])
+        for i in ids:
+            english = roster.english_passed.get(i)
+            rw.writerow([i, "" if english is None else ("Y" if english else "N"), cohorts.get(i, "")])
+        source = f"{self.records_name}＋AI 解析 {sid}" if self.records_name else f"AI 解析 {sid}"
+        self.load_data((source, out.getvalue()), (self.roster_name or "應屆名單", rout.getvalue()))
+
     def report_html(self, sid: str, audited_at: datetime | None = None) -> str:
         """單一學生審查明細（可列印）。"""
         return report.render(self.student(sid), self.kb.program, self.kb.cohort, self.rule_version, audited_at)
+
+
+def _student_id(value: str) -> str:
+    sid = (value or "").strip()
+    if not sid or any(c in sid for c in ",\n\r\""):
+        raise ValueError("請填寫學號（去識別化代號），不可含逗號、引號或換行")
+    return sid
+
+
+def _issue_text(i: dashboard.Issue) -> str:
+    return (f"第 {i.row + 1} 列：" if i.row is not None else "") + i.message
+
+
+def _edit_counts(before: list[dict], after: list[dict]) -> dict:
+    """人工修正量：以（科目代碼, 學期）對齊，計算修改的欄位與增刪的列數。"""
+    def key(r):
+        return str(r.get("code", "")).strip(), str(r.get("term", "")).strip()
+    old = {key(r): r for r in before}
+    new = {key(r): r for r in after}
+    fields = [k for k in dashboard.FIELDS if k not in ("code", "term")]
+    changed = sum(1 for k in old.keys() & new.keys() for f in fields
+                  if str(old[k].get(f, "")).strip() != str(new[k].get(f, "")).strip())
+    return {"rows_before": len(before), "rows_after": len(after), "rows_added": len(new.keys() - old.keys()),
+            "rows_removed": len(old.keys() - new.keys()), "fields_changed": changed}

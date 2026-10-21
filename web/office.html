@@ -5,6 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>系辦畢審・Academic Twin</title>
 <link rel="stylesheet" href="assets/common.css">
+<style>
+/* 系辦解析表格：窄欄位保留給代碼與數字，課名與來源留足閱讀空間。 */
+.dash-table { min-width: 1160px; table-layout: fixed; }
+.dash-table th, .dash-table td { padding: 8px 6px; }
+.dash-table th, .dash-table button { white-space: nowrap; }
+.dash-table input, .dash-table select, .dash-table textarea { box-sizing: border-box; width: 100%; font: inherit; font-size: 12.5px; }
+.dash-table input, .dash-table select { padding: 5px; }
+.dash-table .source-page { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.dash-table .source-page input { width: 64px; }
+.dash-table textarea { padding: 5px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); }
+.dash-table .row-issue { font-size: 12px; color: var(--fail); }
+.dash-table .has-error { background: var(--fail-soft); }
+</style>
+<style>
+  .dash-table input, .dash-table select { width: 100%; min-width: 48px; padding: 2px 4px; font-size: 12.5px; }
+  .dash-table td { vertical-align: top; }
+  .dash-table tr.has-error td { background: var(--fail-soft); }
+  .dash-table tr.has-warning td { background: var(--warn-soft); }
+  .dash-table .src { font-size: 12px; color: var(--muted); max-width: 260px; }
+  .dash-table .row-issue { font-size: 12px; color: var(--fail); }
+</style>
 </head>
 <body>
 <header>
@@ -15,6 +36,7 @@
   </div>
   <nav>
     <button data-view="batch" class="active">系辦畢審</button>
+    <button data-view="ingest">AI 解析儀表板</button>
     <button data-view="student">學生明細</button>
     <button data-view="rules">規則來源</button>
   </nav>
@@ -67,6 +89,45 @@
         <thead><tr><th>學號</th><th>問題</th></tr></thead>
         <tbody id="roster-rows"></tbody>
       </table>
+    </div>
+  </section>
+
+  <!-- AI 解析儀表板：AI 擷取 → 承辦人對照原文修正與確認 → 才進入審查 -->
+  <section class="view" id="view-ingest">
+    <div class="card" style="margin-bottom: 16px">
+      <h2>AI 解析畢審儀表板 <span class="muted small">AI 只擷取文件內容，判定仍由規則引擎產生</span></h2>
+      <p class="small" style="color: var(--fail)">只可上傳去識別化或虛構文件；檔案內容會送至 Gemini 解析。目前支援版型：虛構示範版型（demo-v1），不支援掃描影像。</p>
+      <div class="upload">
+        <label>儀表板 PDF<input type="file" id="dash-file" accept=".pdf,application/pdf"></label>
+        <label>學號（去識別化代號）<input id="dash-sid" placeholder="例如 DEMO-D01" style="padding: 4px 8px"></label>
+        <button class="primary" id="dash-extract">AI 解析</button>
+      </div>
+      <div id="dash-msg"></div>
+    </div>
+    <div class="card" id="dash-draft" hidden>
+      <h2>待確認紀錄 <span class="muted small" id="dash-meta"></span></h2>
+      <div class="small" style="margin-bottom: 8px">
+        入學學年度 <input id="dash-cohort" style="width: 70px; padding: 3px 6px">
+        <span class="muted" id="dash-declared"></span>
+        <span class="muted" id="dash-exists"></span>
+      </div>
+      <div id="dash-issues"></div>
+      <p class="muted small">請對照 PDF 修正各欄與來源頁碼、原文；修改後須重新勾選確認，送出時會重新檢查。</p>
+      <div style="overflow-x: auto">
+        <table class="dash-table">
+          <colgroup><col style="width:3%"><col style="width:7%"><col style="width:8%"><col style="width:11%"><col style="width:16%"><col style="width:6%"><col style="width:6%"><col style="width:11%"><col style="width:25%"><col style="width:7%"></colgroup>
+          <thead><tr><th>#</th><th>規則代碼</th><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th><th>來源（頁碼：原文）</th><th></th></tr></thead>
+          <tbody id="dash-rows"></tbody>
+        </table>
+      </div>
+      <button class="ghost small" id="dash-add" style="margin-top: 6px">新增一列</button>
+      <div class="small" style="margin-top: 12px; display: grid; gap: 6px">
+        <label><input type="checkbox" id="dash-checked"> 我已逐列對照原文，修正擷取錯誤</label>
+        <label id="dash-ack-row" hidden><input type="checkbox" id="dash-ack"> 我已確認上方警示（例如可能漏列），內容無誤</label>
+        <label>確認人 <input id="dash-reviewer" placeholder="姓名" style="padding: 3px 8px; width: 120px"></label>
+      </div>
+      <button class="primary" id="dash-confirm" style="margin-top: 10px">確認並送入審查</button>
+      <div id="dash-confirm-msg"></div>
     </div>
   </section>
 
