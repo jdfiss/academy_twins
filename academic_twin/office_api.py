@@ -10,7 +10,7 @@ from .rule_engine import CATEGORY, classify, reasons
 
 
 class OfficeMixin:
-    """需搭配 api.CoreService 使用（self.kb、self.students、self._report…）。"""
+    """需搭配 api.CoreService 使用（self.ruleset()、self.students、self._report…）。"""
 
     def data_source(self) -> dict:
         return {
@@ -27,8 +27,11 @@ class OfficeMixin:
         for sid in self.roster.to_audit:
             report = self._report(sid)
             t = report.transcript
+            rs = self.ruleset(sid)
             rows.append({
                 "id": sid,
+                "cohort": rs.kb.cohort,
+                "rule_version": rs.rule_version,
                 "status": report.status.value,
                 "total_credits": report.total_credits,
                 "total_required": next((r.need for r in report.results
@@ -50,7 +53,8 @@ class OfficeMixin:
             [{"id": sid, "kind": "no_records", "message": "在應屆名單上，但沒有任何修課紀錄，未審查"} for sid in r.no_records]
             + [{"id": sid, "kind": "not_on_roster", "message": "有修課紀錄，但不在應屆名單，未審查"} for sid in r.not_on_roster]
             + [{"id": sid, "kind": "other_cohort",
-                "message": f"名單入學年度為 {c}，系統只有 {self.kb.cohort} 學年度規則庫，未審查"}
+                "message": f"名單入學年度為 {c}，系統沒有該學年度規則庫"
+                           f"（現有 {'、'.join(map(str, sorted(self.rulesets)))}），未審查，不套用其他年度"}
                for sid, c in r.other_cohort.items()]
             + [{"id": sid, "kind": "duplicate", "message": "應屆名單重複列出"} for sid in r.duplicates]
             + [{"id": None, "kind": "blank", "message": f"名單第 {line} 行學號空白"} for line in r.blank_rows]
@@ -70,7 +74,7 @@ class OfficeMixin:
                 "student_id": row["id"], "status": row["status"], "total_credits": row["total_credits"],
                 "satisfied": row["satisfied"], "requirements": row["requirements"],
                 "reasons": "；".join(row["reasons"]) or "全部符合", "reviewed": row["reviewed"],
-                "rule_version": self.rule_version, "audited_at": stamp,
+                "rule_version": row["rule_version"], "audited_at": stamp,
                 "flag_types": "；".join(dict.fromkeys(f["type"] for f in row["flags"])),
                 "flag_messages": "；".join(f["message"] for f in row["flags"]),
                 "actions": "；".join(f"{a['title']}（{a['office']}）" for a in row["actions"]),
@@ -88,14 +92,16 @@ class OfficeMixin:
         """記下覆核決定並回傳重新審查後的學生資料。只接受引擎無法判定的紀錄。"""
         if sid not in self.students:
             raise KeyError(f"找不到學生 {sid}")
-        raw = classify(self.kb, self.students[sid])
+        rs = self.ruleset(sid)
+        raw = classify(rs.kb, self.students[sid])
         if (code, term) not in {(r.code, r.term) for r in raw.review + raw.dept_unverified}:
             raise ValueError(f"{code}（{term}）不是待覆核的紀錄；規則庫能判定的紀錄不能人工改判")
-        if action == CATEGORY and category not in self.kb.categories:
+        if action == CATEGORY and category not in rs.kb.categories:
             raise ValueError(f"類別「{category}」不在規則庫")
-        self.reviews.add(sid, code, term, action, reviewer, self.rule_version, category, note)
+        self.reviews.add(sid, code, term, action, reviewer, rs.rule_version, category, note)
         return self.student(sid)
 
     def report_html(self, sid: str, audited_at: datetime | None = None) -> str:
         """單一學生審查明細（可列印）。"""
-        return report.render(self.student(sid), self.kb.program, self.kb.cohort, self.rule_version, audited_at)
+        rs = self.ruleset(sid)
+        return report.render(self.student(sid), rs.kb.program, rs.kb.cohort, rs.rule_version, audited_at)
