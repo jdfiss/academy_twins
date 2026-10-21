@@ -90,6 +90,28 @@ class DashboardTest(unittest.TestCase):
         warnings = [i for i in ext["issues"] if i["level"] == "warning"]
         self.assertTrue(any("漏列" in i["message"] for i in warnings))
 
+    def test_manual_source_requires_positive_integer_page_and_nonblank_text(self):
+        for page, text in ((None, "原文"), (0, "原文"), (-1, "原文"), (1.5, "原文"),
+                           (True, "原文"), (1, "  ")):
+            with self.subTest(page=page, text=text):
+                response = fake_response()
+                response.data["rows"][0].update(source_page=page, source_text=text)
+                draft = self.extract(response)
+                self.assertTrue(any(i["row"] == 0 and i["level"] == "error" and "來源" in i["message"]
+                                    for i in draft["issues"]))
+
+    def test_new_warning_details_are_returned_and_draft_can_be_corrected(self):
+        draft = self.extract(fake_response())
+        rows = [dict(r) for r in draft["rows"]]
+        known = next(r for r in rows if r["code"] in self.service.kb.courses)
+        known["credits"] = str(self.service.kb.courses[known["code"]].credits + 1)
+        with self.assertRaises(RecordsError) as ctx:
+            self.service.dashboard_confirm(draft["draft_id"], rows, "虛構確認人")
+        self.assertTrue(any("警示" in message for message in ctx.exception.errors))
+        self.assertTrue(any("學分" in message and "規則庫" in message for message in ctx.exception.errors))
+        self.assertNotIn("DEMO-D02", self.service.students)
+        self.service.dashboard_confirm(draft["draft_id"], draft["rows"], "虛構確認人")
+
     def test_empty_or_unreadable_document_is_error(self):
         ext = self.extract(fake_response(rows=[], unreadable="掃描影像"))
         errors = [i["message"] for i in ext["issues"] if i["level"] == "error"]

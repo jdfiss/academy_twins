@@ -135,7 +135,8 @@ def check(ext: Extraction, kb: KnowledgeBase) -> list[Issue]:
             err(f"成績「{r.get('grade')}」不是 0–100 的數字")
         if r.get("rule_code") not in mapping:
             err(f"規則代碼「{r.get('rule_code')}」不在支援版型 {ext.format} 的對照表，無法決定類別")
-        if not r.get("source_page") or not r.get("source_text"):
+        if (type(r.get("source_page")) is not int or r["source_page"] < 1
+                or not isinstance(r.get("source_text"), str) or not r["source_text"].strip()):
             err("缺少來源頁碼或原文，無法對照")
         key = (r.get("code", ""), r.get("term", ""))
         if all(key) and key in seen:

@@ -6,6 +6,19 @@
 <title>系辦畢審・Academic Twin</title>
 <link rel="stylesheet" href="assets/common.css">
 <style>
+/* 系辦解析表格：窄欄位保留給代碼與數字，課名與來源留足閱讀空間。 */
+.dash-table { min-width: 1160px; table-layout: fixed; }
+.dash-table th, .dash-table td { padding: 8px 6px; }
+.dash-table th, .dash-table button { white-space: nowrap; }
+.dash-table input, .dash-table select, .dash-table textarea { box-sizing: border-box; width: 100%; font: inherit; font-size: 12.5px; }
+.dash-table input, .dash-table select { padding: 5px; }
+.dash-table .source-page { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.dash-table .source-page input { width: 64px; }
+.dash-table textarea { padding: 5px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); }
+.dash-table .row-issue { font-size: 12px; color: var(--fail); }
+.dash-table .has-error { background: var(--fail-soft); }
+</style>
+<style>
   .dash-table input, .dash-table select { width: 100%; min-width: 48px; padding: 2px 4px; font-size: 12.5px; }
   .dash-table td { vertical-align: top; }
   .dash-table tr.has-error td { background: var(--fail-soft); }
@@ -99,8 +112,10 @@
         <span class="muted" id="dash-exists"></span>
       </div>
       <div id="dash-issues"></div>
+      <p class="muted small">請對照 PDF 修正各欄與來源頁碼、原文；修改後須重新勾選確認，送出時會重新檢查。</p>
       <div style="overflow-x: auto">
         <table class="dash-table">
+          <colgroup><col style="width:3%"><col style="width:7%"><col style="width:8%"><col style="width:11%"><col style="width:16%"><col style="width:6%"><col style="width:6%"><col style="width:11%"><col style="width:25%"><col style="width:7%"></colgroup>
           <thead><tr><th>#</th><th>規則代碼</th><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th><th>來源（頁碼：原文）</th><th></th></tr></thead>
           <tbody id="dash-rows"></tbody>
         </table>

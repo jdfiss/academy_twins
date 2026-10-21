@@ -126,7 +126,8 @@ class OfficeMixin:
         if errors:
             raise RecordsError([_issue_text(i) for i in errors])
         if any(i.level == "warning" for i in issues) and not acknowledge_warnings:
-            raise ValueError("仍有警示未確認；請逐項對照原文後勾選「已確認警示」")
+            raise RecordsError(["仍有警示未確認；請逐項對照原文後勾選「已確認警示」"]
+                               + [_issue_text(i) for i in issues if i.level == "warning"])
         records = parse_records(dashboard.to_records_csv(sid, edited.rows))[sid]
         self._replace_student(sid, records, cohort)
         del drafts[draft_id]
