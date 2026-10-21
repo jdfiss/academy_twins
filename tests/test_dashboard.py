@@ -1,8 +1,10 @@
 """AI 解析儀表板：檢查、量測與確認流程。以假的 AI 回應測試，不連網、不送出任何資料。"""
 import csv
+import io
 import json
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -171,6 +173,12 @@ class DashboardTest(unittest.TestCase):
                 self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
         self.assertEqual(self.service.students, before)
 
+    def test_draft_shows_fallback_reason(self):
+        response = fake_response()
+        response.fallback_from = "Gemini（primary）等待逾時，90 秒內未回應"
+        draft = self.extract(response)
+        self.assertEqual(draft["fallback_from"], response.fallback_from)
+
     def test_demo_answer_files_are_fictional(self):
         for path in SAMPLES.glob("dashboard_*_answer.csv"):
             ids = {r["student_id"] for r in csv.DictReader(path.read_text(encoding="utf-8").splitlines())}
@@ -197,6 +205,79 @@ class LLMClientTest(unittest.TestCase):
                 mock.patch.object(llm, "_call", side_effect=fake_call):
             self.assertEqual(llm.generate_json("p", {}).model, "backup")
         self.assertEqual(calls, ["primary", "backup"])
+
+
+def ok_response(*args, **kwargs):
+    return io.BytesIO(json.dumps({"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}).encode())
+
+
+class LLMTimeoutTest(unittest.TestCase):
+    """以假的 urlopen 與時鐘模擬等待；不連網。"""
+
+    def setUp(self):
+        self.now = 0.0
+        self.sleeps, self.calls = [], []
+        for patcher in (
+                mock.patch.dict("os.environ", {"GEMINI_API_KEY": "k", "GEMINI_MODEL": "primary",
+                                               "GEMINI_FALLBACK_MODELS": "backup", "GEMINI_TIMEOUT": ""}),
+                mock.patch.object(llm.time, "monotonic", side_effect=lambda: self.now),
+                mock.patch.object(llm.time, "sleep", side_effect=self.sleep)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
+
+    def urlopen(self, primary_error):
+        def fake(request, timeout):
+            model = "primary" if "/primary:" in request.full_url else "backup"
+            self.calls.append((model, timeout))
+            if model == "primary":
+                raise primary_error()
+            return ok_response()
+        return mock.patch.object(llm.urllib.request, "urlopen", side_effect=fake)
+
+    def test_timeout_switches_to_fallback_without_retry(self):
+        for error in (TimeoutError, lambda: urllib.error.URLError(TimeoutError("timed out"))):
+            with self.subTest(error=error):
+                self.calls.clear()
+                with self.urlopen(error):
+                    result = llm.generate_json("p", {})
+                self.assertEqual(result.model, "backup")
+                self.assertEqual(self.calls, [("primary", llm.DEFAULT_TIMEOUT), ("backup", llm.FALLBACK_TIMEOUT)])
+                self.assertEqual(self.sleeps, [])
+                self.assertIn("primary", result.fallback_from)
+                self.assertIn("逾時", result.fallback_from)
+
+    def test_overload_retries_stay_within_budget(self):
+        busy = lambda: urllib.error.HTTPError("u", 503, "busy", {}, io.BytesIO(b"busy"))
+        with mock.patch.dict("os.environ", {"GEMINI_TIMEOUT": "10"}), self.urlopen(busy):
+            result = llm.generate_json("p", {})
+        # 第 1 次後等 2 秒、第 2 次後等 4 秒；再等 8 秒會超過 10 秒，就不再重試
+        self.assertEqual(self.sleeps, [2, 4])
+        self.assertEqual(self.calls, [("primary", 10), ("primary", 8), ("primary", 4), ("backup", llm.FALLBACK_TIMEOUT)])
+        self.assertEqual(result.model, "backup")
+        self.assertIn("503", result.fallback_from)
+
+    def test_all_models_fail_lists_each_reason(self):
+        def fake(request, timeout):
+            raise TimeoutError()
+        with mock.patch.object(llm.urllib.request, "urlopen", side_effect=fake):
+            with self.assertRaises(llm.LLMError) as ctx:
+                llm.generate_json("p", {})
+        self.assertIn("primary", str(ctx.exception))
+        self.assertIn("backup", str(ctx.exception))
+
+    def test_primary_success_has_no_fallback_reason(self):
+        with mock.patch.object(llm.urllib.request, "urlopen", side_effect=ok_response):
+            self.assertEqual(llm.generate_json("p", {}).fallback_from, "")
+
+    def test_invalid_timeout_setting_is_rejected(self):
+        for raw in ("abc", "0", "-5"):
+            with self.subTest(raw=raw), mock.patch.dict("os.environ", {"GEMINI_TIMEOUT": raw}):
+                with self.assertRaises(llm.LLMError):
+                    llm.generate_json("p", {})
 
 
 if __name__ == "__main__":

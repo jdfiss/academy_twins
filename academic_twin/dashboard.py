@@ -88,6 +88,7 @@ class Extraction:
     prompt_version: str = PROMPT_VERSION
     format: str = FORMAT
     cohort: int | None = None  # 文件上的入學學年度，承辦人確認後寫入名單
+    fallback_from: str = ""  # 改用備援模型時，前面模型失敗的原因
 
 
 def extract(pdf: bytes, fmt: str = FORMAT) -> Extraction:
@@ -106,7 +107,7 @@ def extract(pdf: bytes, fmt: str = FORMAT) -> Extraction:
         rows.append(row)
     return Extraction(rows, data.get("sections", []), data.get("declared_required"), data.get("declared_earned"),
                       str(data.get("unreadable") or ""), result.model, result.generated_at, PROMPT_VERSION, fmt,
-                      data.get("cohort"))
+                      data.get("cohort"), result.fallback_from)
 
 
 def check(ext: Extraction, kb: KnowledgeBase) -> list[Issue]:
@@ -251,6 +252,8 @@ def main(argv: list[str]) -> None:
         sys.exit(f"AI 解析失敗（已記錄）：{e}")
     issues = check(ext, kb)
     print(f"模型 {ext.model}（{ext.generated_at}，提示 {ext.prompt_version}，版型 {ext.format}）")
+    if ext.fallback_from:
+        print(f"已改用備援模型：{ext.fallback_from}")
     print(f"擷取 {len(ext.rows)} 列；錯誤 {sum(i.level == 'error' for i in issues)}、"
           f"警示 {sum(i.level == 'warning' for i in issues)}")
     for i in issues:
@@ -258,7 +261,7 @@ def main(argv: list[str]) -> None:
         print(f"  [{i.level}] {where}：{i.message}")
     entry = {"type": "extract", "file": args.pdf.name, "case_set": args.case_set, "model": ext.model,
              "prompt_version": ext.prompt_version, "format": ext.format, "generated_at": ext.generated_at,
-             "errors": sum(i.level == "error" for i in issues), "warnings": sum(i.level == "warning" for i in issues)}
+             "fallback_from": ext.fallback_from[:200], "errors": sum(i.level == "error" for i in issues), "warnings": sum(i.level == "warning" for i in issues)}
     if args.answer:
         answer = list(csv.DictReader(args.answer.read_text(encoding="utf-8-sig").splitlines()))
         result = compare(ext.rows, answer)

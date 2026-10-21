@@ -207,7 +207,8 @@ function invalidateDraftConfirmation() {
 function renderDraft(fresh = false) {
   const d = DRAFT;
   $("#dash-draft").hidden = false;
-  $("#dash-meta").textContent = `模型 ${d.model}・${d.generated_at}・提示 ${d.prompt_version}・版型 ${d.format}`;
+  $("#dash-meta").textContent = `模型 ${d.model}・${d.generated_at}・提示 ${d.prompt_version}・版型 ${d.format}`
+    + (d.fallback_from ? `・已改用備援（${d.fallback_from}）` : "");
   if (fresh) $("#dash-cohort").value = d.cohort ?? "";
   $("#dash-declared").textContent = `文件標示：應修 ${d.declared_required ?? "—"}、實得 ${d.declared_earned ?? "—"} 學分`;
   $("#dash-exists").textContent = d.exists ? `；${d.student_id} 已有修課紀錄，確認後將以本次紀錄取代` : "";
@@ -251,7 +252,11 @@ $("#dash-extract").addEventListener("click", async () => {
   DRAFT = null;
   $("#dash-draft").hidden = true;
   invalidateDraftConfirmation();
-  dashMsg("#dash-msg", "AI 解析中，通常約需 30–90 秒；服務忙碌時可能較久，確認前不會改動審查資料。");
+  const started = Date.now();
+  const waiting = () => dashMsg("#dash-msg", `AI 解析中，已等待 ${Math.round((Date.now() - started) / 1000)} 秒。`
+    + "主模型預設最多等 90 秒，逾時自動改用備援模型（最多 120 秒）；確認前不會改動審查資料。");
+  waiting();
+  const timer = setInterval(waiting, 1000);
   $("#dash-extract").disabled = true;
   $("#dash-file").disabled = $("#dash-sid").disabled = true;
   try {
@@ -266,6 +271,7 @@ $("#dash-extract").addEventListener("click", async () => {
   } catch (e) {
     dashMsg("#dash-msg", `<b>${esc(e.message)}</b>`, "var(--fail)");
   } finally {
+    clearInterval(timer);
     $("#dash-extract").disabled = false;
     $("#dash-file").disabled = $("#dash-sid").disabled = false;
   }

@@ -142,7 +142,7 @@ class OfficeMixin:
         return {"rows": ext.rows, "issues": [asdict(i) for i in issues], "cohort": ext.cohort,
                 "declared_required": ext.declared_required, "declared_earned": ext.declared_earned,
                 "model": ext.model, "generated_at": ext.generated_at, "prompt_version": ext.prompt_version,
-                "format": ext.format, "categories": sorted(set(dashboard.FORMATS[ext.format].values()) - {""})}
+                "format": ext.format, "fallback_from": ext.fallback_from, "categories": sorted(set(dashboard.FORMATS[ext.format].values()) - {""})}
 
     def _replace_student(self, sid: str, records: list, cohort: int | None) -> None:
         """以確認後的紀錄取代該生既有紀錄並加入名單；經由 load_data 重新檢查，失敗時資料不變。"""
