@@ -41,27 +41,87 @@ async function loadStudent(id) {
   $("#student-status").innerHTML = chip(s.status);
   $("#trial-badge").style.display = s.trial ? "" : "none";
   $("#student-credits").textContent = s.total_credits;
+  const target = s.requirements.find((r) => r.kind === "total_credits")?.need;
+  $("#student-total-target").textContent = target == null ? "學分" : `/ ${target} 學分`;
   $("#student-next").textContent = `下一學期：${s.next_term}`;
   try { history.replaceState(null, "", `?${DEMO ? "demo&" : ""}id=${encodeURIComponent(s.id)}`); } catch {}
-  renderBreakdown(s);
+  renderBreakdown(s, target ?? 0);
+  renderSummary(s);
   renderFlags(s);
   renderActions(s);
   renderIssues(s);
-  renderRequirements(s, explain);
+  renderRequirements(s, (r) => explain(r) + flagNote(s, r));
   renderRecords(s);
   await loadPlan(s.id);
 }
 
+// ---------- 疑似誤判與需辦理事項（flags、actions 由審查核心產生，這裡只組成白話說明） ----------
+// overflow、repeatable：本試算已依規則採計，但校務系統可能不計；substitution_pending：辦理抵修前兩邊都仍列缺課
+const FLAG_INFO = {
+  overflow: {
+    label: "超修學分",
+    text: (f) => `你在某一類課程修得比需求多，其中 ${f.credits} 學分可能可以移到其他類別採計。校務系統「一個蘿蔔一個坑」，不會自動移動多修的學分，所以儀表板上的學分可能比這裡少；能認列多少由承辦人確認。`,
+  },
+  repeatable: {
+    label: "可重複修習",
+    text: (f) => `這門課允許重複修習，你修了不只一次，第二次起的 ${f.credits} 學分依規則可以採計。但校務系統第二次起不計學分，儀表板可能顯示不合格；這是系統限制，不一定是真的缺學分，請找承辦人確認。`,
+  },
+  substitution_pending: {
+    label: "待辦抵修",
+    text: () => "原本的課程已停開，你已經修過可以替代的課程，但還沒辦理抵修。辦理前，校務系統和這裡的試算都會顯示缺這門課；辦好抵修後才會算符合。",
+  },
+};
+const flagLabel = (type) => FLAG_INFO[type]?.label ?? type;
+const reqTitle = (s, id) => s.requirements.find((r) => r.id === id)?.title ?? id;
+const related = (s, x) => [
+  x.requirement_ids.length ? `相關條件：${x.requirement_ids.map((id) => esc(reqTitle(s, id))).join("、")}` : "",
+  x.courses.length ? `相關課程：${x.courses.map(esc).join("、")}` : "",
+].filter(Boolean).join("<br>");
+
 function renderFlags(s) {
-  $("#flags").innerHTML = s.flags.map((f) => `<div class="issue WARNING">⚑ ${esc(f.message)}
-      ${f.courses.length ? `<div class="muted small">相關課程：${f.courses.map(esc).join("、")}</div>` : ""}</div>`).join("")
-    || `<div class="muted small">沒有偵測到校務系統可能誤判的項目。（超修、可重複修習、待辦抵修的偵測建置中）</div>`;
+  $("#flags").innerHTML = s.flags.map((f) => `<div class="issue WARNING">⚑ <b>${esc(flagLabel(f.type))}</b>
+      <div class="small" style="margin-top:4px">${FLAG_INFO[f.type] ? FLAG_INFO[f.type].text(f) : esc(f.message)}</div>
+      <div class="muted small" style="margin-top:4px">${related(s, f)}</div></div>`).join("")
+    || `<div class="muted small">目前沒有偵測到可能被校務系統誤判的項目。</div>`;
 }
 
 function renderActions(s) {
   $("#actions").innerHTML = s.actions.map((a) => `<div class="issue">📋 <b>${esc(a.title)}</b>
-      <div class="muted small">承辦：${esc(a.office)}${a.courses.length ? `・相關課程：${a.courses.map(esc).join("、")}` : ""}</div></div>`).join("")
+      <div class="small">承辦單位：${a.office === "待確認" ? "待確認（尚未取得正式承辦單位）" : esc(a.office)}${a.from_flag ? `・來自提示「${esc(flagLabel(a.from_flag))}」` : ""}</div>
+      <div class="muted small">${related(s, a)}</div></div>`).join("")
     || `<div class="muted small">目前沒有需要辦理的事項。</div>`;
+}
+
+// 畢業條件下標出相關提示，讓學生分得出「真的缺」與「可能是系統限制」
+function flagNote(s, r) {
+  const types = [...new Set(s.flags.filter((f) => f.requirement_ids.includes(r.id)).map((f) => f.type))];
+  return types.length
+    ? `<div class="small" style="margin-top:4px;color:var(--warn)">⚑ 相關提示：${types.map((t) => esc(flagLabel(t))).join("、")}（見「可能是校務系統誤判」）</div>`
+    : "";
+}
+
+// 一眼看出：真正缺修、可辦抵修、校務系統可能顯示不同、待確認；只分類審查結果，不改判定
+function renderSummary(s) {
+  const unmet = s.requirements.filter((r) => !r.satisfied && !r.pending);
+  // 缺的課全部都在待辦抵修提示裡，才算「辦理抵修後可能符合」；只有部分可抵修的仍列為還沒達到
+  const substitutable = new Set(s.flags.filter((f) => f.type === "substitution_pending").flatMap((f) => f.courses));
+  const viaSubstitution = unmet.filter((r) => r.missing.length && r.missing.every((c) => substitutable.has(c.code)));
+  const real = unmet.filter((r) => !viaSubstitution.includes(r));
+  const systemGap = s.flags.filter((f) => f.type !== "substitution_pending");
+  const pending = s.requirements.filter((r) => r.pending);
+  const unsure = pending.length + s.issues.review.length + s.issues.dept_unverified.length;
+  const titles = (rs) => rs.map((r) => esc(r.title)).join("、");
+  const rows = [
+    [real.length, "FAIL", "✘ 還沒達到的條件", titles(real)],
+    [viaSubstitution.length, "WARNING", "🛠 辦理抵修後可能符合", titles(viaSubstitution)],
+    [systemGap.length, "WARNING", "⚑ 校務系統可能顯示不同", systemGap.map((f) => esc(flagLabel(f.type))).join("、")],
+    [unsure, "MANUAL_REVIEW", "? 待確認", [titles(pending), s.issues.review.length + s.issues.dept_unverified.length
+      ? `${s.issues.review.length + s.issues.dept_unverified.length} 筆修課紀錄待承辦人確認採計方式` : ""].filter(Boolean).join("、")],
+  ].filter(([n]) => n);
+  $("#summary").innerHTML = (rows.length
+    ? rows.map(([n, cls, label, text]) => `<div class="issue ${cls}"><b>${label}（${n}）</b><div class="small">${text}</div></div>`).join("")
+    : `<div class="issue PASS"><b>✔ 目前的修課紀錄符合所有已建檔的畢業條件</b></div>`)
+    + `<div class="muted small" style="margin-top:6px">這是試算：只依目前的修課紀錄與已建檔的規則計算，不代表一定能或一定不能畢業，正式結果以系辦審查為準。</div>`;
 }
 
 function renderIssues(s) {
@@ -221,7 +281,8 @@ async function selectCourse(code) {
   await loadMeta();
   $("#cap").textContent = META.max_credits_per_term;
   renderGraph();
-  const ids = await api("/api/twin");
+  // demo 模式只有範例檔這一位，選單不列其他學生，以免切換後仍顯示範例資料
+  const ids = DEMO ? [(await api("assets/demo-twin.json")).id] : await api("/api/twin");
   $("#student-select").innerHTML = ids.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
   const id = params.get("id");
   if (ids.length) await loadStudent(ids.includes(id) ? id : ids[0]);
