@@ -26,7 +26,7 @@
     <label class="muted small">學生 <select id="student-select"></select></label>
     <span id="student-status"></span>
     <span class="trial" id="trial-badge" title="學生端結果為試算，正式結果以系辦審查為準">試算</span>
-    <div><span class="big" id="student-credits"></span> <span class="muted">/ 128 學分</span></div>
+    <div><span class="big" id="student-credits"></span> <span class="muted" id="student-total-target"></span></div>
     <span class="muted small" id="student-next"></span>
   </div>
 
@@ -34,6 +34,10 @@
   <section class="view active" id="view-progress">
     <div class="grid two">
       <div class="grid">
+        <div class="card">
+          <h3>目前狀態</h3>
+          <div id="summary"></div>
+        </div>
         <div class="card">
           <h3>學分採計</h3>
           <div class="stack" id="breakdown-bar"></div>
