@@ -197,13 +197,24 @@ $("#run-sim").addEventListener("click", async () => {
       .filter(([c, t]) => { const n = sc.terms.find((x) => x.courses.some((y) => y.code === c)); return !n || n.term !== t; })
       .map(([c]) => c));
     const delayed = sc.delay_terms > 0 || !sc.feasible;
+    // 數字全部來自 simulate 的結果（graduation、delay_terms、impact），這裡只負責排版
+    const stat = (label, value, color = "inherit") =>
+      `<div class="card" style="padding:10px 14px;flex:1 1 140px"><div class="muted small">${label}</div>
+        <div style="font-size:22px;font-weight:700;color:${color}">${value}</div></div>`;
+    const moved = sc.impact.slice(0, -1);
     $("#sim-result").innerHTML = `
       <div class="small muted">條件：${sc.conditions.map(esc).join("；")}</div>
-      <div class="verdict ${delayed ? "delay" : "same"}">
-        ${!sc.feasible ? "⚠ 此方案排不完" : delayed ? `會延畢 ${sc.delay_terms} 學期：${sim.base.graduation} → ${sc.graduation}` : `不影響畢業：仍可在 ${sc.graduation} 畢業`}
-        <ul class="impact">${sc.impact.slice(0, -1).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0">
+        ${stat("原本最早畢業", esc(sim.base.graduation ?? "已符合"))}
+        ${stat("模擬後最早畢業", sc.feasible ? esc(sc.graduation ?? "已符合") : "排不完", delayed ? "var(--fail)" : "var(--pass)")}
+        ${stat("延畢", !sc.feasible ? "—" : sc.delay_terms > 0 ? `${sc.delay_terms} 學期` : "不會延畢", delayed ? "var(--fail)" : "var(--pass)")}
+        ${stat("被往後推的課", `${moved.length} 門`, moved.length ? "var(--warn)" : "inherit")}
       </div>
-      <div class="muted small" style="margin-bottom:6px">模擬後的路徑（紅框＝被往後推的課）</div>
+      <div class="verdict ${delayed ? "delay" : "same"}">
+        ${!sc.feasible ? esc(sc.impact.at(-1)) : delayed ? `會延畢 ${sc.delay_terms} 學期：${sim.base.graduation} → ${sc.graduation}` : `不影響畢業：仍可在 ${sc.graduation} 畢業`}
+        ${moved.length ? `<ul class="impact">${moved.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
+      </div>
+      <div class="muted small" style="margin-bottom:6px">模擬後的路徑（紅框＝被往後推的課）。開課學期依應修科目表的建議修課學期推估，不是實際開課資料。</div>
       <div class="timeline">${renderPlan(sc, movedCodes, away)}</div>`;
   } catch (err) {
     $("#sim-result").innerHTML = `<div class="issue FAIL">${esc(err.message)}</div>`;
