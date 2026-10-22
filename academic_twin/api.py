@@ -94,6 +94,16 @@ class CoreService:
         self.roster = check_roster(roster_parsed.ids, students, roster_parsed.blank_rows,
                                    roster_parsed.cohorts, self.kb.cohort, set(self.rulesets))
 
+    def use_ruleset(self, path: Path) -> RuleSet:
+        """換用某年度的規則庫版本（啟用或還原規則版本後呼叫）；只能換已載入的年度。"""
+        rs = load_ruleset(path)
+        if rs.kb.cohort not in self.rulesets:
+            raise ValueError(f"沒有載入 {rs.kb.cohort} 學年度規則庫，不能換用")
+        self.rulesets[rs.kb.cohort] = rs
+        if rs.kb.cohort == self.kb.cohort:
+            self.kb, self.graph, self.rule_version = rs.kb, rs.graph, rs.rule_version
+        return rs
+
     # ---------- 共用 ----------
     def ruleset(self, sid: str) -> RuleSet:
         """學生適用的規則庫：依名單的入學學年度；名單未填或不在名單時用預設年度。不套用其他年度。"""

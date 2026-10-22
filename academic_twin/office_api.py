@@ -7,7 +7,7 @@ import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 
-from . import dashboard, report, rule_draft
+from . import dashboard, report, rule_draft, rule_versions
 from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, classify, reasons
 
@@ -193,6 +193,28 @@ class OfficeMixin:
                            acknowledge: bool = False) -> dict:
         """重新檢查並保存確認版本；後續由年度規則流程另外審核啟用。"""
         return rule_draft.confirm(draft_id, requirements, reviewer, acknowledge)
+
+    # ---------- 規則版本（已確認草稿經承辦人明確啟用；可還原） ----------
+    def rule_versions_status(self) -> dict:
+        latest = {e["year"]: e for e in rule_versions.history()}
+        return {
+            "years": [{"year": year, "rule_version": rs.rule_version,
+                       "activated": latest[year] if latest.get(year, {}).get("type") == "activate" else None}
+                      for year, rs in sorted(self.rulesets.items())],
+            "history": list(reversed(rule_versions.history())),
+            "confirmed_drafts": rule_versions.confirmed_drafts(),
+        }
+
+    def rule_activate(self, draft_id: str, activated_by: str, acknowledge: bool = False) -> dict:
+        """啟用後立即以新版本審查該年度學生；覆核紀錄因規則版本不同會標示建議再確認。"""
+        entry = rule_versions.activate(draft_id, activated_by, acknowledge)
+        self.use_ruleset(rule_versions.active_paths()[entry["year"]])
+        return self.rule_versions_status()
+
+    def rule_revert(self, year: int, reverted_by: str) -> dict:
+        entry = rule_versions.revert(year, reverted_by)
+        self.use_ruleset(rule_versions.active_paths()[entry["year"]])
+        return self.rule_versions_status()
 
     def report_html(self, sid: str, audited_at: datetime | None = None) -> str:
         """單一學生審查明細（可列印）。"""

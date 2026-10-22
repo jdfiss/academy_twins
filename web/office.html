@@ -213,6 +213,20 @@
       <button class="primary" id="rule-confirm">確認存檔（未啟用）</button>
       <div id="rule-confirm-msg" role="status" aria-live="polite"></div>
     </div>
+    <div class="card" id="rule-versions" style="margin-top: 16px">
+      <h2>規則版本與啟用</h2>
+      <p class="muted small">已確認的草稿須由承辦人明確啟用，才會用於審查：新版本為該年度正式規則庫，只把草稿中的要求依編號取代或新增。版本另存於 data/rule_versions/，不覆寫正式規則庫檔案；可隨時還原。要成為正式規則庫仍須以 PR 修改並經審查。</p>
+      <div id="rule-versions-years"></div>
+      <h3>已確認、可啟用的草稿</h3>
+      <div id="rule-versions-drafts"></div>
+      <div class="small" style="margin: 12px 0">
+        <label><input type="checkbox" id="rule-activate-ack">了解啟用後該年度學生立即改以新版本審查，既有覆核會標示「建議再確認」</label>
+      </div>
+      <label>啟用／還原人 <input id="rule-activator" placeholder="姓名" style="padding: 4px 8px"></label>
+      <div id="rule-versions-msg" role="status" aria-live="polite"></div>
+      <h3>啟用紀錄</h3>
+      <div id="rule-versions-history" class="small"></div>
+    </div>
   </section>
 
   <!-- 規則來源 -->

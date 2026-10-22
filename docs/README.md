@@ -13,6 +13,7 @@
 | [系辦媒合會議程與訪談大綱](MEETING_AGENDA.md) | 與系辦會議的流程、需求訪談問題與會議紀錄欄位 |
 | [教務處承辦人訪談紀錄](MEETING_NOTES_2026-10-14.md) | 2026-10-14 訪談內容：現行畢審做法、痛點、MVP 範圍與例外案例 |
 | [共用模組變更通知 2026-10-21（年度規則）](CHANGE_NOTICE_2026-10-21_jdfiss_cohort-rules.md) | jdfiss 改動 `api.py`：規則依入學年度取用，給 B 組的影響與跟進建議 |
+| [共用模組變更通知 2026-10-22（規則版本換用）](CHANGE_NOTICE_2026-10-22_rule-activation.md) | 新增 `CoreService.use_ruleset()`：啟用或還原規則版本時換用該年度規則庫，給 B 組的影響 |
 | [共用模組變更通知 2026-10-21](CHANGE_NOTICE_2026-10-21_jdfiss.md) | jdfiss 改動 `llm.py`：Gemini 等待時限與備援，給 B 組的影響說明 |
 
 ## 維護方式

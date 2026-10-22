@@ -411,7 +411,8 @@ $("#rule-confirm").addEventListener("click", async () => {
       reviewer: $("#rule-reviewer").value, acknowledge: true });
     renderRuleDraft(d);
     dashMsg("#rule-confirm-msg", '已確認存檔（AI 草稿、未啟用）：' + esc(d.confirmation.reviewer) + '・' + esc(d.confirmation.confirmed_at)
-      + '；修改 ' + d.confirmation.edited_field_count + ' 欄。檔案：data/eval/rule_drafts/' + esc(d.draft_id) + '.confirmed.json；後續另行審核啟用新版本。');
+      + '；修改 ' + d.confirmation.edited_field_count + ' 欄。檔案：data/eval/rule_drafts/' + esc(d.draft_id) + '.confirmed.json；可在下方「規則版本與啟用」明確啟用。');
+    await loadRuleVersions();
   } catch (e) {
     $("#rule-checked").checked = false;
     dashMsg("#rule-confirm-msg", esc(e.message), "var(--fail)");
@@ -422,9 +423,57 @@ $("#rule-confirm").addEventListener("click", async () => {
   }
 });
 
+// ---------- 規則版本（已確認草稿經承辦人明確啟用；可還原） ----------
+function renderRuleVersions(v) {
+  $("#rule-versions-years").innerHTML = v.years.map((y) => `<div class="issue ${y.activated ? "WARNING" : "PASS"}">
+    <b>${y.year} 學年度</b>：${y.activated
+      ? `啟用版本（草稿 ${esc(y.activated.draft_id.slice(0, 8))}，取代 ${esc(y.activated.replaced.join("、") || "—")}`
+        + `${y.activated.added.length ? `、新增 ${esc(y.activated.added.join("、"))}` : ""}；${esc(y.activated.by)}・${esc(y.activated.at)}）`
+        + ` <button class="ghost small" data-revert="${y.year}">還原為正式規則庫</button>`
+      : "正式規則庫"}<div class="muted small">規則版本 ${esc(y.rule_version)}</div></div>`).join("");
+  $("#rule-versions-drafts").innerHTML = v.confirmed_drafts.map((d) => `<div class="small" style="margin-bottom: 6px">
+    ${d.year} 學年度・${esc(d.requirement_ids.join("、"))}・確認人 ${esc(d.reviewer)}・${esc(d.confirmed_at)}
+    <button class="primary small" data-activate="${esc(d.draft_id)}">啟用</button></div>`).join("")
+    || '<span class="muted small">尚無已確認的草稿</span>';
+  $("#rule-versions-history").innerHTML = v.history.map((e) => `<div>${esc(e.at)}・${e.year} 學年度・`
+    + (e.type === "activate" ? `啟用草稿 ${esc(e.draft_id.slice(0, 8))}` : "還原為正式規則庫") + `・${esc(e.by)}</div>`).join("")
+    || '<span class="muted">尚無紀錄</span>';
+  document.querySelectorAll("[data-activate]").forEach((b) => b.addEventListener("click", () =>
+    changeRuleVersion("activate", { draft_id: b.dataset.activate, acknowledge: $("#rule-activate-ack").checked,
+      activated_by: $("#rule-activator").value })));
+  document.querySelectorAll("[data-revert]").forEach((b) => b.addEventListener("click", () =>
+    changeRuleVersion("revert", { year: Number(b.dataset.revert), reverted_by: $("#rule-activator").value })));
+}
+
+async function loadRuleVersions() {
+  try {
+    renderRuleVersions(await api("/api/rule-versions"));
+  } catch (e) {
+    dashMsg("#rule-versions-msg", esc(e.message), "var(--fail)");
+  }
+}
+
+async function changeRuleVersion(action, body) {
+  if (!$("#rule-activator").value.trim()) return dashMsg("#rule-versions-msg", "請填寫啟用／還原人。", "var(--fail)");
+  if (action === "activate" && !$("#rule-activate-ack").checked)
+    return dashMsg("#rule-versions-msg", "請先勾選了解啟用的影響。", "var(--fail)");
+  try {
+    renderRuleVersions(await api(`/api/rule-versions/${action}`, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+    $("#rule-activate-ack").checked = false;
+    dashMsg("#rule-versions-msg", action === "activate" ? "已啟用，審查結果已依新版本更新。" : "已還原為正式規則庫，審查結果已更新。");
+    await loadMeta();
+    renderRules();
+    await loadData();
+  } catch (e) {
+    dashMsg("#rule-versions-msg", esc(e.message), "var(--fail)");
+  }
+}
+
 // ---------- 啟動 ----------
 (async function init() {
   await loadMeta();
   renderRules();
   await loadData();
+  await loadRuleVersions();
 })();

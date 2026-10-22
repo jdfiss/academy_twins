@@ -6,3 +6,4 @@ __pycache__/
 data/reviews/
 .env
 data/eval/
+data/rule_versions/

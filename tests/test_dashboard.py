@@ -337,11 +337,11 @@ class DashboardCohortTest(unittest.TestCase):
         self.assertEqual(s["cohort"], "112")
 
     def test_web_loads_every_cohort_rule_file(self):
-        import web
+        from academic_twin import rule_versions
         d = Path(self.tmp.name)
         for year in (114, 112):
-            (d / f"curriculum_im_{year}.json").write_text("{}", encoding="utf-8")
+            (d / f"curriculum_im_{year}.json").write_text(json.dumps({"cohort": year}), encoding="utf-8")
         (d / "curriculum_demo_flags.json").write_text("{}", encoding="utf-8")
-        default, extra = web.rule_paths(d / "curriculum_im_114.json")
+        default, extra = rule_versions.startup_paths(d / "curriculum_im_114.json", d / "versions")
         self.assertEqual((default.name, [p.name for p in extra]),
                          ("curriculum_im_114.json", ["curriculum_im_112.json"]))
