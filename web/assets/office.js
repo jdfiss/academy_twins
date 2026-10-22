@@ -210,7 +210,8 @@ function renderDraft(fresh = false) {
   $("#dash-meta").textContent = `模型 ${d.model}・${d.generated_at}・提示 ${d.prompt_version}・版型 ${d.format}`
     + (d.fallback_from ? `・已改用備援（${d.fallback_from}）` : "");
   if (fresh) $("#dash-cohort").value = d.cohort ?? "";
-  $("#dash-declared").textContent = `文件標示：應修 ${d.declared_required ?? "—"}、實得 ${d.declared_earned ?? "—"} 學分`;
+  $("#dash-declared").textContent = `文件標示：應修 ${d.declared_required ?? "—"}、實得 ${d.declared_earned ?? "—"} 學分`
+    + `；系統有 ${d.cohorts.join("、")} 學年度規則；空白時沿用名單年度，名單也未填則用 ${META.cohort}`;
   $("#dash-exists").textContent = d.exists ? `；${d.student_id} 已有修課紀錄，確認後將以本次紀錄取代` : "";
   const docIssues = d.issues.filter((i) => i.row === null);
   const rowIssues = (i) => d.issues.filter((x) => x.row === i);

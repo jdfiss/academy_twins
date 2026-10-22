@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from academic_twin.api import REVIEWS_PATH, ROSTER_PATH, STUDENTS_PATH, AcademicTwinService
+from academic_twin.api import KB_PATH, REVIEWS_PATH, ROSTER_PATH, STUDENTS_PATH, AcademicTwinService
 from academic_twin.llm import LLMError
 from academic_twin.records import RecordsError
 
@@ -22,7 +22,15 @@ STATIC = (Path(__file__).parent / "web").resolve()
 CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
                  ".js": "text/javascript; charset=utf-8", ".json": "application/json; charset=utf-8"}
 MAX_UPLOAD = 20 * 1024 * 1024
-service = AcademicTwinService(reviews_path=REVIEWS_PATH)
+
+
+def rule_paths(kb_path: Path = KB_PATH) -> tuple[Path, list[Path]]:
+    """預設年度規則庫，加上同目錄其他年度的正式規則庫 curriculum_im_<年度>.json；學生依名單年度取用。"""
+    return kb_path, sorted(p for p in kb_path.parent.glob("curriculum_im_*.json") if p != kb_path)
+
+
+default_kb, extra_kbs = rule_paths()
+service = AcademicTwinService(default_kb, reviews_path=REVIEWS_PATH, extra_kb_paths=extra_kbs)
 
 
 class Handler(BaseHTTPRequestHandler):

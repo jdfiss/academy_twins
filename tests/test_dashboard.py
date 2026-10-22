@@ -282,3 +282,66 @@ class LLMTimeoutTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DashboardCohortTest(unittest.TestCase):
+    """儀表板確認依入學年度的規則庫審查；沒有該年度規則庫時不能送入審查，資料不變。
+
+    112 學年度規則庫為測試中由 114 改出的虛構版本，只驗證切換機制。
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        patcher = mock.patch.object(dashboard, "EVAL_LOG", Path(self.tmp.name) / "runs.jsonl")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        from academic_twin.api import KB_PATH
+        raw = json.loads(KB_PATH.read_text(encoding="utf-8"))
+        raw["cohort"] = 112
+        next(r for r in raw["requirements"] if r["kind"] == "total_credits")["min_credits"] = 120
+        self.kb_112 = Path(self.tmp.name) / "curriculum_fake_112.json"
+        self.kb_112.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+
+    def extract(self, service, cohort):
+        with mock.patch.object(llm, "generate_json", return_value=fake_response(cohort=cohort)):
+            return service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+
+    def test_missing_cohort_rules_blocks_confirm_and_keeps_data(self):
+        service = AcademicTwinService()
+        draft = self.extract(service, 112)
+        self.assertTrue(any(i["level"] == "error" and "112" in i["message"] for i in draft["issues"]))
+        self.assertEqual(draft["cohorts"], [114])
+        before = dict(service.students)
+        with self.assertRaises(RecordsError) as ctx:
+            service.dashboard_confirm(draft["draft_id"], draft["rows"], "王助教", 112, True)
+        self.assertTrue(any("不套用其他年度" in m for m in ctx.exception.errors))
+        self.assertEqual(service.students, before)
+        self.assertNotIn("DEMO-D02", service.roster.other_cohort)
+
+    def test_confirm_audits_with_own_cohort_rules(self):
+        service = AcademicTwinService(extra_kb_paths=[self.kb_112])
+        draft = self.extract(service, 112)
+        self.assertFalse([i for i in draft["issues"] if i["level"] == "error"])
+        s = service.dashboard_confirm(draft["draft_id"], draft["rows"], "王助教", 112)
+        need = next(r["need"] for r in s["requirements"] if r["kind"] == "total_credits")
+        self.assertEqual((s["cohort"], need), ("112", 120))
+        self.assertIn("DEMO-D02", [r["id"] for r in service.batch()])
+
+    def test_blank_cohort_keeps_roster_cohort(self):
+        roster = Path(self.tmp.name) / "roster.csv"
+        roster.write_text("student_id,cohort\nS001,\nDEMO-D02,112\n", encoding="utf-8")
+        service = AcademicTwinService(roster_path=roster, extra_kb_paths=[self.kb_112])
+        draft = self.extract(service, None)
+        s = service.dashboard_confirm(draft["draft_id"], draft["rows"], "王助教", None)
+        self.assertEqual(s["cohort"], "112")
+
+    def test_web_loads_every_cohort_rule_file(self):
+        import web
+        d = Path(self.tmp.name)
+        for year in (114, 112):
+            (d / f"curriculum_im_{year}.json").write_text("{}", encoding="utf-8")
+        (d / "curriculum_demo_flags.json").write_text("{}", encoding="utf-8")
+        default, extra = web.rule_paths(d / "curriculum_im_114.json")
+        self.assertEqual((default.name, [p.name for p in extra]),
+                         ("curriculum_im_114.json", ["curriculum_im_112.json"]))

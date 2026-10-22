@@ -113,7 +113,7 @@ class OfficeMixin:
         draft_id = uuid.uuid4().hex
         drafts[draft_id] = (sid, ext)
         return {"draft_id": draft_id, "student_id": sid, "exists": sid in self.students,
-                **self._draft_view(ext, dashboard.check(ext, self.kb))}
+                **self._draft_view(ext, self._dashboard_issues(ext, ext.cohort))}
 
     def dashboard_confirm(self, draft_id: str, rows: list[dict], reviewer: str, cohort: int | None = None,
                           acknowledge_warnings: bool = False) -> dict:
@@ -126,7 +126,8 @@ class OfficeMixin:
         sid, ext = drafts[draft_id]
         fields = dashboard.FIELDS + ["rule_code", "source_page", "source_text"]
         edited = replace(ext, rows=[{k: r.get(k, "") for k in fields} for r in rows])
-        issues = dashboard.check(edited, self.kb)
+        cohort = cohort or self._roster_parsed.cohorts.get(sid)
+        issues = self._dashboard_issues(edited, cohort)
         errors = [i for i in issues if i.level == "error"]
         if errors:
             raise RecordsError([_issue_text(i) for i in errors])
@@ -143,11 +144,21 @@ class OfficeMixin:
         })
         return self.student(sid)
 
+    def _dashboard_issues(self, ext: dashboard.Extraction, cohort: int | None) -> list[dashboard.Issue]:
+        """依入學年度的規則庫檢查；沒有該年度規則庫時為錯誤，不能送入審查，也不套用其他年度。"""
+        year = cohort or self.kb.cohort
+        if year not in self.rulesets:
+            return [dashboard.Issue("error", f"入學學年度 {year} 沒有規則庫（現有 "
+                                             f"{'、'.join(map(str, sorted(self.rulesets)))}），不能送入審查；"
+                                             "請核對文件年度，系統不套用其他年度")] + dashboard.check(ext, self.kb)
+        return dashboard.check(ext, self.rulesets[year].kb)
+
     def _draft_view(self, ext: dashboard.Extraction, issues: list[dashboard.Issue]) -> dict:
         return {"rows": ext.rows, "issues": [asdict(i) for i in issues], "cohort": ext.cohort,
                 "declared_required": ext.declared_required, "declared_earned": ext.declared_earned,
                 "model": ext.model, "generated_at": ext.generated_at, "prompt_version": ext.prompt_version,
-                "format": ext.format, "fallback_from": ext.fallback_from, "categories": sorted(set(dashboard.FORMATS[ext.format].values()) - {""})}
+                "format": ext.format, "fallback_from": ext.fallback_from, "cohorts": sorted(self.rulesets),
+                "categories": sorted(set(dashboard.FORMATS[ext.format].values()) - {""})}
 
     def _replace_student(self, sid: str, records: list, cohort: int | None) -> None:
         """以確認後的紀錄取代該生既有紀錄並加入名單；經由 load_data 重新檢查，失敗時資料不變。"""
