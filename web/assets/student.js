@@ -5,9 +5,32 @@ const params = new URLSearchParams(location.search);
 const DEMO = params.has("demo");
 setupTabs("twin-student-view");
 
-// 白話說明（B 組待建置）：依 r.kind 與審查結果組成學生看得懂的說明；只能引用審查結果，不得自行計算或改判
+// 白話說明：依 r.kind 與審查結果組成學生看得懂的說明；只引用 have、need、shortfall 等審查結果，不自行計算或改判
+// 缺的課程與缺額已由 renderRequirements 列出（「缺：」「尚缺」），這裡不再重複
+const EXPLAIN = {
+  all_of: (r) => r.satisfied
+    ? "這些是必修課，你都已經修過並及格。"
+    : `這些是必修課，每一門都要修過並及格；共 ${r.need} 門，你已通過 ${r.have} 門。`,
+  taken_all: () => "必選課只要「有修過」就算符合，不及格也可以；但不及格就拿不到這門課的學分。",
+  n_of: (r) => `從指定的課程中選 ${r.need} 門及格即可，不必全修。`
+    + (r.satisfied ? `你已經修了 ${r.have} 門。` : `上面列出的是可以選的課，再挑 ${r.shortfall} 門就夠了。`),
+  credits_from: (r) => `從指定範圍的課程修滿 ${r.need} 學分；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
+  category_credits: (r) => `這一類課程合計要修滿 ${r.need} 學分；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
+  category_count: (r) => `這項看的是門數（或學期數），不看學分；需要 ${r.need}，目前 ${r.have}${r.satisfied ? "，已經足夠" : ""}。`
+    + (!r.satisfied && !r.shortfall && r.detail ? `數量已經夠了，但還有附加條件沒達到：${esc(r.detail)}。` : ""),
+  dept_elective_credits: (r) => `本系開設的選修課要修滿 ${r.need} 學分（外系課不算在這裡）；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
+  english_threshold: (r) => r.satisfied
+    ? "已符合英文畢業門檻。"
+    : r.pending
+      ? `修課紀錄看不出你是否已通過英檢。英檢達標就符合；沒有的話，修替代課程及格滿 ${r.need} 學分也可以（目前 ${r.have} 學分）。英檢結果由語言中心登錄，請先確認登錄狀態。`
+      : `英檢尚未達標，替代課程目前 ${r.have} 學分，要滿 ${r.need} 學分才算通過。`,
+  total_credits: (r) => `這是「可採計」的畢業學分，不是你修過的所有學分，例如不及格、不計入畢業的課，或超過上限的外系學分都不算。需要 ${r.need}，目前 ${r.have}${r.satisfied ? "，已經足夠" : ""}。`,
+};
+
 function explain(r) {
-  return "";
+  const text = EXPLAIN[r.kind]?.(r) ?? "這項規則的白話說明尚未提供，請參考上方條件與規章依據。";
+  const terms = `校務系統代碼：${esc(r.system_code ?? "待提供")}・章則用語：${esc(r.regulation_term ?? "待提供")}`;
+  return `<div class="small" style="margin-top:6px">${text}</div><div class="muted small">${terms}</div>`;
 }
 
 // ---------- 我的進度 ----------

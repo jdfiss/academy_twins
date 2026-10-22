@@ -192,7 +192,7 @@ A 組 flags 虛構示範使用 `data/curriculum_demo_flags.json` 與 `data/stude
 |---|---|---|---|---|---|
 | 0 | 依 stub 建學生頁骨架 | **已完成骨架**：學生頁有誤判提示區、需辦理事項區與「試算」標示；白話說明留有 `explain()` 掛點 | `student.html?demo` 可顯示示意資料 | — | — |
 | 1 | 學分當前狀態 | 強化進度頁：一眼看出已修、缺修、超修；嵌入誤判提示（依 `flags` 分開「疑似校務系統誤判」與「真正缺修」）與需辦理事項（依 `actions` 列出事項與單位） | 不讓學生誤以為一定不能畢業，也不保證一定能畢業（[學生端驗收條件](STUDENT_REQUIREMENTS.md#個人修業進度)）；每項需辦理事項指出單位或承辦人 | 重要性 | 先用 `demo-twin.json`；A 組產生真實 flags、actions 後接上 |
-| 1 | 白話說明 | 每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名；有系統代碼與章則用語時並列，沒有時顯示「待提供」 | 每條要求都有說明；只引用審查結果，不自行計算或更改判定；附規章依據 | 重要性、可行性 | 無（可先以 114 規則庫撰寫） |
+| 1 | 白話說明 | **已完成模板**（`student.js` 的 `explain()`）：每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名；有系統代碼與章則用語時並列，沒有時顯示「待提供」 | 每條要求都有說明；只引用審查結果，不自行計算或更改判定；附規章依據 | 重要性、可行性 | 無（可先以 114 規則庫撰寫） |
 | 1 | What-if 強化 | 現有情境（某課某學期不修、出國交換）的結果更直觀：畢業學期變化、延畢學期數、受影響課程 | 結果全部來自 `simulate`；開課學期為推估時明確標示 | 重要性 | 無 |
 | 1 | AI 自然語言 What-if | 學生用一句話提問；AI 只把問題轉成 `simulate` 參數並讓學生確認；規劃器計算；回答只引用計算結果 | 符合「AI 輸入與啟用驗收」的 AI 說明規定；轉不出參數或服務失敗時，退回手動選情境；不支援的情境明說不支援 | 創新性 | AI 服務 |
 | 1 | 兩端一致性測試 | 基本版已在 `tests/test_contract.py`；擴充 flags 與年度載入情境 | 同一份資料在兩端判定完全相同；納入每次測試 | 實證性 | A 組 flags、年度載入 |
