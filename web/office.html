@@ -42,8 +42,22 @@
     <div class="card">
       <h2>批次畢業資格審查 <span class="muted small">點一列看該生細節</span>
         <a class="ghost small" href="/api/export.csv" download style="float: right; text-decoration: none; padding: 4px 12px">匯出 CSV</a></h2>
+      <div class="small" style="margin-bottom: 12px">
+        <label for="flag-filter">提示篩選</label>
+        <select id="flag-filter">
+          <option value="">全部學生</option>
+          <option value="any">有疑似誤判提示</option>
+          <option value="overflow">超修學分</option>
+          <option value="repeatable">可重複修習</option>
+          <option value="substitution_pending">待辦抵修</option>
+          <option value="actions">有需辦理事項</option>
+          <option value="none">沒有提示或待辦</option>
+        </select>
+        <span class="muted" id="batch-filter-count" aria-live="polite"></span>
+        <p class="muted">提示需由承辦人確認，不代表已證實校務系統誤判。匯出 CSV 包含完整批次結果。</p>
+      </div>
       <table>
-        <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th>原因</th></tr></thead>
+        <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th>原因</th><th>疑似誤判／待辦</th></tr></thead>
         <tbody id="batch-rows"></tbody>
       </table>
     </div>
@@ -61,7 +75,7 @@
     <div class="student-head">
       <label class="muted small">學生 <select id="student-select"></select></label>
       <span id="student-status"></span>
-      <div><span class="big" id="student-credits"></span> <span class="muted">/ 128 學分</span></div>
+      <div><span class="big" id="student-credits"></span> <span class="muted" id="student-total-target"></span></div>
       <a class="ghost small" id="student-report" target="_blank" style="text-decoration: none; padding: 4px 12px">列印審查明細</a>
       <a class="ghost small" id="student-twin" target="_blank" style="text-decoration: none; padding: 4px 12px">學生端畫面</a>
     </div>

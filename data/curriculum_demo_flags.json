@@ -1,0 +1,30 @@
+{
+  "_note": "全數為虛構的功能測試資料，不是正式章則，不代表已確認的校務系統誤判。",
+  "program": "虛構示範：疑似誤判與待辦",
+  "cohort": 114,
+  "passing_grade": 60,
+  "dept_prefixes": ["DEMO-"],
+  "sources": {"DEMO": "虛構測試條文"},
+  "courses": [
+    {"code": "DEMO-OLD", "name": "虛構停開必修", "credits": 3, "type": "required",
+      "discontinued": true, "replacement_courses": ["DEMO-NEW"], "substitution_office": "虛構系辦"},
+    {"code": "DEMO-NEW", "name": "虛構替代選修", "credits": 3, "type": "elective", "counts_as": "dept_elective"},
+    {"code": "DEMO-REP", "name": "虛構可重複專題", "credits": 2, "type": "elective", "counts_as": "dept_elective"},
+    {"code": "DEMO-ONCE", "name": "虛構一般選修", "credits": 3, "type": "elective", "counts_as": "dept_elective"}
+  ],
+  "repeatable_courses": ["DEMO-REP"],
+  "categories": {"通識": "", "通識核心": "通識"},
+  "credit_policy": {"outside_cap": 4, "category_caps": {"通識": 2}},
+  "requirements": [
+    {"id": "D1", "kind": "all_of", "title": "虛構必修要求", "courses": ["DEMO-OLD"],
+      "source": {"doc": "DEMO", "ref": "第一條"}},
+    {"id": "D2", "kind": "dept_elective_credits", "title": "虛構本系選修", "min_credits": 4,
+      "source": {"doc": "DEMO", "ref": "第二條"}},
+    {"id": "D3", "kind": "category_credits", "title": "虛構通識要求", "categories": ["通識"], "min_credits": 4,
+      "source": {"doc": "DEMO", "ref": "第三條"}},
+    {"id": "D4", "kind": "total_credits", "title": "虛構總學分要求", "min_credits": 10,
+      "source": {"doc": "DEMO", "ref": "第四條"}}
+  ],
+  "assumptions": ["本檔與 demo_flags_*.csv 只供功能測試，所有課號、單位、學生代號與條文皆為虛構。",
+    "待辦抵修只提示，不自動認列原必修；尚未提供個人抵修登錄功能。"]
+}

@@ -40,6 +40,24 @@ class ParseRecordsTest(unittest.TestCase):
     def test_empty_file_rejected(self):
         self.assertTrue(self.errors(HEADER))
 
+    def test_duplicate_offering_rejected_with_both_line_numbers(self):
+        errors = self.errors(HEADER + "S1,IM1001,虛構課程,3,80,114-1,\n"
+                             + "S1,IM1001,虛構課程,3,90,114-1,\n")
+        self.assertEqual(len(errors), 1)
+        for part in ("第 3 行", "第 2 行", "重複"):
+            self.assertIn(part, errors[0])
+
+    def test_same_course_in_different_terms_or_students_is_valid(self):
+        students = parse_records(HEADER + "S1,IM1001,虛構課程,3,80,114-1,\n"
+                                 + "S1,IM1001,虛構課程,3,80,114-2,\n"
+                                 + "S2,IM1001,虛構課程,3,80,114-1,\n")
+        self.assertEqual(len(students["S1"]), 2)
+
+    def test_equivalent_term_with_leading_zero_is_duplicate(self):
+        errors = self.errors(HEADER + "S1,IM1001,虛構課程,3,80,99-1,\n"
+                             + "S1,IM1001,虛構課程,3,80,099-1,\n")
+        self.assertIn("重複", errors[0])
+
 
 class LoadDataTest(unittest.TestCase):
     def test_upload_replaces_records_and_reaudits(self):

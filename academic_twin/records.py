@@ -28,6 +28,7 @@ def parse_records(text: str) -> dict[str, list[Record]]:
 
     students: dict[str, list[Record]] = defaultdict(list)
     errors: list[str] = []
+    offerings: dict[tuple[str, str, tuple[int, ...]], int] = {}
     for row in reader:
         line = reader.line_num
         if not any((v or "").strip() for v in row.values() if isinstance(v, str)):
@@ -48,9 +49,15 @@ def parse_records(text: str) -> dict[str, list[Record]]:
             problems.append(f"成績「{get('grade')}」不是 0–100 的數字")
         if not TERM_RE.match(get("term")):
             problems.append(f"學期「{get('term')}」格式應為 學年-學期，例如 114-1")
+        # 99-1 與 099-1 是同一學期，不可藉由前導零重複採計。
+        term_key = tuple(int(p) for p in get("term").split("-")) if TERM_RE.fullmatch(get("term")) else ()
+        key = get("student_id"), get("code"), term_key
+        if key in offerings:
+            problems.append(f"同一學生、課號與學期和第 {offerings[key]} 行重複，請先確認修課資料")
         if problems:
             errors.append(f"第 {line} 行：" + "；".join(problems))
             continue
+        offerings[key] = line
         students[get("student_id")].append(
             Record(get("code"), get("name"), credits, grade, get("term"), get("category"))
         )
