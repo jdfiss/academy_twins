@@ -6,7 +6,7 @@ from pathlib import Path
 
 from academic_twin import knowledge_base
 from academic_twin.knowledge_base import CreditPolicy, Requirement, Source
-from academic_twin.rule_engine import Decision, Record, Status, audit
+from academic_twin.rule_engine import Decision, Record, Status, audit, category_overflow, classify
 
 KB = knowledge_base.load(Path(__file__).parent / "fixtures" / "curriculum_sample.json")
 ALL_REQUIRED = ["IM1001", "IM1002", "IM1003", "IM1004", "IM1005", "IM2001",
@@ -136,6 +136,13 @@ class MisjudgmentFlagsTest(unittest.TestCase):
                                  Record("G2", "虛構通識", 5, 20, "113-2", "通識"),
                                  Record("PE", "虛構體育", 3, 80, "113-1", "體育")])
         self.assertEqual(report.flags, [])
+
+    def test_category_overflow_lists_excess_and_movable_amount(self):
+        records = [Record("G1", "虛構通識", 4, 80, "113-1", "通識"),
+                   Record("G2", "虛構核心", 5, 80, "113-2", "核心")]
+        self.assertEqual(category_overflow(self.kb, classify(self.kb, records)), [("通識", 5, 2)])
+        exact = [Record("G1", "虛構通識", 4, 80, "113-1", "通識"), Record("PE", "虛構體育", 3, 80, "113-1", "體育")]
+        self.assertEqual(category_overflow(self.kb, classify(self.kb, exact)), [])
 
     def test_zero_category_transfer_cap_does_not_create_action(self):
         kb = replace(self.kb, credit_policy=CreditPolicy(category_caps={"通識": 0}))
