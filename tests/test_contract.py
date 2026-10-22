@@ -61,6 +61,36 @@ class ConsistencyTest(unittest.TestCase):
                 for key in ("status", "requirements", "credit_breakdown", "flags", "actions", "rule_version"):
                     self.assertEqual(office[key], twin[key], key)
 
+    def test_both_sides_agree_on_detected_flags(self):
+        """示例學生在正式 114 規則下沒有 flags；改用 A 組虛構示範資料，確認提示真的出現時兩端仍一致。"""
+        root = Path(__file__).parent.parent
+        service = AcademicTwinService(root / "data" / "curriculum_demo_flags.json",
+                                      root / "data" / "students" / "demo_flags_records.csv",
+                                      root / "data" / "students" / "demo_flags_roster.csv")
+        flagged = service.twin("DEMO-FLAGS")
+        self.assertEqual({f["type"] for f in flagged["flags"]}, set(FLAG_KINDS))
+        for sid in service.twin_ids():
+            office, twin = service.student(sid), service.twin(sid)
+            with self.subTest(student=sid):
+                self.assertEqual(office["flags"], twin["flags"])
+                self.assertEqual(office["actions"], twin["actions"])
+                self.assertEqual(office["status"], twin["status"])
+
+    def test_flags_and_actions_point_to_existing_requirements(self):
+        """學生頁依 requirement_ids 找條件名稱、依 from_flag 找提示名稱，引用要能對上。"""
+        root = Path(__file__).parent.parent
+        service = AcademicTwinService(root / "data" / "curriculum_demo_flags.json",
+                                      root / "data" / "students" / "demo_flags_records.csv",
+                                      root / "data" / "students" / "demo_flags_roster.csv")
+        cases = [service.twin(sid) for sid in service.twin_ids()] + [json.loads(DEMO.read_text(encoding="utf-8"))]
+        for s in cases:
+            ids = {r["id"] for r in s["requirements"]}
+            with self.subTest(student=s["id"]):
+                for x in s["flags"] + s["actions"]:
+                    self.assertLessEqual(set(x["requirement_ids"]), ids)
+                for a in s["actions"]:
+                    self.assertIn(a["from_flag"], (None, *FLAG_KINDS))
+
     def test_both_sides_agree_after_review(self):
         service = AcademicTwinService()
         service.add_review("S003", "XFER-01", "114-1", "outside", "王助教")
