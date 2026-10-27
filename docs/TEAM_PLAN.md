@@ -107,9 +107,13 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | 自然語言 What-if 模組（新增，如 `academic_twin/ask.py`） | B | AI 將學生問題轉成 `simulate` 參數；計算與回答依據只來自規劃器結果 |
 | `academic_twin/llm.py` | A（共用，變更需通知 B） | 以標準函式庫呼叫 Gemini；金鑰讀環境變數或未進版控的 `.env`；每個模型有總等待上限，主模型過載或逾時時改用備援模型；兩組的 AI 功能共用 |
 | `academic_twin/dashboard.py` | A | AI 解析儀表板 PDF 為待確認紀錄（附來源頁碼與原文）、檢查、與標準答案比對 |
-| `academic_twin/demo_dashboard.py` | A | 產生虛構儀表板 PDF 與標準答案（`data/samples/`） |
+| `academic_twin/demo_dashboard.py` | A | 產生虛構儀表板 PDF 與標準答案（`data/samples/`）；`--bench` 產生 24 份虛構基準集（`data/samples/bench/`） |
 | `academic_twin/rule_draft.py` | A | AI 草擬 114 少量規則、來源與差異，重用知識庫驗證；人工確認只存獨立草稿，不啟用 |
 | `academic_twin/rule_versions.py` | A | 已確認草稿產生新規則版本，由承辦人明確啟用、可還原；不覆寫正式規則庫 |
+| `academic_twin/cross_check.py` | A | 雙模型交叉驗證：同一份儀表板由兩個模型各自擷取，不一致處列為警示；一致不代表正確 |
+| `academic_twin/pdf_text.py` | A | 以標準函式庫取 PDF 逐頁文字，核對 AI 宣稱的原文與頁碼；只產生警示 |
+| `academic_twin/rule_diff.py` | A | 規則草稿啟用前影響預覽：虛構案例由規則引擎以新舊規則各審查一次，列出判定不同者 |
+| `academic_twin/benchmark.py` | A | 虛構基準集量測：單一模型與交叉驗證的擷取正確率、抓錯率；只輸出彙總數字 |
 | 系辦審查助理（新增，如 `academic_twin/office_agent.py`） | A | 以 `CoreService` 為工具的 agent；只讀審查結果，不改判定 |
 | `academic_twin/api.py` | A（共用，變更需通知 B） | `CoreService`：載入資料、`_report`、`rule_version`、`meta`、交接格式 `student()`；`AcademicTwinService` 組合兩端 |
 | `academic_twin/office_api.py` | A | `OfficeMixin`：`data_source`、`batch`、`roster_anomalies`、`export_csv`、`add_review`、`report_html` |
@@ -144,6 +148,10 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_rule_draft.py` | A |
 | `tests/test_rule_versions.py` | A |
 | `tests/test_evaluate.py` | A |
+| `tests/test_cross_check.py` | A |
+| `tests/test_pdf_text.py` | A |
+| `tests/test_rule_diff.py` | A |
+| `tests/test_benchmark.py` | A |
 | `tests/test_planner.py` | B |
 | `tests/test_contract.py`（交接格式與兩端一致性） | B 維護、A 審查；第 0 步已建立基本版 |
 | `tests/fixtures/curriculum_sample.json` | A（B 需新增測試情境時發 PR） |
@@ -183,6 +191,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | 1 | AI 草擬規則庫 | **已完成少量草稿與確認存檔（離線驗證）**：114 應修科目表的 R2、R4、R10 附年度、頁次、引文、條件與例外，經既有驗證器檢查並列出差異；CLI 與系辦頁可確認存檔；**已確認草稿可由承辦人明確啟用為新規則版本、可還原**（`rule_versions.py`），正式規則庫檔案不覆寫 | 新增 28 項替身測試；現有 114 JSON 只供差異核對，實際錯漏與修正時間待承辦人確認答案後量測。草稿與確認檔獨立保存、記錄修改數；啟用前再次驗證，尚未驗證規章解讀正確 | 創新性、可行性（擴散到其他系所） | AI 服務、正式規章與承辦人確認 |
 | 1 | 實證設計與資料取得 | 先約定人工答案、案例集合、原流程時間與量測方法，開發期間累積結果。**比對工具已完成**：答案與計時格式、分組彙總（`evaluate.py`），以虛構案例驗證；待承辦人提供案例與答案 | 第一階段確認資料可取得與量測可執行；功能測試與實務驗證分列 | 實證性 | 承辦人配合；先以虛構案例建立流程 |
 | 1 | 規則依入學年度取用（最小版） | **載入機制已完成**：年度選擇與缺年度阻擋，已用虛構規則測切換；待接已確認的 112 | 同批不同年度使用自己的規則，缺規則時列異常而不套其他年度；`rule_version` 帶出年度；來源未確認前不宣稱可做 112 正式審查 | 可行性 | 載入機制不依賴 AI；112 內容需正式來源與確認 |
+| 1 | AI 自動查核（可驗證 AI） | **已完成程式與替身測試**：儀表板雙模型交叉驗證（不一致列優先核對，記錄人工修正落在標示列與否）；PDF 原文與頁碼自動核對（儀表板與規則草稿）；規則草稿啟用前影響預覽（引擎判定的虛構反例）；24 份虛構基準集與量測工具 | 全部只產生警示或預覽，不改判定、不自動啟用；量測輸出標明虛構版型。真實模型量測待以金鑰執行 | 創新性、實證性 | Gemini 金鑰；真實版型待去識別化範例 |
 | 2 | 實證驗證與彙整 | 依第一階段約定，比對 AI 擷取、規則草稿、審查及人工流程 | 報告可引用的彙總數據，包含樣本數、誤報／漏報、時間與限制；無資料時如實標記 | 實證性 | 第一階段案例與人工答案、可執行的主流程 |
 | 2 | 系辦總表依 flag 篩選 | **已完成**：依三種 flag／有待辦／無提示篩選，可與狀態篩選併用；明細、CSV 與列印報告呈現提示及待辦 | 虛構案例可從總表定位案件、查看要求與課程、覆核未標示的重複通過並重審；抵修待辦仍需正式程序 | 可行性（展示） | 真實流程驗證仍待承辦人案例 |
 | 選配 | 系辦審查助理（Agentic） | 主流程與實證完成後，才評估以 `CoreService` 為工具整理案件與草擬通知 | 只讀已確認輸入的審查結果，不改判定、不自動啟用規則或送出通知；有工具呼叫紀錄與失敗處理 | 創新性 | AI 服務、主流程與實證先完成 |
@@ -491,7 +500,7 @@ TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
 
 ### 測試
 
-- PR 合併前全部測試須通過（目前 192 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
+- PR 合併前全部測試須通過（目前 249 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
 - 新功能要附測試，放在自己組的測試檔；新增測試檔時在 PR 說明寫明歸屬。
 - **不得為了讓測試通過而刪除或放寬對方組的測試**。對方的測試若與新需求衝突，先找對方組討論，由對方修改。
 - `tests/test_contract.py` 的兩端一致性測試失敗，一律視為阻擋合併：同一份資料在兩端必須得到相同判定。
