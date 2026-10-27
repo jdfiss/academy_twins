@@ -1,0 +1,5 @@
+student_id,status,unmet,flags,split,source,confirmed,note
+DEMO-FLAGS,未通過,D1,overflow;repeatable;substitution_pending,開發,虛構,Y,原停開必修仍缺，可辦抵修
+DEMO-CLEAN,通過,,,開發,虛構,Y,
+DEMO-REVIEW,未通過,D1;D2;D3;D4,,驗證,虛構,Y,一般選修第二次通過不採計
+DEMO-MISSING,未通過,D1;D2;D3;D4,,驗證,虛構,N,替代課不及格，不能抵修
