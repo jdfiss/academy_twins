@@ -9,7 +9,7 @@ from datetime import datetime
 
 from . import dashboard, report, rule_draft, rule_versions
 from .records import REQUIRED, RecordsError, parse_records
-from .rule_engine import CATEGORY, classify, reasons
+from .rule_engine import CATEGORY, category_overflow, classify, reasons
 
 
 class OfficeMixin:
@@ -43,6 +43,8 @@ class OfficeMixin:
                 "requirements": len(report.results),
                 "reasons": reasons(report),
                 "reviewed": len(t.reviewed),
+                "overflow": [{"category": cat, "excess": excess, "movable": movable}
+                             for cat, excess, movable in category_overflow(rs.kb, t)],
                 "flags": [{"type": f.type, "message": f.message, "credits": f.credits} for f in report.flags],
                 "action_count": len(report.actions),
                 "actions": [{"title": a.title, "office": a.office} for a in report.actions],
@@ -64,7 +66,7 @@ class OfficeMixin:
         )
 
     EXPORT_FIELDS = ["student_id", "status", "total_credits", "satisfied", "requirements", "reasons",
-                     "reviewed", "rule_version", "audited_at", "flag_types", "flag_messages", "actions"]
+                     "reviewed", "overflow", "rule_version", "audited_at", "flag_types", "flag_messages", "actions"]
 
     def export_csv(self, audited_at: datetime | None = None) -> str:
         """批次審查結果 + 名單異常匯出成 CSV；每列附規則版本與審查時間。"""
@@ -77,6 +79,7 @@ class OfficeMixin:
                 "student_id": row["id"], "status": row["status"], "total_credits": row["total_credits"],
                 "satisfied": row["satisfied"], "requirements": row["requirements"],
                 "reasons": "；".join(row["reasons"]) or "全部符合", "reviewed": row["reviewed"],
+                "overflow": "；".join(_overflow_text(o) for o in row["overflow"]),
                 "rule_version": row["rule_version"], "audited_at": stamp,
                 "flag_types": "；".join(dict.fromkeys(f["type"] for f in row["flags"])),
                 "flag_messages": "；".join(f["message"] for f in row["flags"]),
@@ -244,3 +247,7 @@ def _edit_counts(before: list[dict], after: list[dict]) -> dict:
                   if str(old[k].get(f, "")).strip() != str(new[k].get(f, "")).strip())
     return {"rows_before": len(before), "rows_after": len(after), "rows_added": len(new.keys() - old.keys()),
             "rows_removed": len(old.keys() - new.keys()), "fields_changed": changed}
+
+
+def _overflow_text(o: dict) -> str:
+    return f"{o['category']}超修 {o['excess']} 學分（可移入外系 {o['movable']}）"

@@ -32,11 +32,12 @@ function renderBatch() {
       <td>${chip(s.status)}</td>
       <td><div>${s.total_credits}</div><div class="meter ${pct >= 100 ? "ok" : ""}"><div style="width:${pct}%"></div></div></td>
       <td class="hide-sm">${s.satisfied} / ${s.requirements}</td>
+      <td class="small hide-sm">${(s.overflow || []).map((o) => `<div>${esc(o.category)} +${o.excess}<span class="muted">（可移入外系 ${o.movable}）</span></div>`).join("") || '<span class="muted">—</span>'}</td>
       <td class="small">${s.reasons.map(esc).join("<br>") || '<span class="muted">全部符合</span>'}${s.reviewed ? `<div class="muted">已人工覆核 ${s.reviewed} 筆</div>` : ""}</td>
       <td class="small">${(s.flags || []).map((f) => `<div><b>${esc(FLAG_LABELS[f.type] || f.type)}</b>：${esc(f.message)}</div>`).join("") || '<span class="muted">無疑似誤判提示</span>'}
         ${s.action_count ? `<div>需辦理 ${s.action_count} 項，點此列查看</div>` : ""}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="6" class="empty">沒有符合的學生</td></tr>`;
+  }).join("") || `<tr><td colspan="7" class="empty">沒有符合的學生</td></tr>`;
   document.querySelectorAll("#batch-rows tr[data-id]").forEach((tr) =>
     tr.addEventListener("click", () => { loadStudent(tr.dataset.id); show("student"); }));
 }

@@ -221,7 +221,7 @@ def credit_breakdown(kb: KnowledgeBase, t: Transcript) -> dict[str, int]:
 
     outside_pool = (sum(r.credits for r in t.outside)
                     + sum(kb.courses[c].credits for c in t.passed if kb.courses[c].counts_as == "outside"))
-    for cat, counted, overflow in _category_allocation(kb, t):
+    for cat, counted, _, overflow in _category_allocation(kb, t):
         if counted:
             breakdown[cat] = counted
         outside_pool += overflow
@@ -233,8 +233,15 @@ def credit_breakdown(kb: KnowledgeBase, t: Transcript) -> dict[str, int]:
     return breakdown
 
 
-def _category_allocation(kb: KnowledgeBase, t: Transcript) -> list[tuple[str, int, int]]:
-    """類別的採計與可移入外系學分池數量；總學分與 flag 共用同一份計算。"""
+def category_overflow(kb: KnowledgeBase, t: Transcript) -> list[tuple[str, int, int]]:
+    """有最低學分要求的類別超修多少學分、其中可移入外系學分池多少（扣類別上限）；總表呈現用。"""
+    required = {req.categories[0] for req in kb.requirements if req.kind == "category_credits"}
+    return [(cat, excess, overflow) for cat, _, excess, overflow in _category_allocation(kb, t)
+            if cat in required and excess > 0]
+
+
+def _category_allocation(kb: KnowledgeBase, t: Transcript) -> list[tuple[str, int, int, int]]:
+    """類別的採計、超出要求與可移入外系學分池數量；總學分、flag 與總表共用同一份計算。"""
     by_root: dict[str, int] = {}
     for r in t.categorized:
         root = root_category(kb, r.category)
@@ -247,7 +254,7 @@ def _category_allocation(kb: KnowledgeBase, t: Transcript) -> list[tuple[str, in
         counted = min(credits, required.get(cat, 0))
         excess = credits - counted
         overflow = min(excess, kb.credit_policy.category_caps.get(cat, excess))
-        allocations.append((cat, counted, overflow))
+        allocations.append((cat, counted, excess, overflow))
     return allocations
 
 
@@ -272,7 +279,7 @@ def _detect_flags(kb: KnowledgeBase, t: Transcript,
                   results: list[RequirementResult]) -> tuple[list[Flag], list[Action]]:
     flags: list[Flag] = []
     actions: list[Action] = []
-    for cat, _, overflow in _category_allocation(kb, t):
+    for cat, _, _, overflow in _category_allocation(kb, t):
         if overflow <= 0:
             continue
         records = [r for r in t.categorized if root_category(kb, r.category) == cat]
