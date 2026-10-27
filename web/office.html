@@ -6,86 +6,106 @@
 <title>系辦畢審・Academic Twin</title>
 <link rel="stylesheet" href="assets/common.css">
 <style>
-/* 系辦解析表格：窄欄位保留給代碼與數字，課名與來源留足閱讀空間。 */
-.dash-table { min-width: 1160px; table-layout: fixed; }
-.dash-table th, .dash-table td { padding: 8px 6px; }
-.dash-table th, .dash-table button { white-space: nowrap; }
-.dash-table input, .dash-table select, .dash-table textarea { box-sizing: border-box; width: 100%; font: inherit; font-size: 12.5px; }
-.dash-table input, .dash-table select { padding: 5px; }
-.dash-table .source-page { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.dash-table .source-page input { width: 64px; }
-.dash-table textarea { padding: 5px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); }
-.dash-table .row-issue { font-size: 12px; color: var(--fail); }
-.dash-table .has-error { background: var(--fail-soft); }
-</style>
-<style>
-  .dash-table input, .dash-table select { width: 100%; min-width: 48px; padding: 2px 4px; font-size: 12.5px; }
-  .dash-table td { vertical-align: top; }
-  .dash-table tr.has-error td { background: var(--fail-soft); }
-  .dash-table tr.has-warning td { background: var(--warn-soft); }
-  .dash-table .src { font-size: 12px; color: var(--muted); max-width: 260px; }
-  .dash-table .row-issue { font-size: 12px; color: var(--fail); }
+/* 系辦端專屬樣式（共用 common.css 不動）：簡約、留白、不用小字 */
+body.office { font-size: 16px; }
+.office .sub { font-size: 15px; } .office .req .cite { font-size: 14px; }
+.office .course code, .office .course .code { font-size: 13px; } .office .side-tag { font-size: 14px; }
+.office input[type=file] { border: 0; padding: 0; background: none; max-width: 260px; }
+.office .small, .office .muted.small, .office th, .office .chip, .office .issue, .office details summary,
+.office .legend, .office .course, .office .review-form select, .office .review-form input, .office .review-form button,
+.office .upload label { font-size: 15px; }
+.office .card { padding: 22px 24px; border-radius: 12px; }
+.office h2 { font-size: 20px; margin-bottom: 16px; }
+.office h3 { font-size: 17px; }
+.office .section { margin-bottom: 20px; }
+.office .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.office .row .spacer { flex: 1; }
+.office .hint { color: var(--muted); }
+.office .msg { margin-top: 12px; }
+.office .msg.ok { color: var(--pass); } .office .msg.err { color: var(--fail); }
+.office .tag { display: inline-block; padding: 2px 12px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  background: var(--warn-soft); color: var(--warn); vertical-align: middle; margin-left: 8px; }
+.office .officer { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.office .officer input { width: 130px; }
+.office .stat { padding: 18px 20px; } .office .stat .n { font-size: 32px; }
+.office .flags { display: flex; flex-wrap: wrap; gap: 6px; }
+.office .flag { padding: 2px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-size: 14px; }
+.office .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 18px;
+  padding-top: 18px; border-top: 1px solid var(--line); }
+.office .confirm label { display: flex; align-items: center; gap: 8px; }
+.office details.fold { margin-top: 14px; }
+.office details.fold > summary { font-size: 15px; }
+.office blockquote { margin: 8px 0; padding: 8px 14px; border-left: 3px solid var(--line); white-space: pre-wrap; }
+/* 解析表格：代碼與數字欄窄，課名與原文寬 */
+.dash-table { min-width: 1100px; table-layout: fixed; }
+.dash-table th, .dash-table td { padding: 8px 6px; vertical-align: top; }
+.dash-table input, .dash-table select, .dash-table textarea { width: 100%; box-sizing: border-box; font: inherit;
+  font-size: 15px; padding: 5px 6px; }
+.dash-table textarea { resize: vertical; border: 1px solid var(--line); border-radius: 8px; color: var(--ink);
+  background: var(--panel); margin-top: 4px; }
+.dash-table tr.has-error td { background: var(--fail-soft); }
+.dash-table tr.has-warning td { background: var(--warn-soft); }
+.dash-table .row-issue { margin-top: 4px; color: var(--fail); }
+.dash-table tr.has-warning .row-issue { color: var(--warn); }
+.dash-table .page { display: flex; align-items: center; gap: 6px; }
+.dash-table .page input { width: 70px; }
+.dash-table .del { padding: 4px 10px; }
 </style>
 </head>
-<body>
+<body class="office">
 <header>
   <div class="bar">
     <div class="brand"><a href="./">NCU <span>Academic Twin</span></a></div>
     <span class="side-tag">系辦端</span>
     <div class="sub" id="program"></div>
+    <label class="officer">承辦人 <input id="officer" placeholder="姓名"></label>
   </div>
   <nav>
-    <button data-view="batch" class="active">系辦畢審</button>
-    <button data-view="ingest">AI 解析儀表板</button>
-    <button data-view="rule-draft">AI 草擬規則</button>
+    <button data-view="batch" class="active">畢審總表</button>
     <button data-view="student">學生明細</button>
-    <button data-view="rules">規則來源</button>
+    <button data-view="ingest">AI 解析儀表板</button>
+    <button data-view="rules">規則</button>
   </nav>
 </header>
-
 <!-- 系辦端（A 組）。共用外框與樣式見 assets/common.*，變更需通知 B 組 -->
 <main>
-  <!-- 系辦畢審 -->
+  <!-- 畢審總表 -->
   <section class="view active" id="view-batch">
-    <div class="card" style="margin-bottom: 16px">
-      <h2>資料來源 <span class="muted small" id="data-source"></span></h2>
-      <div class="upload">
-        <label>修課紀錄 CSV<input type="file" id="records-file" accept=".csv,text/csv"></label>
-        <label>應屆名單 CSV<input type="file" id="roster-file" accept=".csv,text/csv"></label>
-        <button class="primary" id="upload-btn">上傳並重新審查</button>
-        <button class="ghost" id="reset-btn">還原示例資料</button>
-      </div>
-      <div class="muted small" style="margin-top: 8px">
-        修課紀錄欄位：student_id,code,name,credits,grade,term,category（category 可空白）；名單需有 student_id 欄，可加選填的 english_passed 欄（Y／N，空白表示未知）與 cohort 欄（入學學年度，空白視為 114）。
-        可只換其中一份。資料只存在這次執行的記憶體中，關掉伺服器就回到示例資料。
+    <div class="card section">
+      <div class="row">
+        <label>修課紀錄 <input type="file" id="records-file" accept=".csv,text/csv"></label>
+        <label>應屆名單 <input type="file" id="roster-file" accept=".csv,text/csv"></label>
+        <button class="primary" id="upload-btn">上傳並審查</button>
+        <span class="spacer"></span>
+        <span class="hint" id="data-source"></span>
+        <button class="ghost" id="reset-btn">還原示例</button>
       </div>
       <div id="upload-msg"></div>
     </div>
     <div class="grid stats" id="stats"></div>
     <div class="card">
-      <h2>批次畢業資格審查 <span class="muted small">點一列看該生細節</span>
-        <a class="ghost small" href="/api/export.csv" download style="float: right; text-decoration: none; padding: 4px 12px">匯出 CSV</a></h2>
-      <div class="small" style="margin-bottom: 12px">
-        <label for="flag-filter">提示篩選</label>
-        <select id="flag-filter">
-          <option value="">全部學生</option>
-          <option value="any">有疑似誤判提示</option>
+      <div class="row" style="margin-bottom: 14px">
+        <h2 style="margin: 0">畢業資格審查</h2>
+        <span class="spacer"></span>
+        <select id="flag-filter" aria-label="提示篩選">
+          <option value="">全部提示</option>
+          <option value="any">有疑似誤判</option>
           <option value="overflow">超修學分</option>
           <option value="repeatable">可重複修習</option>
           <option value="substitution_pending">待辦抵修</option>
           <option value="actions">有需辦理事項</option>
-          <option value="none">沒有提示或待辦</option>
+          <option value="none">沒有提示</option>
         </select>
-        <span class="muted" id="batch-filter-count" aria-live="polite"></span>
-        <p class="muted">提示需由承辦人確認，不代表已證實校務系統誤判。匯出 CSV 包含完整批次結果。</p>
+        <span class="hint" id="batch-filter-count" aria-live="polite"></span>
+        <a class="ghost" href="/api/export.csv" download style="text-decoration: none">匯出 CSV</a>
       </div>
       <table>
-        <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th class="hide-sm">類別超修</th><th>原因</th><th>疑似誤判／待辦</th></tr></thead>
+        <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th>原因</th><th>提示</th></tr></thead>
         <tbody id="batch-rows"></tbody>
       </table>
     </div>
-    <div class="card" id="roster-card" style="margin-top: 16px">
-      <h2>名單異常 <span class="muted small">應屆名單與修課紀錄比對，以下學生未納入審查</span></h2>
+    <div class="card" id="roster-card" style="margin-top: 20px" hidden>
+      <h2>名單異常（未納入審查）</h2>
       <table>
         <thead><tr><th>學號</th><th>問題</th></tr></thead>
         <tbody id="roster-rows"></tbody>
@@ -93,54 +113,15 @@
     </div>
   </section>
 
-  <!-- AI 解析儀表板：AI 擷取 → 承辦人對照原文修正與確認 → 才進入審查 -->
-  <section class="view" id="view-ingest">
-    <div class="card" style="margin-bottom: 16px">
-      <h2>AI 解析畢審儀表板 <span class="muted small">AI 只擷取文件內容，判定仍由規則引擎產生</span></h2>
-      <p class="small" style="color: var(--fail)">只可上傳去識別化或虛構文件；檔案內容會送至 Gemini 解析。目前支援版型：虛構示範版型（demo-v1），不支援掃描影像。</p>
-      <div class="upload">
-        <label>儀表板 PDF<input type="file" id="dash-file" accept=".pdf,application/pdf"></label>
-        <label>學號（去識別化代號）<input id="dash-sid" placeholder="例如 DEMO-D01" style="padding: 4px 8px"></label>
-        <button class="primary" id="dash-extract">AI 解析</button>
-      </div>
-      <div id="dash-msg"></div>
-    </div>
-    <div class="card" id="dash-draft" hidden>
-      <h2>待確認紀錄 <span class="muted small" id="dash-meta"></span></h2>
-      <div class="small" style="margin-bottom: 8px">
-        入學學年度 <input id="dash-cohort" style="width: 70px; padding: 3px 6px">
-        <span class="muted" id="dash-declared"></span>
-        <span class="muted" id="dash-exists"></span>
-      </div>
-      <div id="dash-cross"></div>
-      <div id="dash-issues"></div>
-      <p class="muted small">請對照 PDF 修正各欄與來源頁碼、原文；修改後須重新勾選確認，送出時會重新檢查。</p>
-      <div style="overflow-x: auto">
-        <table class="dash-table">
-          <colgroup><col style="width:3%"><col style="width:7%"><col style="width:8%"><col style="width:11%"><col style="width:16%"><col style="width:6%"><col style="width:6%"><col style="width:11%"><col style="width:25%"><col style="width:7%"></colgroup>
-          <thead><tr><th>#</th><th>規則代碼</th><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th><th>來源（頁碼：原文）</th><th></th></tr></thead>
-          <tbody id="dash-rows"></tbody>
-        </table>
-      </div>
-      <button class="ghost small" id="dash-add" style="margin-top: 6px">新增一列</button>
-      <div class="small" style="margin-top: 12px; display: grid; gap: 6px">
-        <label><input type="checkbox" id="dash-checked"> 我已逐列對照原文，修正擷取錯誤</label>
-        <label id="dash-ack-row" hidden><input type="checkbox" id="dash-ack"> 我已確認上方警示（例如可能漏列），內容無誤</label>
-        <label>確認人 <input id="dash-reviewer" placeholder="姓名" style="padding: 3px 8px; width: 120px"></label>
-      </div>
-      <button class="primary" id="dash-confirm" style="margin-top: 10px">確認並送入審查</button>
-      <div id="dash-confirm-msg"></div>
-    </div>
-  </section>
-
   <!-- 學生明細：審查結果與人工覆核 -->
   <section class="view" id="view-student">
     <div class="student-head">
-      <label class="muted small">學生 <select id="student-select"></select></label>
+      <select id="student-select" aria-label="學生"></select>
       <span id="student-status"></span>
-      <div><span class="big" id="student-credits"></span> <span class="muted" id="student-total-target"></span></div>
-      <a class="ghost small" id="student-report" target="_blank" style="text-decoration: none; padding: 4px 12px">列印審查明細</a>
-      <a class="ghost small" id="student-twin" target="_blank" style="text-decoration: none; padding: 4px 12px">學生端畫面</a>
+      <div><span class="big" id="student-credits"></span> <span class="hint" id="student-total-target"></span></div>
+      <span class="spacer" style="flex: 1"></span>
+      <a class="ghost" id="student-report" target="_blank" style="text-decoration: none">列印明細</a>
+      <a class="ghost" id="student-twin" target="_blank" style="text-decoration: none">學生端畫面</a>
     </div>
     <div class="grid two">
       <div class="grid">
@@ -151,27 +132,23 @@
         </div>
         <div class="card" id="issues-card">
           <h3>需要注意</h3>
-          <div id="reviewer-row" class="small muted" style="margin-bottom: 8px">
-            覆核人 <input id="reviewer" placeholder="姓名" style="padding: 3px 8px; font-size: 12.5px; width: 120px">
-            <span>系辦對無法自動判定的紀錄做決定，存檔後立即重新審查。</span>
-          </div>
           <div id="issues"></div>
           <div id="review-msg"></div>
-          <details id="review-history-box" style="margin-top: 8px">
+          <details id="review-history-box" class="fold">
             <summary>覆核歷程（<span id="review-history-count"></span> 筆）</summary>
-            <div id="review-history" class="small" style="margin-top: 6px"></div>
+            <div id="review-history" style="margin-top: 8px"></div>
           </details>
         </div>
       </div>
       <div class="grid">
         <div class="card">
-          <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
+          <h3>畢業條件 <span class="hint" id="req-summary"></span></h3>
           <div id="requirements"></div>
         </div>
         <div class="card">
           <details>
             <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
-            <table style="margin-top:8px">
+            <table style="margin-top: 8px">
               <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
               <tbody id="records"></tbody>
             </table>
@@ -181,65 +158,91 @@
     </div>
   </section>
 
-  <!-- AI 規則草稿：獨立保存，確認只留紀錄，不啟用 -->
-  <section class="view" id="view-rule-draft">
-    <div class="card" style="margin-bottom: 16px">
-      <h2>AI 草擬規則 <span class="muted small">AI 草稿、未啟用</span></h2>
-      <p class="small">目前僅支援公開的 114 應修科目表（data/sources/im_114_table.pdf），草擬院訂必修清單、國文學分與最低畢業學分三項。PDF 內容會送至 Gemini。</p>
-      <div class="upload">
-        <label>公開應修科目表 PDF<input type="file" id="rule-file" accept=".pdf,application/pdf"></label>
-        <label>適用年度 <select id="rule-year"><option value="114">114</option></select></label>
-        <button class="primary" id="rule-extract">AI 草擬（未啟用）</button>
-        <a id="rule-source" target="_blank" rel="noopener" hidden>開啟所選原文 PDF</a>
+  <!-- AI 解析儀表板：AI 擷取 → 承辦人對照原文修正與確認 → 才進入審查 -->
+  <section class="view" id="view-ingest">
+    <div class="card section">
+      <h2>AI 解析儀表板</h2>
+      <div class="row">
+        <input type="file" id="dash-file" accept=".pdf,application/pdf" aria-label="儀表板 PDF">
+        <input id="dash-sid" placeholder="學號（去識別化代號）" aria-label="學號">
+        <button class="primary" id="dash-extract">解析</button>
       </div>
-      <div id="rule-msg" role="status" aria-live="polite"></div>
+      <p class="hint" style="margin: 12px 0 0">只上傳去識別化或虛構文件，內容會送至 Gemini。</p>
+      <div id="dash-msg"></div>
     </div>
-    <div class="card" id="rule-draft-panel" hidden>
-      <h2>AI 草稿、未啟用 <span class="muted small" id="rule-meta"></span></h2>
-      <p class="muted small">結構合法不代表規章解讀正確；114 現有 JSON 含待確認假設，差異皆為「需人工確認」。請逐項檢查原文、門檻、適用條件、例外與遺漏。這是少量要求草稿，不是完整規則庫。</p>
-      <div id="rule-issues" role="status"></div>
-      <div id="rule-requirements"></div>
-      <h3>與現有 114 JSON 的差異（僅限指定三項及草稿多列）</h3>
-      <div id="rule-diff"></div>
-      <details style="margin: 12px 0">
-        <summary>修正規則與來源（JSON，可補漏或刪除要求）</summary>
-        <label for="rule-editor" class="small">要求陣列，包含適用年度、來源頁次、逐字引用、條件與例外</label>
-        <textarea id="rule-editor" rows="16" style="width: 100%; box-sizing: border-box; font: inherit"></textarea>
-      </details>
-      <button class="ghost" id="rule-check">重新檢查修正內容與差異</button>
-      <div class="small" style="margin: 12px 0">
-        <label><input type="checkbox" id="rule-checked">已逐項核對原文、門檻、適用條件、例外、遺漏及差異，確認保存草稿（未啟用）</label>
+    <div class="card" id="dash-draft" hidden>
+      <div class="row" style="margin-bottom: 14px">
+        <h2 style="margin: 0">待確認紀錄<span class="tag">AI 擷取・待確認</span></h2>
+        <span class="spacer"></span>
+        <label>入學學年度 <input id="dash-cohort" style="width: 80px"></label>
       </div>
-      <label>確認人 <input id="rule-reviewer" placeholder="姓名" style="padding: 4px 8px"></label>
-      <button class="primary" id="rule-confirm">確認存檔（未啟用）</button>
-      <div id="rule-confirm-msg" role="status" aria-live="polite"></div>
-    </div>
-    <div class="card" id="rule-versions" style="margin-top: 16px">
-      <h2>規則版本與啟用</h2>
-      <p class="muted small">已確認的草稿須由承辦人明確啟用，才會用於審查：新版本為該年度正式規則庫，只把草稿中的要求依編號取代或新增。版本另存於 data/rule_versions/，不覆寫正式規則庫檔案；可隨時還原。要成為正式規則庫仍須以 PR 修改並經審查。</p>
-      <div id="rule-versions-years"></div>
-      <h3>已確認、可啟用的草稿</h3>
-      <p class="muted small">每份草稿附「啟用前影響預覽」：系統依規則條件產生虛構學生，由規則引擎分別以目前規則與套用草稿後的規則審查，列出判定會改變的代表案例。預覽只供核對，不會啟用；未發現差異只代表在搜尋範圍內沒有找到，不保證判定完全相同。</p>
-      <div id="rule-versions-drafts"></div>
-      <div class="small" style="margin: 12px 0">
-        <label><input type="checkbox" id="rule-activate-ack">了解啟用後該年度學生立即改以新版本審查，既有覆核會標示「建議再確認」</label>
+      <p class="hint" id="dash-declared" style="margin: 0 0 12px"></p>
+      <div id="dash-cross"></div>
+      <div id="dash-issues"></div>
+      <div style="overflow-x: auto; margin-top: 8px">
+        <table class="dash-table">
+          <colgroup><col style="width:3%"><col style="width:7%"><col style="width:8%"><col style="width:10%"><col style="width:16%"><col style="width:6%"><col style="width:6%"><col style="width:11%"><col style="width:27%"><col style="width:6%"></colgroup>
+          <thead><tr><th>#</th><th>代碼</th><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th><th>原文</th><th></th></tr></thead>
+          <tbody id="dash-rows"></tbody>
+        </table>
       </div>
-      <label>啟用／還原人 <input id="rule-activator" placeholder="姓名" style="padding: 4px 8px"></label>
-      <div id="rule-versions-msg" role="status" aria-live="polite"></div>
-      <h3>啟用紀錄</h3>
-      <div id="rule-versions-history" class="small"></div>
+      <button class="ghost" id="dash-add" style="margin-top: 10px">新增一列</button>
+      <details class="fold"><summary>解析資訊</summary><p class="hint" id="dash-meta"></p></details>
+      <div class="confirm">
+        <label><input type="checkbox" id="dash-checked"> 已對照原文並確認所有警示</label>
+        <button class="primary" id="dash-confirm">確認送入審查</button>
+      </div>
+      <div id="dash-confirm-msg"></div>
     </div>
   </section>
 
-  <!-- 規則來源 -->
+  <!-- 規則：AI 草擬（獨立保存）→ 承辦人確認 → 明確啟用；來源與待確認假設 -->
   <section class="view" id="view-rules">
-    <div class="grid">
-      <div class="card"><h2>規則來源</h2><ul id="sources"></ul></div>
-      <div class="card">
-        <h2>尚待系辦確認的假設</h2>
-        <p class="muted small">以下是官方文件沒寫清楚、規則庫暫時採用的解讀。所有正式判定仍以規則條文為準。</p>
-        <ol class="assume" id="assumptions"></ol>
+    <div class="card section">
+      <h2>AI 草擬規則<span class="tag">AI 草稿・未啟用</span></h2>
+      <div class="row">
+        <input type="file" id="rule-file" accept=".pdf,application/pdf" aria-label="應修科目表 PDF">
+        <button class="primary" id="rule-extract">草擬</button>
+        <a id="rule-source" target="_blank" rel="noopener" hidden>開啟原文</a>
       </div>
+      <p class="hint" style="margin: 12px 0 0">支援 114 應修科目表：院訂必修、國文學分、最低畢業學分。</p>
+      <div id="rule-msg" role="status" aria-live="polite"></div>
+      <div id="rule-draft-panel" hidden style="margin-top: 18px">
+        <p class="hint" id="rule-meta"></p>
+        <div id="rule-issues" role="status"></div>
+        <div id="rule-requirements"></div>
+        <details class="fold"><summary>與現有規則的差異</summary><div id="rule-diff" style="margin-top: 8px"></div></details>
+        <details class="fold">
+          <summary>修正內容（JSON）</summary>
+          <textarea id="rule-editor" rows="16" aria-label="草稿 JSON"
+            style="width: 100%; box-sizing: border-box; font: inherit; margin-top: 8px"></textarea>
+        </details>
+        <div class="confirm">
+          <label><input type="checkbox" id="rule-checked"> 已核對原文、門檻、條件、例外與差異</label>
+          <button class="primary" id="rule-confirm">確認存檔</button>
+        </div>
+        <div id="rule-confirm-msg" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="card section" id="rule-versions">
+      <h2>規則版本與啟用</h2>
+      <div id="rule-versions-years"></div>
+      <h3 style="margin-top: 18px">待啟用草稿</h3>
+      <div id="rule-versions-drafts"></div>
+      <div class="confirm">
+        <label><input type="checkbox" id="rule-activate-ack"> 了解啟用後該年度學生立即改用新版本審查</label>
+      </div>
+      <div id="rule-versions-msg" role="status" aria-live="polite"></div>
+      <details class="fold"><summary>啟用紀錄</summary><div id="rule-versions-history" style="margin-top: 8px"></div></details>
+    </div>
+    <div class="card">
+      <details>
+        <summary>規則來源與待確認假設</summary>
+        <h3 style="margin-top: 14px">規則來源</h3>
+        <ul id="sources"></ul>
+        <h3>待系辦確認的假設</h3>
+        <ol class="assume" id="assumptions"></ol>
+      </details>
     </div>
   </section>
 </main>
