@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import knowledge_base, llm
+from . import knowledge_base, llm, pdf_text
 
 ROOT = Path(__file__).parent.parent
 BASELINE_PATH = ROOT / "data" / "curriculum_im_114.json"
@@ -226,13 +226,36 @@ def load_draft(draft_id: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def citation_warnings(requirements: object, text: pdf_text.PdfText) -> list[dict]:
+    """到 PDF 文字裡核對每條的引文是否在宣稱頁次；全部是警示，承辦人仍須逐項對照原文。
+
+    取出的文字是近似，找不到不等於一定錯；PDF 取不出文字時只列一則整份警示，不當成引文不符。
+    """
+    if not text.ok:
+        return [{"level": "warning", "id": None, "message": f"無法自動核對引文：{text.reason}；請逐項對照原文"}]
+    out = []
+    for r in requirements if isinstance(requirements, list) else []:
+        if not isinstance(r, dict):
+            continue
+        quote, page = r.get("source_quote"), r.get("source_page")
+        if not isinstance(quote, str) or not quote.strip() or type(page) is not int or page < 1:
+            continue  # 缺來源已是錯誤
+        message = pdf_text.describe(pdf_text.locate(text, quote, page), page)
+        if message:
+            rid = r.get("id") if isinstance(r.get("id"), str) else None
+            out.append({"level": "warning", "id": rid, "message": f"{rid}：{message}" if rid else message})
+    return out
+
+
 def view(draft: dict, requirements=None) -> dict:
     rows = draft["requirements"] if requirements is None else requirements
     context = baseline()
     return {k: copy.deepcopy(v) for k, v in {
-        **draft, "requirements": rows, "label": LABEL, "active": False,
+        **{k: v for k, v in draft.items() if k != "pdf_text"}, "requirements": rows, "label": LABEL, "active": False,
         "issues": check(rows, draft["year"], context, draft.get("unreadable", ""))
                   + [{"level": "error", "message": e} for e in draft.get("response_errors", [])],
+        # 引文與頁次的自動核對：警示，不阻擋確認；確認時仍須勾選已對照原文
+        "warnings": citation_warnings(rows, pdf_text.PdfText.from_dict(draft.get("pdf_text"))),
         "diff": diff(rows, context["requirements"]),
         "baseline_changed": draft["baseline_sha256"] != _hash(context),
         "notice": "結構合法不代表規章解讀正確；114 現有 JSON 含待確認假設。請核對門檻、適用條件、例外與遺漏。",
@@ -283,12 +306,15 @@ def run_draft(pdf: bytes, year: int = 114, answer: Path | None = None) -> dict:
              "requirements": rows, "unreadable": data.get("unreadable", "") if isinstance(data, dict) else "",
              "response_errors": shape_errors, "model": result.model, "generated_at": result.generated_at,
              "prompt_version": PROMPT_VERSION, "source_sha256": hashlib.sha256(pdf).hexdigest(),
-             "baseline_sha256": _hash(context)}
+             "baseline_sha256": _hash(context),
+             # 公開規章的逐頁文字，供重新檢查時核對引文；不送給 AI，也不寫入量測紀錄
+             "pdf_text": pdf_text.extract_pages(pdf).to_dict()}
     review = view(draft)
     _save(_path(draft["draft_id"]), draft)
     entry = {"type": "draft", "model": result.model, "prompt_version": PROMPT_VERSION, "at": now(),
              "year": year, "baseline_version": draft["baseline_sha256"],
-             "errors": len(review["issues"]), "requirements": len(rows) if isinstance(rows, list) else 0}
+             "errors": len(review["issues"]), "citation_warnings": len(review["warnings"]),
+             "requirements": len(rows) if isinstance(rows, list) else 0}
     if expected is not None:
         entry["before_correction"] = compare(rows if isinstance(rows, list) else [], expected)
         entry["answer_version"] = _hash({"requirements": expected})
