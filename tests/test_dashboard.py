@@ -1,5 +1,6 @@
 """AI 解析儀表板：檢查、量測與確認流程。以假的 AI 回應測試，不連網、不送出任何資料。"""
 import csv
+import dataclasses
 import io
 import json
 import tempfile
@@ -31,6 +32,13 @@ def fake_response(rows=None, **extra):
     return llm.LLMResult(data, "fake-model", "2026-10-21T00:00:00")
 
 
+def two_models(response):
+    """兩個模型讀到相同內容的替身：主模型回原名稱，指定 model 時回該名稱（交叉驗證一致）。"""
+    def generate(*args, model=None, **kwargs):
+        return dataclasses.replace(response, model=model or response.model)
+    return mock.patch.object(llm, "generate_json", side_effect=generate)
+
+
 class DashboardTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -42,7 +50,7 @@ class DashboardTest(unittest.TestCase):
         self.service = AcademicTwinService()
 
     def extract(self, response, student_id="DEMO-D02"):
-        with mock.patch.object(llm, "generate_json", return_value=response):
+        with two_models(response):
             return self.service.dashboard_extract(b"%PDF-1.7 fake", student_id)
 
     def test_faithful_extraction_matches_answer(self):
@@ -155,9 +163,14 @@ class DashboardTest(unittest.TestCase):
         draft = self.extract(fake_response())
         rows = [dict(r) for r in draft["rows"]]
         rows[0]["grade"] = "90"
-        self.service.dashboard_confirm(draft["draft_id"], rows, "王助教")
+        # 改成與兩個模型都不同的值，交叉驗證會再提示一次，須勾選已確認警示
+        with self.assertRaises(RecordsError):
+            self.service.dashboard_confirm(draft["draft_id"], rows, "王助教")
+        self.service.dashboard_confirm(draft["draft_id"], rows, "王助教", acknowledge_warnings=True)
         entry = json.loads(self.log.read_text(encoding="utf-8").splitlines()[-1])
         self.assertEqual((entry["fields_changed"], entry["rows_added"], entry["rows_removed"]), (1, 0, 0))
+        self.assertEqual((entry["cross_check"]["edited_rows_flagged"], entry["cross_check"]["edited_rows_unflagged"]),
+                         (0, 1))
         text = json.dumps(entry, ensure_ascii=False)
         self.assertNotIn("DEMO-D02", text)
         self.assertNotIn(rows[0]["code"], text)
@@ -304,7 +317,7 @@ class DashboardCohortTest(unittest.TestCase):
         self.kb_112.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
 
     def extract(self, service, cohort):
-        with mock.patch.object(llm, "generate_json", return_value=fake_response(cohort=cohort)):
+        with two_models(fake_response(cohort=cohort)):
             return service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
 
     def test_missing_cohort_rules_blocks_confirm_and_keeps_data(self):

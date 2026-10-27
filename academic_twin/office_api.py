@@ -7,7 +7,7 @@ import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 
-from . import dashboard, report, rule_draft, rule_versions
+from . import cross_check, dashboard, report, rule_draft, rule_versions
 from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
 
@@ -109,14 +109,19 @@ class OfficeMixin:
 
     # ---------- AI 解析儀表板（結果待承辦人確認，確認前不進入審查） ----------
     def dashboard_extract(self, pdf: bytes, student_id: str) -> dict:
-        """AI 擷取儀表板為草稿；草稿暫存於記憶體，只有確認後才會寫入修課紀錄。"""
+        """AI 擷取儀表板為草稿；草稿暫存於記憶體，只有確認後才會寫入修課紀錄。
+
+        兩個模型同時擷取並逐列比對，不一致處列為警示；第二模型失敗時照常使用主模型並標示未交叉驗證。
+        """
         sid = _student_id(student_id)
-        ext = dashboard.extract(pdf)
+        ext, other = cross_check.extract_pair(pdf)
+        cmp = cross_check.recheck(ext.rows, other, ext.model)
         drafts = self.__dict__.setdefault("_dashboard_drafts", {})
         draft_id = uuid.uuid4().hex
-        drafts[draft_id] = (sid, ext)
+        drafts[draft_id] = (sid, ext, other)
+        issues = self._dashboard_issues(ext, ext.cohort) + cross_check.issues(cmp)
         return {"draft_id": draft_id, "student_id": sid, "exists": sid in self.students,
-                **self._draft_view(ext, self._dashboard_issues(ext, ext.cohort))}
+                **self._draft_view(ext, issues), "cross_check": _cross_check_view(cmp, len(ext.rows))}
 
     def dashboard_confirm(self, draft_id: str, rows: list[dict], reviewer: str, cohort: int | None = None,
                           acknowledge_warnings: bool = False) -> dict:
@@ -126,11 +131,12 @@ class OfficeMixin:
             raise KeyError("找不到這份解析草稿，可能已確認或伺服器已重開，請重新解析")
         if not reviewer.strip():
             raise ValueError("請填寫確認人")
-        sid, ext = drafts[draft_id]
+        sid, ext, other = drafts[draft_id]
         fields = dashboard.FIELDS + ["rule_code", "source_page", "source_text"]
         edited = replace(ext, rows=[{k: r.get(k, "") for k in fields} for r in rows])
         cohort = cohort or self._roster_parsed.cohorts.get(sid)
-        issues = self._dashboard_issues(edited, cohort)
+        cmp = cross_check.recheck(edited.rows, other, ext.model)
+        issues = self._dashboard_issues(edited, cohort) + cross_check.issues(cmp)
         errors = [i for i in issues if i.level == "error"]
         if errors:
             raise RecordsError([_issue_text(i) for i in errors])
@@ -140,10 +146,13 @@ class OfficeMixin:
         records = parse_records(dashboard.to_records_csv(sid, edited.rows))[sid]
         self._replace_student(sid, records, cohort)
         del drafts[draft_id]
+        initial = cross_check.recheck(ext.rows, other, ext.model)
         dashboard.log_run({
             "type": "confirm", "model": ext.model, "prompt_version": ext.prompt_version, "format": ext.format,
             "generated_at": ext.generated_at, "confirmed_at": datetime.now().isoformat(timespec="seconds"),
             **_edit_counts(ext.rows, edited.rows), "warnings_acknowledged": acknowledge_warnings,
+            "cross_check": {**initial.summary(len(ext.rows)), **_edits_by_flag(ext.rows, edited.rows, initial),
+                            "flagged_after_edit": len(cmp.flagged_rows) + len(cmp.only_check)},
         })
         return self.student(sid)
 
@@ -234,6 +243,30 @@ def _student_id(value: str) -> str:
 
 def _issue_text(i: dashboard.Issue) -> str:
     return (f"第 {i.row + 1} 列：" if i.row is not None else "") + i.message
+
+
+def _cross_check_view(cmp: cross_check.Comparison, total_rows: int) -> dict:
+    return {**cmp.summary(total_rows), "differences": cmp.differences, "only_primary": cmp.only_primary,
+            "only_check": [{k: r.get(k, "") for k in ("code", "term", "name")} for r in cmp.only_check]}
+
+
+def _edits_by_flag(before: list[dict], after: list[dict], cmp: cross_check.Comparison) -> dict:
+    """人工修正分別落在交叉驗證標示列與未標示列的數量，用來量測標示是否抓到真正要改的地方（不含課程內容）。"""
+    def key(r):
+        return str(r.get("code", "")).strip(), str(r.get("term", "")).strip()
+    new = {key(r): r for r in after}
+    fields = [k for k in dashboard.FIELDS if k not in ("code", "term")]
+    out = {"edited_rows_flagged": 0, "edited_rows_unflagged": 0, "rows_flagged": len(cmp.flagged_rows),
+           "rows_added_reported_by_check": 0}
+    for i, r in enumerate(before):
+        changed = key(r) not in new or any(str(r.get(f, "")).strip() != str(new[key(r)].get(f, "")).strip()
+                                           for f in fields)
+        if changed:
+            out["edited_rows_flagged" if i in cmp.flagged_rows else "edited_rows_unflagged"] += 1
+    old_keys = {key(r) for r in before}
+    reported = {key(r) for r in cmp.only_check}
+    out["rows_added_reported_by_check"] = sum(1 for k in new if k not in old_keys and k in reported)
+    return out
 
 
 def _edit_counts(before: list[dict], after: list[dict]) -> dict:

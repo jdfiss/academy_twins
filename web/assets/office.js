@@ -205,6 +205,17 @@ function invalidateDraftConfirmation() {
   dashMsg("#dash-confirm-msg", "");
 }
 
+// 雙模型交叉驗證摘要：一致不代表正確，只用來排出優先核對的列
+function crossCheckSummary(cc) {
+  if (!cc) return "";
+  if (cc.status !== "ok") return `<div class="issue WARNING">⚠ 未交叉驗證：${esc(cc.note)}；請逐列對照原文</div>`;
+  const flagged = cc.flagged_rows + cc.missing_in_primary;
+  return `<div class="issue ${flagged ? "WARNING" : "PASS"}">${flagged ? "⚠" : "✔"} 雙模型交叉驗證（${esc(cc.primary_model)}／${esc(cc.check_model)}）：`
+    + `一致 ${cc.agreed_rows} 列、需優先核對 ${cc.flagged_rows} 列`
+    + (cc.missing_in_primary ? `、第二模型多擷取 ${cc.missing_in_primary} 列（可能漏列）` : "")
+    + `。兩模型一致不代表正確，送出前仍須逐列對照原文。</div>`;
+}
+
 function renderDraft(fresh = false) {
   const d = DRAFT;
   $("#dash-draft").hidden = false;
@@ -216,6 +227,7 @@ function renderDraft(fresh = false) {
   $("#dash-exists").textContent = d.exists ? `；${d.student_id} 已有修課紀錄，確認後將以本次紀錄取代` : "";
   const docIssues = d.issues.filter((i) => i.row === null);
   const rowIssues = (i) => d.issues.filter((x) => x.row === i);
+  $("#dash-cross").innerHTML = crossCheckSummary(d.cross_check);
   $("#dash-issues").innerHTML = docIssues.map((i) =>
     `<div class="issue ${i.level === "error" ? "FAIL" : "WARNING"}">${i.level === "error" ? "✘" : "⚠"} ${esc(i.message)}</div>`).join("");
   const cats = ["", ...d.categories];
