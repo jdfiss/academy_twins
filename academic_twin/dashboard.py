@@ -16,6 +16,7 @@ import argparse
 import csv
 import io
 import json
+import re
 import sys
 import unicodedata
 from collections import Counter
@@ -23,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import llm
+from . import llm, pdf_text
 from .knowledge_base import KnowledgeBase
 from .records import REQUIRED, TERM_RE
 
@@ -89,15 +90,19 @@ class Extraction:
     format: str = FORMAT
     cohort: int | None = None  # 文件上的入學學年度，承辦人確認後寫入名單
     fallback_from: str = ""  # 改用備援模型時，前面模型失敗的原因
+    # 從 PDF 取出的逐頁文字，供 check 核對 AI 宣稱的原文與頁碼；None 表示未要求核對（舊行為）
+    pages: pdf_text.PdfText | None = field(default=None, repr=False)
 
 
-def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None) -> Extraction:
+def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: bool = False) -> Extraction:
     """送 Gemini 擷取；失敗時丟 llm.LLMError，呼叫端應保留手動上傳 CSV 的流程。
 
     指定 model 時只用該模型、不改用備援（交叉驗證的第二模型用）。
+    read_text=True 時另從 PDF 取出逐頁文字（不送給 AI），check 會據以核對每列原文與頁碼。
     """
     if not pdf.startswith(b"%PDF"):
         raise ValueError("不是 PDF 檔案")
+    pages = pdf_text.extract_pages(pdf) if read_text else None
     result = llm.generate_json(PROMPT, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
     data = result.data if isinstance(result.data, dict) else {}
     mapping = FORMATS[fmt]
@@ -110,11 +115,14 @@ def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None) -> Extracti
         rows.append(row)
     return Extraction(rows, data.get("sections", []), data.get("declared_required"), data.get("declared_earned"),
                       str(data.get("unreadable") or ""), result.model, result.generated_at, PROMPT_VERSION, fmt,
-                      data.get("cohort"), result.fallback_from)
+                      data.get("cohort"), result.fallback_from, pages)
 
 
-def check(ext: Extraction, kb: KnowledgeBase) -> list[Issue]:
-    """格式、重複、來源與文件宣告數字的檢查。通過檢查不代表擷取正確，仍須人工對照原文。"""
+def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = None) -> list[Issue]:
+    """格式、重複、來源與文件宣告數字的檢查。通過檢查不代表擷取正確，仍須人工對照原文。
+
+    有 PDF 逐頁文字時（pages 參數，未給則用 ext.pages）另核對原文與頁碼，結果為警示，見 check_sources。
+    """
     issues: list[Issue] = []
     mapping = FORMATS[ext.format]
     if ext.unreadable:
@@ -163,7 +171,50 @@ def check(ext: Extraction, kb: KnowledgeBase) -> list[Issue]:
     if ext.declared_earned is not None and ext.declared_earned != earned(ext.rows):
         issues.append(Issue("warning", f"學分區實得 {ext.declared_earned} 學分，擷取的及格紀錄合計 "
                                        f"{earned(ext.rows)} 學分，可能有漏列或多列"))
+    text = pages if pages is not None else ext.pages
+    if text is not None:
+        issues += check_sources(ext.rows, text)
     return issues
+
+
+def check_sources(rows: list[dict], text: pdf_text.PdfText) -> list[Issue]:
+    """到 PDF 文字裡核對 AI 宣稱的原文與頁碼，並檢查課號、學分、成績是否出現在該列原文。
+
+    全部是警示（承辦人須對照文件確認），不是錯誤：取出的文字是近似，找不到不等於一定錯。
+    PDF 取不出文字時只列一則整份警示，不當成原文不符。
+    """
+    issues: list[Issue] = []
+    if not text.ok:
+        issues.append(Issue("warning", f"無法自動核對原文：{text.reason}；請逐列對照文件"))
+    for i, r in enumerate(rows):
+        source, page = r.get("source_text"), r.get("source_page")
+        if not isinstance(source, str) or not source.strip() or type(page) is not int or page < 1:
+            continue  # 缺來源已是錯誤
+        if text.ok:
+            message = pdf_text.describe(pdf_text.locate(text, source, page), page)
+            if message:
+                issues.append(Issue("warning", message, i))
+        missing = _fields_not_in_source(r, source)
+        if missing:
+            issues.append(Issue("warning", f"此列原文中找不到{'、'.join(missing)}，擷取值可能與原文不符", i))
+    return issues
+
+
+def _fields_not_in_source(r: dict, source: str) -> list[str]:
+    """課號以正規化後的子字串比對；學分、成績比對原文中出現的數字（數值相同即可，如 80 與 80.0）。"""
+    out = []
+    code = pdf_text.normalize(r.get("code", ""))
+    if code and code not in pdf_text.normalize(source):
+        out.append(f"科目代碼「{r.get('code')}」")
+    numbers = {float(n) for n in re.findall(r"\d+(?:\.\d+)?", unicodedata.normalize("NFKC", source))}
+    for k, label in (("credits", "學分"), ("grade", "成績")):
+        value = str(r.get(k, "")).strip()
+        try:
+            if float(value) not in numbers:
+                out.append(f"{label}「{value}」")
+        except ValueError:
+            continue  # 非數字已是錯誤
+    return out
 
 
 def _grade(r: dict) -> float | None:
@@ -250,7 +301,7 @@ def main(argv: list[str]) -> None:
 
     kb = knowledge_base.load(KB_PATH)
     try:
-        ext = extract(args.pdf.read_bytes())
+        ext = extract(args.pdf.read_bytes(), read_text=True)
     except llm.LLMError as e:
         log_run({"type": "extract_failed", "file": args.pdf.name, "case_set": args.case_set,
                  "model": llm.model_name(), "prompt_version": PROMPT_VERSION,
