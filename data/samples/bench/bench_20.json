@@ -1,0 +1,32 @@
+{
+  "case_id": "bench_20",
+  "student_id": "DEMO-B20",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "開發",
+  "tags": [
+    "retake",
+    "rare_credits"
+  ],
+  "tag_labels": [
+    "重修（同課號不同學期）",
+    "少見學分數（0、1、4、6、9）"
+  ],
+  "cohort": 114,
+  "rows": 61,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "B02",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 3,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}

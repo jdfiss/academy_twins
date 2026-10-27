@@ -1,0 +1,32 @@
+{
+  "case_id": "bench_14",
+  "student_id": "DEMO-B14",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "開發",
+  "tags": [
+    "rare_credits",
+    "dense_section"
+  ],
+  "tag_labels": [
+    "少見學分數（0、1、4、6、9）",
+    "同一段落很多列"
+  ],
+  "cohort": 114,
+  "rows": 78,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "B02",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 4,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}
