@@ -444,8 +444,9 @@ function renderRuleVersions(v) {
         + `${y.activated.added.length ? `、新增 ${esc(y.activated.added.join("、"))}` : ""}；${esc(y.activated.by)}・${esc(y.activated.at)}）`
         + ` <button class="ghost small" data-revert="${y.year}">還原為正式規則庫</button>`
       : "正式規則庫"}<div class="muted small">規則版本 ${esc(y.rule_version)}</div></div>`).join("");
-  $("#rule-versions-drafts").innerHTML = v.confirmed_drafts.map((d) => `<div class="small" style="margin-bottom: 6px">
+  $("#rule-versions-drafts").innerHTML = v.confirmed_drafts.map((d) => `<div class="small" style="margin-bottom: 12px">
     ${d.year} 學年度・${esc(d.requirement_ids.join("、"))}・確認人 ${esc(d.reviewer)}・${esc(d.confirmed_at)}
+    ${renderRulePreview(d.preview)}
     <button class="primary small" data-activate="${esc(d.draft_id)}">啟用</button></div>`).join("")
     || '<span class="muted small">尚無已確認的草稿</span>';
   $("#rule-versions-history").innerHTML = v.history.map((e) => `<div>${esc(e.at)}・${e.year} 學年度・`
@@ -456,6 +457,29 @@ function renderRuleVersions(v) {
       activated_by: $("#rule-activator").value })));
   document.querySelectorAll("[data-revert]").forEach((b) => b.addEventListener("click", () =>
     changeRuleVersion("revert", { year: Number(b.dataset.revert), reverted_by: $("#rule-activator").value })));
+}
+
+// 啟用前影響預覽：虛構學生由規則引擎以目前規則與套用草稿後的規則各審查一次，列出判定不同的案例。
+function renderRulePreview(p) {
+  if (!p) return "";
+  if (p.error) return `<div class="issue WARNING">啟用前影響預覽無法產生：${esc(p.error)}</div>`;
+  const verdict = (r) => !r ? "沒有這條要求" : r.pending ? "待確認" : r.satisfied ? "符合" : "未符合";
+  const side = (r) => r ? `${verdict(r)}（${r.have}／${r.need}）` : verdict(r);
+  const course = (c) => `${esc(c.code)} ${esc(c.name)} ${c.credits} 學分：${c.grade === null ? "未修" : `成績 ${c.grade}`}`;
+  const groups = p.differences.map((d) => `<div class="issue WARNING" style="margin: 6px 0">
+    ${d.changes.map((c) => `<div><b>${esc(c.id)} ${esc(c.title)}</b>：目前 ${side(c.old)} → 啟用後 ${side(c.new)}</div>`).join("")}
+    <div>整體狀態：${esc(d.old_status)} → ${esc(d.new_status)}</div>
+    <div class="muted">代表案例（虛構）：${esc(d.case.edits.join("；"))}；總學分 ${d.case.total_credits.old}
+      ${d.case.total_credits.new !== d.case.total_credits.old ? `→ ${d.case.total_credits.new}` : ""}・同類案例 ${d.cases_found} 個</div>
+    ${d.case.key_courses.length ? `<details><summary class="muted">關鍵課程</summary>
+      ${d.case.key_courses.map((c) => `<div>${course(c)}</div>`).join("")}</details>` : ""}</div>`).join("");
+  const quiet = p.changed_without_observed_difference.length
+    ? `<div class="muted">規則內容有改、但搜尋範圍內未發現判定差異：${esc(p.changed_without_observed_difference
+      .map((r) => `${r.id} ${r.title}`).join("、"))}</div>` : "";
+  return `<details class="small" style="margin: 6px 0" ${p.differences.length ? "open" : ""}>
+    <summary><b>啟用前影響預覽</b>：${esc(p.message)}</summary>
+    <div class="muted">${esc(p.label)}。${esc(p.base_case)}。搜尋範圍：${esc(p.scope)}。</div>
+    ${groups}${quiet}</details>`;
 }
 
 async function loadRuleVersions() {

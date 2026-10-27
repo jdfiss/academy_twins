@@ -7,7 +7,7 @@ import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 
-from . import cross_check, dashboard, report, rule_draft, rule_versions
+from . import cross_check, dashboard, report, rule_diff, rule_draft, rule_versions
 from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
 
@@ -214,8 +214,25 @@ class OfficeMixin:
                        "activated": latest[year] if latest.get(year, {}).get("type") == "activate" else None}
                       for year, rs in sorted(self.rulesets.items())],
             "history": list(reversed(rule_versions.history())),
-            "confirmed_drafts": rule_versions.confirmed_drafts(),
+            "confirmed_drafts": [{**d, "preview": self._rule_preview(d)} for d in rule_versions.confirmed_drafts()],
         }
+
+    def _rule_preview(self, draft: dict) -> dict:
+        """啟用前影響預覽：該年度目前使用的規則 vs 套用草稿後的版本，以虛構案例由引擎各審查一次。
+
+        只預覽、不啟用；同一份草稿對同一規則版本只搜尋一次。失敗時回傳錯誤訊息，不影響啟用流程。
+        """
+        if draft["year"] not in self.rulesets:
+            return {"error": f"沒有載入 {draft['year']} 學年度規則庫，無法預覽"}
+        rs = self.rulesets[draft["year"]]
+        cache = self.__dict__.setdefault("_rule_previews", {})
+        key = (draft["draft_id"], rs.rule_version)
+        if key not in cache:
+            try:
+                cache[key] = rule_diff.preview_draft(draft["draft_id"], rs.kb)
+            except (KeyError, ValueError, TypeError) as e:
+                return {"error": str(e.args[0] if e.args else e)}
+        return cache[key]
 
     def rule_activate(self, draft_id: str, activated_by: str, acknowledge: bool = False) -> dict:
         """啟用後立即以新版本審查該年度學生；覆核紀錄因規則版本不同會標示建議再確認。"""
