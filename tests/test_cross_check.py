@@ -9,7 +9,7 @@ from unittest import mock
 from academic_twin import cross_check, dashboard, llm
 from academic_twin.api import AcademicTwinService
 from academic_twin.records import RecordsError
-from tests.test_dashboard import answer_rows, fake_response
+from tests.test_dashboard import answer_rows, fake_response, pdf_pages
 
 CHECK = "check-model"
 
@@ -123,7 +123,7 @@ class OfficeFlowTest(unittest.TestCase):
         self.service = AcademicTwinService()
 
     def extract(self, primary, check=None):
-        with models(primary, check):
+        with models(primary, check), pdf_pages(fake_response()):  # PDF 本身是完整的標準答案
             return self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
 
     def test_draft_reports_cross_check_summary_and_row_warning(self):
@@ -170,6 +170,17 @@ class OfficeFlowTest(unittest.TestCase):
         self.service.dashboard_confirm(draft["draft_id"], draft["rows"], "王助教", acknowledge_warnings=True)
         cc = json.loads(self.log.read_text(encoding="utf-8").splitlines()[-1])["cross_check"]
         self.assertEqual(cc["status"], "unavailable")
+
+    def test_office_flow_checks_sources_against_real_pdf_text(self):
+        """用真的虛構 PDF 取文字：AI 編造的原文在系辦草稿中被標示（不送給 AI，只在本機比對）。"""
+        pdf = (Path(__file__).parent.parent / "data" / "samples" / "dashboard_demo_d02.pdf").read_bytes()
+        rows = [dict(r) for r in fake_response().data["rows"]]
+        rows[0]["source_text"] = "113-2 IM9999 不存在的課 3 99"
+        with models(fake_response(rows)):
+            draft = self.service.dashboard_extract(pdf, "DEMO-D02")
+        row0 = [i["message"] for i in draft["issues"] if i["row"] == 0]
+        self.assertTrue(any("編造" in m for m in row0), row0)
+        self.assertFalse(any("無法自動核對" in i["message"] for i in draft["issues"]))
 
 
 if __name__ == "__main__":

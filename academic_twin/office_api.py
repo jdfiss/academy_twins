@@ -7,7 +7,7 @@ import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 
-from . import cross_check, dashboard, report, rule_diff, rule_draft, rule_versions
+from . import cross_check, dashboard, pdf_text, report, rule_diff, rule_draft, rule_versions
 from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
 
@@ -115,6 +115,7 @@ class OfficeMixin:
         """
         sid = _student_id(student_id)
         ext, other = cross_check.extract_pair(pdf)
+        ext.pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
         cmp = cross_check.recheck(ext.rows, other, ext.model)
         drafts = self.__dict__.setdefault("_dashboard_drafts", {})
         draft_id = uuid.uuid4().hex
@@ -230,7 +231,7 @@ class OfficeMixin:
         if key not in cache:
             try:
                 cache[key] = rule_diff.preview_draft(draft["draft_id"], rs.kb)
-            except (KeyError, ValueError, TypeError) as e:
+            except Exception as e:  # 預覽失敗只顯示訊息，不能讓規則版本頁整個打不開
                 return {"error": str(e.args[0] if e.args else e)}
         return cache[key]
 

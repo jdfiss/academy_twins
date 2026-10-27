@@ -1,4 +1,5 @@
 """AI 解析儀表板：檢查、量測與確認流程。以假的 AI 回應測試，不連網、不送出任何資料。"""
+import contextlib
 import csv
 import dataclasses
 import io
@@ -9,7 +10,7 @@ import urllib.error
 from pathlib import Path
 from unittest import mock
 
-from academic_twin import dashboard, llm
+from academic_twin import dashboard, llm, pdf_text
 from academic_twin.api import AcademicTwinService
 from academic_twin.records import RecordsError
 
@@ -32,11 +33,19 @@ def fake_response(rows=None, **extra):
     return llm.LLMResult(data, "fake-model", "2026-10-21T00:00:00")
 
 
+def pdf_pages(response):
+    """假 PDF 的逐頁文字：以 AI 回應宣稱的原文組成第 1 頁，讓原文核對通過（核對本身另有測試）。"""
+    text = "\n".join(r.get("source_text") or "" for r in response.data.get("rows", []))
+    return mock.patch.object(pdf_text, "extract_pages", return_value=pdf_text.PdfText([text]))
+
+
+@contextlib.contextmanager
 def two_models(response):
     """兩個模型讀到相同內容的替身：主模型回原名稱，指定 model 時回該名稱（交叉驗證一致）。"""
     def generate(*args, model=None, **kwargs):
         return dataclasses.replace(response, model=model or response.model)
-    return mock.patch.object(llm, "generate_json", side_effect=generate)
+    with mock.patch.object(llm, "generate_json", side_effect=generate), pdf_pages(response):
+        yield
 
 
 class DashboardTest(unittest.TestCase):

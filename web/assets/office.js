@@ -334,6 +334,7 @@ function renderRuleDraft(d) {
   $("#rule-draft-panel").hidden = false;
   $("#rule-meta").textContent = '模型 ' + d.model + '・' + d.generated_at + '・提示 ' + d.prompt_version;
   $("#rule-issues").innerHTML = d.issues.map((i) => '<div class="issue FAIL">' + esc(i.message) + '</div>').join("")
+    + (d.warnings || []).map((w) => '<div class="issue WARNING">⚠ ' + esc(w.message) + '</div>').join("")
     + (d.baseline_changed ? '<div class="issue WARNING">對照 JSON 在草擬後已改變，請重新核對全部差異。</div>' : "");
   $("#rule-requirements").innerHTML = (Array.isArray(d.requirements) ? d.requirements : []).map((r) => {
     if (!r || typeof r !== 'object') return '<div class="issue FAIL">要求格式錯誤，請修正。</div>';
