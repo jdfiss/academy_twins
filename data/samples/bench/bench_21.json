@@ -1,0 +1,31 @@
+{
+  "case_id": "bench_21",
+  "student_id": "DEMO-B21",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "驗證",
+  "tags": [
+    "failed",
+    "long_name"
+  ],
+  "tag_labels": [
+    "不及格",
+    "長課名或全形括號"
+  ],
+  "cohort": 114,
+  "rows": 43,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 3,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}

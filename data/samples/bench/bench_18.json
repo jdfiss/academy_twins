@@ -1,0 +1,32 @@
+{
+  "case_id": "bench_18",
+  "student_id": "DEMO-B18",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "驗證",
+  "tags": [
+    "other_cohort",
+    "retake"
+  ],
+  "tag_labels": [
+    "非 114 入學年度",
+    "重修（同課號不同學期）"
+  ],
+  "cohort": 113,
+  "rows": 58,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "B02",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 3,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}

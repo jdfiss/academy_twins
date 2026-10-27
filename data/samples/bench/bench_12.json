@@ -1,0 +1,28 @@
+{
+  "case_id": "bench_12",
+  "student_id": "DEMO-B12",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "驗證",
+  "tags": [
+    "baseline"
+  ],
+  "tag_labels": [
+    "一般（無特殊情境，對照用）"
+  ],
+  "cohort": 114,
+  "rows": 41,
+  "sections": [
+    "A01",
+    "A02",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 2,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}

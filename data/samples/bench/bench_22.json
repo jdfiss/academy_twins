@@ -1,0 +1,34 @@
+{
+  "case_id": "bench_22",
+  "student_id": "DEMO-B22",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "開發",
+  "tags": [
+    "grade_boundary",
+    "dense_section",
+    "retake"
+  ],
+  "tag_labels": [
+    "成績邊界（59／60）",
+    "同一段落很多列",
+    "重修（同課號不同學期）"
+  ],
+  "cohort": 114,
+  "rows": 78,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "B02",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 4,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}
