@@ -91,11 +91,14 @@ class Extraction:
     fallback_from: str = ""  # 改用備援模型時，前面模型失敗的原因
 
 
-def extract(pdf: bytes, fmt: str = FORMAT) -> Extraction:
-    """送 Gemini 擷取；失敗時丟 llm.LLMError，呼叫端應保留手動上傳 CSV 的流程。"""
+def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None) -> Extraction:
+    """送 Gemini 擷取；失敗時丟 llm.LLMError，呼叫端應保留手動上傳 CSV 的流程。
+
+    指定 model 時只用該模型、不改用備援（交叉驗證的第二模型用）。
+    """
     if not pdf.startswith(b"%PDF"):
         raise ValueError("不是 PDF 檔案")
-    result = llm.generate_json(PROMPT, SCHEMA, [llm.Attachment("application/pdf", pdf)])
+    result = llm.generate_json(PROMPT, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
     data = result.data if isinstance(result.data, dict) else {}
     mapping = FORMATS[fmt]
     rows = []
@@ -189,15 +192,7 @@ def compare(rows: list[dict], answer: list[dict]) -> dict:
     def key(r):
         return r["code"].strip(), r["term"].strip()
 
-    def norm(k, v):
-        v = unicodedata.normalize("NFKC", str(v)).strip()
-        if k in ("credits", "grade"):
-            try:
-                return float(v)
-            except ValueError:
-                return v
-        return v
-
+    norm = normalize
     got = {}
     for r in rows:
         got.setdefault(key(r), r)
@@ -223,6 +218,17 @@ def compare(rows: list[dict], answer: list[dict]) -> dict:
             "field_correct": correct, "field_total": total,
             "field_accuracy": round(correct / total, 4) if total else None,
             "wrong_by_field": dict(wrong), "fully_correct": missing == 0 and extra == 0 and correct == total}
+
+
+def normalize(k: str, v) -> object:
+    """比對用：NFKC 正規化（全形與半形標點視為相同）；學分與成績比數值。"""
+    v = unicodedata.normalize("NFKC", str(v)).strip()
+    if k in ("credits", "grade"):
+        try:
+            return float(v)
+        except ValueError:
+            return v
+    return v
 
 
 def log_run(entry: dict, path: Path | None = None) -> None:
