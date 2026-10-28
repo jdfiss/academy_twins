@@ -103,6 +103,8 @@ class DemoFlagsTest(unittest.TestCase):
         self.assertIn("虛構系辦", row["actions"])
         self.assertIn("外系總上限", row["flag_messages"])
         self.assertEqual(rows["DEMO-CLEAN"]["flag_types"], "")
+        self.assertEqual(row["overflow"], "通識超修 2 學分（可移入外系 2）")
+        self.assertEqual(rows["DEMO-CLEAN"]["overflow"], "")
         self.service.load_data(roster=("r.csv", "student_id\nDEMO-FLAGS\nDEMO-ABSENT\n"))
         rows = list(csv.DictReader(io.StringIO(self.service.export_csv())))
         self.assertTrue(any(r["status"] == "ROSTER_NO_RECORDS" for r in rows))

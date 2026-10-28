@@ -1,0 +1,31 @@
+{
+  "case_id": "bench_05",
+  "student_id": "DEMO-B05",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "開發",
+  "tags": [
+    "rare_credits",
+    "long_name"
+  ],
+  "tag_labels": [
+    "少見學分數（0、1、4、6、9）",
+    "長課名或全形括號"
+  ],
+  "cohort": 114,
+  "rows": 34,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 2,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}

@@ -1,0 +1,32 @@
+{
+  "case_id": "bench_10",
+  "student_id": "DEMO-B10",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "開發",
+  "tags": [
+    "long_multipage",
+    "failed"
+  ],
+  "tag_labels": [
+    "長紀錄跨頁（70 列以上）",
+    "不及格"
+  ],
+  "cohort": 114,
+  "rows": 81,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "B02",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 4,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}
