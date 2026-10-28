@@ -5,9 +5,32 @@ const params = new URLSearchParams(location.search);
 const DEMO = params.has("demo");
 setupTabs("twin-student-view");
 
-// 白話說明（B 組待建置）：依 r.kind 與審查結果組成學生看得懂的說明；只能引用審查結果，不得自行計算或改判
+// 白話說明：依 r.kind 與審查結果組成學生看得懂的說明；只引用 have、need、shortfall 等審查結果，不自行計算或改判
+// 缺的課程與缺額已由 renderRequirements 列出（「缺：」「尚缺」），這裡不再重複
+const EXPLAIN = {
+  all_of: (r) => r.satisfied
+    ? "這些是必修課，你都已經修過並及格。"
+    : `這些是必修課，每一門都要修過並及格；共 ${r.need} 門，你已通過 ${r.have} 門。`,
+  taken_all: () => "必選課只要「有修過」就算符合，不及格也可以；但不及格就拿不到這門課的學分。",
+  n_of: (r) => `從指定的課程中選 ${r.need} 門及格即可，不必全修。`
+    + (r.satisfied ? `你已經修了 ${r.have} 門。` : `上面列出的是可以選的課，再挑 ${r.shortfall} 門就夠了。`),
+  credits_from: (r) => `從指定範圍的課程修滿 ${r.need} 學分；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
+  category_credits: (r) => `這一類課程合計要修滿 ${r.need} 學分；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
+  category_count: (r) => `這項看的是門數（或學期數），不看學分；需要 ${r.need}，目前 ${r.have}${r.satisfied ? "，已經足夠" : ""}。`
+    + (!r.satisfied && !r.shortfall && r.detail ? `數量已經夠了，但還有附加條件沒達到：${esc(r.detail)}。` : ""),
+  dept_elective_credits: (r) => `本系開設的選修課要修滿 ${r.need} 學分（外系課不算在這裡）；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
+  english_threshold: (r) => r.satisfied
+    ? "已符合英文畢業門檻。"
+    : r.pending
+      ? `修課紀錄看不出你是否已通過英檢。英檢達標就符合；沒有的話，修替代課程及格滿 ${r.need} 學分也可以（目前 ${r.have} 學分）。英檢結果由語言中心登錄，請先確認登錄狀態。`
+      : `英檢尚未達標，替代課程目前 ${r.have} 學分，要滿 ${r.need} 學分才算通過。`,
+  total_credits: (r) => `這是「可採計」的畢業學分，不是你修過的所有學分，例如不及格、不計入畢業的課，或超過上限的外系學分都不算。需要 ${r.need}，目前 ${r.have}${r.satisfied ? "，已經足夠" : ""}。`,
+};
+
 function explain(r) {
-  return "";
+  const text = EXPLAIN[r.kind]?.(r) ?? "這項規則的白話說明尚未提供，請參考上方條件與規章依據。";
+  const terms = `校務系統代碼：${esc(r.system_code ?? "待提供")}・章則用語：${esc(r.regulation_term ?? "待提供")}`;
+  return `<div class="small" style="margin-top:6px">${text}</div><div class="muted small">${terms}</div>`;
 }
 
 // ---------- 我的進度 ----------
@@ -186,13 +209,24 @@ $("#run-sim").addEventListener("click", async () => {
       .filter(([c, t]) => { const n = sc.terms.find((x) => x.courses.some((y) => y.code === c)); return !n || n.term !== t; })
       .map(([c]) => c));
     const delayed = sc.delay_terms > 0 || !sc.feasible;
+    // 數字全部來自 simulate 的結果（graduation、delay_terms、impact），這裡只負責排版
+    const stat = (label, value, color = "inherit") =>
+      `<div class="card" style="padding:10px 14px;flex:1 1 140px"><div class="muted small">${label}</div>
+        <div style="font-size:22px;font-weight:700;color:${color}">${value}</div></div>`;
+    const moved = sc.impact.slice(0, -1);
     $("#sim-result").innerHTML = `
       <div class="small muted">條件：${sc.conditions.map(esc).join("；")}</div>
-      <div class="verdict ${delayed ? "delay" : "same"}">
-        ${!sc.feasible ? "⚠ 此方案排不完" : delayed ? `會延畢 ${sc.delay_terms} 學期：${sim.base.graduation} → ${sc.graduation}` : `不影響畢業：仍可在 ${sc.graduation} 畢業`}
-        <ul class="impact">${sc.impact.slice(0, -1).map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0">
+        ${stat("原本最早畢業", esc(sim.base.graduation ?? "已符合"))}
+        ${stat("模擬後最早畢業", sc.feasible ? esc(sc.graduation ?? "已符合") : "排不完", delayed ? "var(--fail)" : "var(--pass)")}
+        ${stat("延畢", !sc.feasible ? "—" : sc.delay_terms > 0 ? `${sc.delay_terms} 學期` : "不會延畢", delayed ? "var(--fail)" : "var(--pass)")}
+        ${stat("被往後推的課", `${moved.length} 門`, moved.length ? "var(--warn)" : "inherit")}
       </div>
-      <div class="muted small" style="margin-bottom:6px">模擬後的路徑（紅框＝被往後推的課）</div>
+      <div class="verdict ${delayed ? "delay" : "same"}">
+        ${!sc.feasible ? esc(sc.impact.at(-1)) : delayed ? `會延畢 ${sc.delay_terms} 學期：${sim.base.graduation} → ${sc.graduation}` : `不影響畢業：仍可在 ${sc.graduation} 畢業`}
+        ${moved.length ? `<ul class="impact">${moved.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
+      </div>
+      <div class="muted small" style="margin-bottom:6px">模擬後的路徑（紅框＝被往後推的課）。開課學期依應修科目表的建議修課學期推估，不是實際開課資料。</div>
       <div class="timeline">${renderPlan(sc, movedCodes, away)}</div>`;
   } catch (err) {
     $("#sim-result").innerHTML = `<div class="issue FAIL">${esc(err.message)}</div>`;
