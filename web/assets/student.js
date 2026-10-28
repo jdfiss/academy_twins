@@ -5,9 +5,44 @@ const params = new URLSearchParams(location.search);
 const DEMO = params.has("demo");
 setupTabs("twin-student-view");
 
-// 白話說明（B 組待建置）：依 r.kind 與審查結果組成學生看得懂的說明；只能引用審查結果，不得自行計算或改判
+// 白話說明：依 r.kind 與審查結果組成學生看得懂的說明；只引用 have、need、shortfall、detail、satisfied、pending，不自行計算或改判
+const EXPLAIN = {
+  all_of: (r) => r.satisfied
+    ? `這 ${r.need} 門課每一門都要及格才算數，你都已經通過了。`
+    : `這 ${r.need} 門課每一門都要及格才算數。你已通過 ${r.have} 門，還有 ${r.shortfall} 門沒通過（見上方「缺」）。`,
+  taken_all: (r) => r.satisfied
+    ? `必選課只要「有修過」就算，不需要及格；這 ${r.need} 門你都修過了。及格的話，學分另外算進本系選修。`
+    : `必選課只要「有修過」就算，不需要及格。你修過 ${r.have} 門，還有 ${r.shortfall} 門沒修過（見上方「缺」）。`,
+  n_of: (r) => r.satisfied
+    ? `從清單中任選 ${r.need} 門及格即可，你已經達到。`
+    : `從清單中任選 ${r.need} 門及格即可。你已通過 ${r.have} 門，還差 ${r.shortfall} 門。`,
+  credits_from: (r) => r.satisfied
+    ? `從指定課程中修滿 ${r.need} 學分即可，你已經達到。`
+    : `從指定課程中修滿 ${r.need} 學分即可。目前採計 ${r.have} 學分，還差 ${r.shortfall} 學分。`,
+  category_credits: (r) => r.satisfied
+    ? `這一類課要修滿 ${r.need} 學分，你已有 ${r.have} 學分算進這一類。`
+    : `這一類課要修滿 ${r.need} 學分。目前算進這一類的有 ${r.have} 學分，還差 ${r.shortfall} 學分。`,
+  category_count: (r) => r.satisfied
+    ? `這一項要修 ${r.need} 門，你已修 ${r.have} 門${r.detail ? `（${r.detail}）` : ""}。`
+    : r.shortfall
+      ? `這一項要修 ${r.need} 門。你已修 ${r.have} 門，還差 ${r.shortfall} 門${r.detail ? `（${r.detail}）` : ""}。`
+      : `門數已經夠了，但還有附帶條件沒達成${r.detail ? `：${r.detail}` : ""}，請對照上方標題。`,
+  dept_elective_credits: (r) => r.satisfied
+    ? `本系選修要修滿 ${r.need} 學分，目前採計 ${r.have} 學分，已經達到。`
+    : `本系選修要修滿 ${r.need} 學分。目前採計 ${r.have} 學分，還差 ${r.shortfall} 學分。`,
+  english_threshold: (r) => r.satisfied
+    ? `你已達到英文畢業門檻。`
+    : r.pending
+      ? `修課紀錄看不出你是否通過英檢。已通過英檢的話，這項就符合；還沒通過的話，可以改修進修英文，及格 ${r.need} 學分即可（目前 ${r.have} 學分）。`
+      : `目前紀錄顯示尚未通過英檢。可以改修進修英文，及格 ${r.need} 學分即可；目前 ${r.have} 學分，還差 ${r.shortfall} 學分。`,
+  total_credits: (r) => r.satisfied
+    ? `畢業總共要 ${r.need} 學分，你目前可採計 ${r.have} 學分，已經達到。`
+    : `畢業總共要 ${r.need} 學分，你目前可採計 ${r.have} 學分，還差 ${r.shortfall} 學分。`,
+};
+
 function explain(r) {
-  return "";
+  const text = EXPLAIN[r.kind]?.(r);
+  return text ? `<div class="small" style="margin-top:6px">💬 ${esc(text)}</div>` : "";
 }
 
 // ---------- 我的進度 ----------

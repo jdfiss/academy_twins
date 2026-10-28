@@ -116,7 +116,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `academic_twin/evaluate.py` | A | 實證比對：審查結果對承辦人答案、原流程與輔助流程計時；只輸出彙總數字 |
 | `academic_twin/graph.py` | B | 課程關係、瓶頸、循環檢查 |
 | `academic_twin/planner.py` | B | 修課路徑規劃與情境 |
-| 白話說明模組（新增，如 `academic_twin/explain.py`） | B | 依審查結果產生學生看得懂的說明；不改判定 |
+| 白話說明（`web/assets/student.js` 的 `EXPLAIN`） | B | 依審查結果產生學生看得懂的說明；不改判定。放在前端是為了不改動交接格式 |
 | 自然語言 What-if 模組（新增，如 `academic_twin/ask.py`） | B | AI 將學生問題轉成 `simulate` 參數；計算與回答依據只來自規劃器結果 |
 | `academic_twin/llm.py` | A（共用，變更需通知 B） | 以標準函式庫呼叫 Gemini；金鑰讀環境變數或未進版控的 `.env`；每個模型有總等待上限，主模型過載或逾時時改用備援模型；兩組的 AI 功能共用 |
 | `academic_twin/dashboard.py` | A | AI 解析儀表板 PDF 為待確認紀錄（附來源頁碼與原文）、檢查、與標準答案比對 |
@@ -222,7 +222,7 @@ A 組 flags 虛構示範使用 `data/curriculum_demo_flags.json` 與 `data/stude
 |---|---|---|---|---|---|
 | 0 | 依 stub 建學生頁骨架 | **已完成骨架**：學生頁有誤判提示區、需辦理事項區與「試算」標示；白話說明留有 `explain()` 掛點 | `student.html?demo` 可顯示示意資料 | — | — |
 | 1 | 學分當前狀態 | 強化進度頁：一眼看出已修、缺修、超修；嵌入誤判提示（依 `flags` 分開「疑似校務系統誤判」與「真正缺修」）與需辦理事項（依 `actions` 列出事項與單位） | 不讓學生誤以為一定不能畢業，也不保證一定能畢業（[學生端驗收條件](STUDENT_REQUIREMENTS.md#個人修業進度)）；每項需辦理事項指出單位或承辦人 | 重要性 | 先用 `demo-twin.json`；A 組產生真實 flags、actions 後接上 |
-| 1 | 白話說明 | 每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名；有系統代碼與章則用語時並列，沒有時顯示「待提供」 | 每條要求都有說明；只引用審查結果，不自行計算或更改判定；附規章依據 | 重要性、可行性 | 無（可先以 114 規則庫撰寫） |
+| 1 | 白話說明 | **已完成**：`web/assets/student.js` 的 `EXPLAIN` 模板，掛在 `explain()`。每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名；有系統代碼與章則用語時並列，沒有時顯示「待提供」 | 每條要求都有說明；只引用審查結果，不自行計算或更改判定；附規章依據 | 重要性、可行性 | 無（可先以 114 規則庫撰寫） |
 | 1 | What-if 強化 | 現有情境（某課某學期不修、出國交換）的結果更直觀：畢業學期變化、延畢學期數、受影響課程 | 結果全部來自 `simulate`；開課學期為推估時明確標示 | 重要性 | 無 |
 | 1 | AI 自然語言 What-if | 學生用一句話提問；AI 只把問題轉成 `simulate` 參數並讓學生確認；規劃器計算；回答只引用計算結果 | 符合「AI 輸入與啟用驗收」的 AI 說明規定；轉不出參數或服務失敗時，退回手動選情境；不支援的情境明說不支援 | 創新性 | AI 服務 |
 | 1 | 兩端一致性測試 | 基本版已在 `tests/test_contract.py`；擴充 flags 與年度載入情境 | 同一份資料在兩端判定完全相同；納入每次測試 | 實證性 | A 組 flags、年度載入 |
