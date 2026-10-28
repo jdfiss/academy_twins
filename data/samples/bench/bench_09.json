@@ -1,0 +1,34 @@
+{
+  "case_id": "bench_09",
+  "student_id": "DEMO-B09",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "驗證",
+  "tags": [
+    "other_cohort",
+    "long_multipage",
+    "retake"
+  ],
+  "tag_labels": [
+    "非 114 入學年度",
+    "長紀錄跨頁（70 列以上）",
+    "重修（同課號不同學期）"
+  ],
+  "cohort": 113,
+  "rows": 88,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "B02",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 4,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}

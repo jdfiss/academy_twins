@@ -1,0 +1,32 @@
+{
+  "case_id": "bench_03",
+  "student_id": "DEMO-B03",
+  "case_set": "bench-v1",
+  "seed": 20261027,
+  "split": "驗證",
+  "tags": [
+    "failed",
+    "grade_boundary"
+  ],
+  "tag_labels": [
+    "不及格",
+    "成績邊界（59／60）"
+  ],
+  "cohort": 114,
+  "rows": 56,
+  "sections": [
+    "A01",
+    "A02",
+    "B01",
+    "B02",
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06"
+  ],
+  "pages": 3,
+  "fictional": true,
+  "note": "虛構案例，版面由本專案自行產生，不代表真實儀表板"
+}

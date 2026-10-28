@@ -14,7 +14,7 @@ class RosterCheck:
     not_on_roster: list[str] = field(default_factory=list)  # 修課紀錄有、名單沒有
     duplicates: list[str] = field(default_factory=list)     # 名單重複列出
     blank_rows: list[int] = field(default_factory=list)     # 名單中學號空白的列（檔案行號）
-    other_cohort: dict[str, int] = field(default_factory=dict)  # 入學年度與規則庫不符，未審查
+    other_cohort: dict[str, int] = field(default_factory=dict)  # 入學年度沒有對應的規則庫，未審查
 
     @property
     def roster_size(self) -> int:
@@ -36,7 +36,7 @@ class Roster:
     ids: list[str]  # 名單學號（保留順序與重複）
     blank_rows: list[int]  # 學號空白的行號
     english_passed: dict[str, bool] = field(default_factory=dict)  # 選填欄位；空白的學生不列入
-    cohorts: dict[str, int] = field(default_factory=dict)  # 選填欄位：入學學年度；空白視為規則庫年度
+    cohorts: dict[str, int] = field(default_factory=dict)  # 選填欄位：入學學年度；空白視為預設規則庫年度
 
 
 def parse_roster(text: str, source: str = "應屆名單") -> Roster:
@@ -74,11 +74,15 @@ def load_roster(path: Path) -> Roster:
 
 
 def check_roster(roster_ids: list[str], record_ids, blank_rows: list[int] | None = None,
-                 cohorts: dict[str, int] | None = None, cohort: int | None = None) -> RosterCheck:
-    """cohorts 為名單上的入學年度；與規則庫年度 cohort 不同的學生列為異常、不審查。"""
+                 cohorts: dict[str, int] | None = None, cohort: int | None = None,
+                 available: set[int] | None = None) -> RosterCheck:
+    """cohorts 為名單上的入學年度（空白視為預設年度 cohort）；available 為已載入規則庫的年度，
+    未提供時只有 cohort。入學年度沒有規則庫的學生列為異常、不審查，不套用其他年度。"""
     records = set(record_ids)
     check = RosterCheck(blank_rows=list(blank_rows or []))
     cohorts = cohorts or {}
+    if available is None and cohort is not None:
+        available = {cohort}
     seen: set[str] = set()
     for sid in roster_ids:
         if sid in seen:
@@ -86,7 +90,7 @@ def check_roster(roster_ids: list[str], record_ids, blank_rows: list[int] | None
                 check.duplicates.append(sid)
             continue
         seen.add(sid)
-        if cohort is not None and cohorts.get(sid, cohort) != cohort:
+        if available is not None and cohorts.get(sid, cohort) not in available:
             check.other_cohort[sid] = cohorts[sid]
         else:
             (check.to_audit if sid in records else check.no_records).append(sid)

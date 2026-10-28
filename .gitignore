@@ -4,3 +4,6 @@ __pycache__/
 .vscode/
 .idea/
 data/reviews/
+.env
+data/eval/
+data/rule_versions/
