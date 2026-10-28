@@ -1,6 +1,7 @@
 """學生端 API：學業分身試算、修課路徑與 What-if、課程影響範圍。（B 組）"""
 from __future__ import annotations
 
+from .ask import parse as parse_question, term_labels
 from .planner import Plan, Scenario, Term, explain_delay, plan
 
 
@@ -70,3 +71,15 @@ class StudentMixin:
                 "delay_terms": ((g1.year - g0.year) * 2 + (g1.sem - g0.sem)) if (g0 and g1 and alt.feasible) else None,
             }
         return result
+
+    def ask(self, sid: str, question: str) -> dict:
+        """自然語言 What-if：AI 把問題轉成 simulate 參數，回傳待學生確認的提案，不在這裡模擬。"""
+        start = self._next_term(sid)
+        base = plan(self.kb, self.graph, self._report(sid), start)
+        planned = {c: str(t) for t, codes in base.terms.items() for c in codes}
+        try:
+            cohort = self.ruleset(sid).kb.cohort
+        except KeyError:
+            cohort = None
+        return parse_question(question, {c: self.kb.courses[c].name for c in planned}, planned,
+                              term_labels(str(start), cohort))

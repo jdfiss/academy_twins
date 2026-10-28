@@ -85,6 +85,13 @@
         <div class="card">
           <h3>What-if 模擬</h3>
           <div class="whatif">
+            <label style="flex:1 1 320px">用一句話問（AI 只把問題轉成模擬條件，確認後才計算）
+              <input id="ask-input" type="text" maxlength="300" placeholder="例如：如果我大三下去交換一年，會延畢嗎？"></label>
+            <button class="primary" id="ask-run">轉成條件</button>
+          </div>
+          <div id="ask-result"></div>
+          <div class="muted small" style="margin:4px 0 2px">或手動選情境：</div>
+          <div class="whatif">
             <label>如果這門課
               <select id="skip-course"><option value="">（不設定）</option></select></label>
             <label>在這學期不修

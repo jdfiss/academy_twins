@@ -94,6 +94,7 @@ class Handler(BaseHTTPRequestHandler):
         POST /api/rule-drafts/check 或 confirm  {"draft_id", "requirements", "reviewer"?, "acknowledge"?}
         POST /api/rule-versions/activate  {"draft_id", "activated_by", "acknowledge"}：以已確認草稿啟用新規則版本
         POST /api/rule-versions/revert    {"year", "reverted_by"}：還原為正式規則庫
+        POST /api/twin/<id>/ask  {"question"}：AI 把 What-if 問題轉成待確認的 simulate 參數（不模擬）
         """
         route = urlparse(self.path).path.strip("/")
         length = int(self.headers.get("Content-Length") or 0)
@@ -164,6 +165,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not str(body.get("year") or "").isdigit():
                     return self._json({"error": "年度須為數字"}, 400)
                 return self._json(service.rule_revert(int(body["year"]), str(body.get("reverted_by") or "")))
+            # ---------- 學生端（B 組） ----------
+            elif route.startswith("api/twin/") and route.endswith("/ask"):
+                if not isinstance(body.get("question"), str):
+                    return self._json({"error": "缺少欄位：question"}, 400)
+                return self._json(service.ask(unquote(route.split("/")[2]), body["question"]))
             elif route == "api/reset":
                 service.load_data(
                     (STUDENTS_PATH.name, STUDENTS_PATH.read_text(encoding="utf-8-sig")),
