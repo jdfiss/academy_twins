@@ -78,6 +78,27 @@ class PlannerTest(unittest.TestCase):
         alt = plan(KB, GRAPH, self.report, START, Scenario(skip={"GE0003": Term(111, 2)}))
         self.assertEqual(alt.graduation, self.base.graduation)
 
+    def test_simulate_reports_delay_from_plans(self):
+        """學生端 What-if 顯示的延畢學期數，要和兩個計畫的畢業學期一致。"""
+        from academic_twin.api import AcademicTwinService
+        service = AcademicTwinService()
+        base = service.simulate("S002")["base"]
+        first = next(t for t in base["terms"] if t["courses"])
+        course = first["courses"][0]["code"]
+        sim = service.simulate("S002", skip=[f"{course}@{first['term']}"])
+        sc = sim["scenario"]
+        self.assertEqual(sim["base"], base)
+        g0, g1 = Term.parse(base["graduation"]), Term.parse(sc["graduation"])
+        self.assertEqual(sc["delay_terms"], (g1.year - g0.year) * 2 + (g1.sem - g0.sem))
+        self.assertTrue(sc["impact"])
+        self.assertIn(course, sc["conditions"][0])
+        self.assertIsNone(service.simulate("S002")["scenario"])
+
+    def test_simulate_rejects_bad_skip(self):
+        from academic_twin.api import AcademicTwinService
+        with self.assertRaises(ValueError):
+            AcademicTwinService().simulate("S002", skip=["NOPE@115-2"])
+
     def test_term_arithmetic(self):
         self.assertEqual(Term(113, 1).next(), Term(113, 2))
         self.assertEqual(Term(113, 2).next(), Term(114, 1))
