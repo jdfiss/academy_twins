@@ -120,6 +120,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | 自然語言 What-if 模組（新增，如 `academic_twin/ask.py`） | B | AI 將學生問題轉成 `simulate` 參數；計算與回答依據只來自規劃器結果 |
 | `academic_twin/llm.py` | A（共用，變更需通知 B） | 以標準函式庫呼叫 Gemini；金鑰讀環境變數或未進版控的 `.env`；每個模型有總等待上限，主模型過載或逾時時改用備援模型；兩組的 AI 功能共用 |
 | `academic_twin/dashboard.py` | A | AI 解析儀表板 PDF 為待確認紀錄（附來源頁碼與原文）、檢查、與標準答案比對 |
+| `academic_twin/dashboard_batch.py` | A | 儀表板批次解析：檔名對名單、背景佇列、失敗重試、停止全部（系辦端 AI 停用）；結果仍逐份確認 |
 | `academic_twin/demo_dashboard.py` | A | 產生虛構儀表板 PDF 與標準答案（`data/samples/`）；`--bench` 產生 24 份虛構基準集（`data/samples/bench/`） |
 | `academic_twin/rule_draft.py` | A | AI 草擬 114 少量規則、來源與差異，重用知識庫驗證；人工確認只存獨立草稿，不啟用 |
 | `academic_twin/rule_versions.py` | A | 已確認草稿產生新規則版本，由承辦人明確啟用、可還原；不覆寫正式規則庫 |
@@ -158,6 +159,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_export.py` | A |
 | `tests/test_cohort_rules.py` | A |
 | `tests/test_dashboard.py` | A |
+| `tests/test_dashboard_batch.py` | A |
 | `tests/test_rule_draft.py` | A |
 | `tests/test_rule_versions.py` | A |
 | `tests/test_evaluate.py` | A |

@@ -221,7 +221,7 @@ $("#upload-btn").addEventListener("click", async () => {
 $("#reset-btn").addEventListener("click", () => sendData("/api/reset", {}));
 
 // ---------- AI 解析儀表板 ----------
-let DRAFT = null;
+let DRAFT = null, draftFromBatch = false;
 const DASH_FIELDS = ["rule_code", "term", "code", "name", "credits", "grade"];
 const DASH_LABELS = { rule_code: "規則代碼", term: "學期", code: "課號", name: "課名", credits: "學分", grade: "成績" };
 
@@ -286,6 +286,7 @@ $("#dash-extract").addEventListener("click", async () => {
   const file = $("#dash-file").files[0], sid = $("#dash-sid").value.trim();
   if (!file || !sid) return msg("#dash-msg", "請選擇 PDF 並填寫學號。", "err");
   DRAFT = null;
+  draftFromBatch = false;
   $("#dash-draft").hidden = true;
   invalidateDraftConfirmation();
   const started = Date.now();
@@ -326,7 +327,11 @@ $("#dash-confirm").addEventListener("click", async () => {
     msg("#dash-msg", "");
     await loadData();
     await loadStudent(s.id);
-    show("student");
+    if (draftFromBatch) {  // 批次：留在本頁繼續核對下一份
+      await refreshJobs();
+      msg("#jobs-msg", `${esc(s.id)} 已確認送入審查。`, "ok");
+      $("#jobs-table").scrollIntoView({ behavior: "smooth" });
+    } else show("student");
   } catch (e) {
     $("#dash-checked").checked = false;
     msg("#dash-confirm-msg", errorList(e), "err");
@@ -334,6 +339,102 @@ $("#dash-confirm").addEventListener("click", async () => {
     $("#dash-confirm").disabled = false;
   }
 });
+
+// ---------- 批次解析：背景排隊，解析完逐份核對確認 ----------
+const JOB_LABELS = { queued: "排隊中", running: "解析中", done: "待確認", failed: "失敗", stopped: "已停止", confirmed: "已確認" };
+const JOB_ORDER = { failed: 0, stopped: 1, done: 2, running: 3, queued: 4, confirmed: 5 };
+let jobsTimer = null, aiPaused = false;
+
+function renderJobs(st) {
+  const c = st.counts, pending = c.queued + c.running;
+  aiPaused = st.paused;
+  $("#jobs-workers").textContent = `（同時 ${st.workers} 份）`;
+  $("#jobs-stop").textContent = st.paused ? "恢復 AI" : "停止全部";
+  $("#jobs-stop").classList.toggle("primary", st.paused);
+  $("#jobs-add").disabled = st.paused;
+  $("#jobs-retry-all").hidden = st.paused || !(c.failed + c.stopped);
+  $("#jobs-progress").textContent = st.jobs.length
+    ? `已確認 ${c.confirmed}・待確認 ${c.done}・處理中 ${pending}・失敗 ${c.failed + c.stopped}`
+      + (st.paused ? "・AI 已停用" : "") : (st.paused ? "AI 已停用" : "");
+  const jobs = [...st.jobs].sort((a, b) => JOB_ORDER[a.state] - JOB_ORDER[b.state]
+    || b.errors - a.errors || b.warnings - a.warnings || a.student_id.localeCompare(b.student_id));
+  $("#jobs-table").hidden = !jobs.length;
+  $("#jobs-rows").innerHTML = jobs.map((j) => {
+    const check = j.state === "done" || j.state === "confirmed"
+      ? `錯誤 ${j.errors}・警示 ${j.warnings}` + (j.cross_checked ? `・需核對 ${j.flagged_rows} 列` : "・未交叉驗證")
+      : j.error ? `<span class="hint">${esc(j.error)}</span>` : "";
+    const button = j.state === "done" ? `<button class="primary" data-open="${esc(j.student_id)}">核對</button>`
+      : (j.state === "failed" || j.state === "stopped") && !st.paused
+        ? `<button class="ghost" data-retry="${esc(j.student_id)}">重試</button>` : "";
+    return `<tr><td><b>${esc(j.student_id)}</b></td>
+      <td><span class="flag">${JOB_LABELS[j.state]}</span></td>
+      <td>${j.state === "done" || j.state === "confirmed" ? j.rows : ""}</td>
+      <td>${check}</td><td class="hide-sm">${j.seconds == null ? "" : `${j.seconds} 秒`}</td><td>${button}</td></tr>`;
+  }).join("");
+  document.querySelectorAll("#jobs-rows [data-open]").forEach((b) => b.addEventListener("click", () => openJob(b.dataset.open)));
+  document.querySelectorAll("#jobs-rows [data-retry]").forEach((b) => b.addEventListener("click", () =>
+    jobsAction("retry", { student_id: b.dataset.retry })));
+  clearTimeout(jobsTimer);
+  if (pending) jobsTimer = setTimeout(refreshJobs, 2000);
+}
+
+async function refreshJobs() {
+  try {
+    renderJobs(await api("/api/dashboard/batch"));
+  } catch (e) {
+    msg("#jobs-msg", esc(e.message), "err");
+  }
+}
+
+async function jobsAction(action, body = {}) {
+  try {
+    renderJobs(await postJSON(`/api/dashboard/batch/${action}`, body));
+    msg("#jobs-msg", "");
+  } catch (e) {
+    msg("#jobs-msg", esc(e.message), "err");
+  }
+}
+
+async function openJob(sid) {
+  try {
+    DRAFT = await api(`/api/dashboard/batch/${encodeURIComponent(sid)}`);
+  } catch (e) {
+    return msg("#jobs-msg", esc(e.message), "err");
+  }
+  draftFromBatch = true;
+  msg("#dash-msg", `核對 ${esc(sid)}：擷取 ${DRAFT.rows.length} 列`);
+  renderDraft(true);
+  $("#dash-draft").scrollIntoView({ behavior: "smooth" });
+}
+
+$("#jobs-add").addEventListener("click", async () => {
+  const files = [...$("#jobs-files").files];
+  if (!files.length) return msg("#jobs-msg", "請選擇 PDF（可多選）。", "err");
+  $("#jobs-add").disabled = true;
+  const added = [], unmatched = [], failed = [];
+  for (const [i, f] of files.entries()) {
+    msg("#jobs-msg", `上傳中 ${i + 1} / ${files.length}…`);
+    try {
+      const r = await postJSON("/api/dashboard/batch", { filename: f.name, data: await pdfBase64(f) });
+      (r.unmatched ? unmatched : added).push(r.unmatched?.student_id || r.student_id);
+    } catch (e) {
+      failed.push(`${f.name}：${e.message}`);
+    }
+  }
+  $("#jobs-files").value = "";
+  $("#jobs-add").disabled = false;
+  const lines = [`已加入佇列 ${added.length} 份`];
+  if (unmatched.length) lines.push(`學號不在應屆名單、未解析 ${unmatched.length} 份：${unmatched.map(esc).join("、")}（已列入名單異常）`);
+  msg("#jobs-msg", lines.join("<br>") + (failed.length
+    ? `<ul class="upload-errors">${failed.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""),
+    failed.length || unmatched.length ? "err" : "ok");
+  renderRoster(await api("/api/roster-anomalies"));
+  await refreshJobs();
+});
+
+$("#jobs-stop").addEventListener("click", () =>
+  jobsAction(aiPaused ? "resume" : "stop"));
+$("#jobs-retry-all").addEventListener("click", () => jobsAction("retry"));
 
 // ---------- AI 草擬規則（確認僅存檔，啟用另行操作） ----------
 let RULE_DRAFT = null, ruleEdited = false, ruleSourceUrl = null;
@@ -502,4 +603,5 @@ async function changeRuleVersion(action, body) {
   renderRules();
   await loadData();
   await loadRuleVersions();
+  await refreshJobs();
 })();
