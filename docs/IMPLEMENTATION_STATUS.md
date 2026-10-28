@@ -31,7 +31,7 @@
 | 系辦提示篩選 | 總表可按三種 flag、有待辦、無提示篩選，與狀態篩選併用；明細顯示相關要求、課程與承辦單位。CSV 附加 `flag_types`、`flag_messages`、`actions` 欄；列印報告附提示與待辦。學生端程式與正式交接格式未改 |
 | 白話說明 | 學生端「我的進度」每條要求下附白話說明，涵蓋九種規則類型（`web/assets/student.js` 的 `explain()`）；只引用審查結果的 `have`、`need`、`shortfall`、`detail`，不自行計算學分或改判；未知類型顯示「說明尚未提供」。每條並列校務系統代碼與章則用語，未取得時顯示「待提供」 |
 | 學生端學分狀態 | 「目前狀態」區分還沒達到、辦理抵修後可能符合（缺的課全部在待辦抵修提示內才算）、校務系統可能顯示不同（超修、可重複修習）、待確認，並附試算提醒；三種 flags 依類型以白話說明並列相關條件與課程（課號附課名）；需辦理事項列事項類型、承辦單位與來源提示；畢業條件下標出相關提示與需辦理事項。只分類與呈現審查結果，不改判定。總學分門檻改讀規則庫；`?demo` 選單只列範例學生 |
-| 學生端 What-if | 結果以原本／模擬後畢業學期、延畢學期數、被往後推的課數並排呈現，數字皆來自 `simulate`；修課路徑與模擬結果標示開課學期為推估 |
+| 學生端 What-if | 結果以原本／模擬後畢業學期、延畢學期數、被往後推的課數並排呈現，數字皆來自 `simulate`；出國交換可設定起始學期與連續 1–4 學期，可抵學分逐學期計算；修課路徑與模擬結果標示開課學期為推估 |
 | 測試程式 | `tests/test_rule_engine.py`、`tests/test_planner.py`、`tests/test_curriculum_114.py`、`tests/test_roster.py`、`tests/test_export.py`、`tests/test_records.py`、`tests/test_reviews.py`、`tests/test_contract.py`（交接格式與兩端一致性）；GitHub Actions 於 push 與 PR 時自動執行 |
 
 ## 資料與基本操作

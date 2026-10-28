@@ -156,13 +156,20 @@ async function loadPlan(id) {
   $("#sim-result").innerHTML = `<div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div>`;
 }
 
-function renderPlan(plan, moved = new Set(), away = "") {
+// 學期字串的下一學期，同 planner.py 的 Term.next()（"115-1" → "115-2" → "116-1"）
+function nextTerm(term) {
+  const [year, sem] = term.split("-").map(Number);
+  return sem === 1 ? `${year}-2` : `${year + 1}-1`;
+}
+
+function renderPlan(plan, moved = new Set(), away = []) {
   if (!plan.terms.length) return `<div class="empty">已符合所有畢業條件</div>`;
   const cols = plan.terms.map((t) => {
     const grad = t.term === plan.graduation;
-    return `<div class="term ${t.term === away ? "away" : ""} ${grad ? "grad" : ""}">
+    const isAway = away.includes(t.term);
+    return `<div class="term ${isAway ? "away" : ""} ${grad ? "grad" : ""}">
       <div class="term-head"><span>${t.term}${grad ? " 🎓" : ""}</span><span class="muted small">${t.credits} 學分</span></div>
-      ${t.term === away ? '<div class="small" style="margin-bottom:4px">✈ 出國交換</div>' : ""}
+      ${isAway ? '<div class="small" style="margin-bottom:4px">✈ 出國交換</div>' : ""}
       ${t.courses.map((c) => courseTag(c, moved.has(c.code) ? "moved" : "")).join("")}
       ${t.other_credits ? `<div class="other">其他學分 ${t.other_credits}</div>` : ""}
       ${!t.courses.length && !t.other_credits ? '<div class="muted small">（無本系課程）</div>' : ""}
@@ -188,17 +195,21 @@ $("#skip-course").addEventListener("change", (e) => {
 });
 
 $("#reset-sim").addEventListener("click", () => {
-  $("#skip-course").value = ""; $("#away-term").value = "";
+  $("#skip-course").value = ""; $("#away-term").value = ""; $("#away-count").value = "1";
   $("#base-plan").innerHTML = renderPlan(BASE_PLAN);
   $("#sim-result").innerHTML = `<div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div>`;
 });
 
 $("#run-sim").addEventListener("click", async () => {
   const params = new URLSearchParams();
-  const code = $("#skip-course").value, away = $("#away-term").value;
+  const code = $("#skip-course").value, start = $("#away-term").value;
+  // 從起始學期連續往後排；simulate 的 away 可重複帶多個學期，可抵學分逐學期計算
+  const away = [];
+  for (let t = start, i = 0; start && i < Number($("#away-count").value); i++, t = nextTerm(t)) away.push(t);
   if (code) params.append("skip", `${code}@${$("#skip-term").value}`);
-  if (away) { params.append("away", away); params.append("away_credits", $("#away-credits").value || "0"); }
-  if (!code && !away) {
+  away.forEach((t) => params.append("away", t));
+  if (away.length) params.append("away_credits", $("#away-credits").value || "0");
+  if (!code && !away.length) {
     $("#sim-result").innerHTML = `<div class="muted small">請先選一門課，或選一個交換學期。</div>`;
     return;
   }
