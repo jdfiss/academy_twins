@@ -196,23 +196,80 @@ $("#skip-course").addEventListener("change", (e) => {
 
 $("#reset-sim").addEventListener("click", () => {
   $("#skip-course").value = ""; $("#away-term").value = ""; $("#away-count").value = "1";
+  $("#ask-result").innerHTML = "";
   $("#base-plan").innerHTML = renderPlan(BASE_PLAN);
   $("#sim-result").innerHTML = `<div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div>`;
 });
 
-$("#run-sim").addEventListener("click", async () => {
-  const params = new URLSearchParams();
+$("#run-sim").addEventListener("click", () => {
   const code = $("#skip-course").value, start = $("#away-term").value;
   // 從起始學期連續往後排；simulate 的 away 可重複帶多個學期，可抵學分逐學期計算
   const away = [];
   for (let t = start, i = 0; start && i < Number($("#away-count").value); i++, t = nextTerm(t)) away.push(t);
-  if (code) params.append("skip", `${code}@${$("#skip-term").value}`);
-  away.forEach((t) => params.append("away", t));
-  if (away.length) params.append("away_credits", $("#away-credits").value || "0");
   if (!code && !away.length) {
     $("#sim-result").innerHTML = `<div class="muted small">請先選一門課，或選一個交換學期。</div>`;
     return;
   }
+  runSim(code ? [`${code}@${$("#skip-term").value}`] : [], away, $("#away-credits").value || "0");
+});
+
+// ---------- 自然語言 What-if ----------
+// AI 只回傳待確認的 simulate 參數；學生按確認後才呼叫 simulate，結果與手動選項同一套呈現
+let ASK = null;
+
+$("#ask-run").addEventListener("click", async () => {
+  const question = $("#ask-input").value.trim();
+  if (!question) return;
+  ASK = null;
+  // 模型回應約需 10–30 秒；等待時鎖住按鈕與輸入框，避免重複送出
+  $("#ask-run").disabled = $("#ask-input").disabled = true;
+  $("#ask-result").innerHTML = `<div class="muted small">AI 轉換中，約需 10–30 秒…</div>`;
+  try {
+    const res = await api(`/api/twin/${encodeURIComponent(CURRENT.id)}/ask`, { method: "POST", body: JSON.stringify({ question }) });
+    $("#ask-result").innerHTML = renderAsk(res);
+    if (res.status === "proposed") ASK = res.params;
+  } catch (err) {
+    $("#ask-result").innerHTML = `<div class="issue FAIL">${esc(err.message)}；請改用下方手動選項。</div>`;
+  } finally {
+    $("#ask-run").disabled = $("#ask-input").disabled = false;
+  }
+});
+$("#ask-input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !$("#ask-run").disabled) $("#ask-run").click(); });
+
+function renderAsk(res) {
+  const t = res.trace;
+  const steps = t.steps.filter((s) => s.step === "check").length;
+  const trace = `<div class="muted small">執行軌跡：模型 ${esc(t.model ?? "—")}・提示 ${esc(t.prompt_version)}・檢核 ${steps} 次${t.corrected ? "（自我修正 1 次後通過）" : ""}${t.to_manual ? "・轉手動" : ""}・${t.wait_seconds} 秒</div>`;
+  if (res.status === "proposed") {
+    return `<div class="issue WARNING">
+        <div><b>AI 理解的模擬條件</b>（${esc(res.label)}）：</div>
+        <ul class="impact">${res.conditions.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>
+        <button class="primary" id="ask-confirm">確認並模擬</button>
+        <button class="ghost" id="ask-cancel">不對，改用手動</button>
+      </div>${trace}`;
+  }
+  const errors = res.errors.length ? `<ul class="impact">${res.errors.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : "";
+  const head = res.status === "unsupported" ? "目前無法模擬這個問題" : "AI 無法轉成條件";
+  return `<div class="issue ${res.status === "unsupported" ? "WARNING" : "FAIL"}"><b>${head}</b>：${esc(res.reason)}${errors}
+      <div class="small">支援的情境：某門課某學期不修、出國交換（可連續多學期）。請改用下方手動選項。</div></div>${trace}`;
+}
+
+$("#ask-result").addEventListener("click", (e) => {
+  if (e.target.id === "ask-cancel") { ASK = null; $("#ask-result").innerHTML = ""; return; }
+  if (e.target.id !== "ask-confirm" || !ASK) return;
+  // 單一條件時同步到手動選項，方便學生微調
+  const [code, term] = ASK.skip.length === 1 ? ASK.skip[0].split("@") : ["", ""];
+  $("#skip-course").value = code; if (term) $("#skip-term").value = term;
+  $("#away-term").value = ASK.away[0] ?? ""; $("#away-count").value = String(ASK.away.length || 1);
+  if (ASK.away.length) $("#away-credits").value = ASK.away_credits;
+  runSim(ASK.skip, ASK.away, String(ASK.away_credits ?? 0));
+});
+
+async function runSim(skip, away, awayCredits) {
+  const params = new URLSearchParams();
+  skip.forEach((s) => params.append("skip", s));
+  away.forEach((t) => params.append("away", t));
+  if (away.length) params.append("away_credits", awayCredits);
   try {
     const sim = await api(`/api/students/${encodeURIComponent(CURRENT.id)}/simulate?${params}`);
     const sc = sim.scenario;
@@ -242,7 +299,7 @@ $("#run-sim").addEventListener("click", async () => {
   } catch (err) {
     $("#sim-result").innerHTML = `<div class="issue FAIL">${esc(err.message)}</div>`;
   }
-});
+}
 
 // ---------- 先修關係圖 ----------
 function renderGraph() {
