@@ -220,14 +220,29 @@ def _fields_not_in_source(r: dict, source: str) -> list[str]:
     if code and code not in pdf_text.normalize(source):
         out.append(f"科目代碼「{r.get('code')}」")
     numbers = {float(n) for n in re.findall(r"\d+(?:\.\d+)?", unicodedata.normalize("NFKC", source))}
+    tail = _after_name(r, source)
     for k, label in (("credits", "學分"), ("grade", "成績")):
         value = str(r.get(k, "")).strip()
         try:
-            if float(value) not in numbers:
+            if float(value) not in numbers and not _in_tail(value, tail):
                 out.append(f"{label}「{value}」")
         except ValueError:
             continue  # 非數字已是錯誤
     return out
+
+
+def _after_name(r: dict, source: str) -> str:
+    """課名之後的原文（去空白）。有些模型抄原文時把欄位黏在一起（如「計算機概論I389」），
+    學分與成績就不是獨立的數字；改在課名之後找，學期與課號裡的數字不算數。找不到課名時回傳空字串。"""
+    text = re.sub(r"\s+", "", unicodedata.normalize("NFKC", source))
+    name = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(r.get("name", ""))))
+    at = text.rfind(name) if name else -1
+    return text[at + len(name):] if at >= 0 else ""
+
+
+def _in_tail(value: str, tail: str) -> bool:
+    forms = {value, f"{float(value):g}"}
+    return any(f and f in tail for f in forms)
 
 
 def _grade(r: dict) -> float | None:

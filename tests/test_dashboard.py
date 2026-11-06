@@ -286,6 +286,18 @@ class DashboardTest(unittest.TestCase):
         [trace] = self.traces()
         self.assertEqual((trace["status"], trace["to_manual"]), ("failed", True))
 
+    def test_source_text_without_spaces_is_not_flagged(self):
+        """備援模型把原文欄位黏在一起（2026-11-06 實測 DEMO-D07）時，正確的學分與成績不應被誤報。"""
+        row = {"code": "IM1001", "name": "計算機概論I", "credits": "3", "grade": "89"}
+        self.assertEqual(dashboard._fields_not_in_source(row, "114-1IM1001計算機概論I389"), [])
+        self.assertEqual(dashboard._fields_not_in_source(
+            {"code": "SL-1", "name": "服務學習(一)", "credits": "0", "grade": "80"}, "114-1SL-1服務學習(一)080"), [])
+        # 錯的值仍要抓到；學期、課號裡的數字不算數
+        wrong = dashboard._fields_not_in_source({**row, "grade": "75"}, "114-1IM1001計算機概論I389")
+        self.assertEqual(wrong, ["成績「75」"])
+        self.assertEqual(dashboard._fields_not_in_source({**row, "credits": "4", "grade": "11"},
+                                                         "114-1IM1001計算機概論I389"), ["學分「4」", "成績「11」"])
+
     def test_demo_answer_files_are_fictional(self):
         for path in SAMPLES.glob("dashboard_*_answer.csv"):
             ids = {r["student_id"] for r in csv.DictReader(path.read_text(encoding="utf-8").splitlines())}
