@@ -118,7 +118,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `academic_twin/planner.py` | B | 修課路徑規劃與情境 |
 | 白話說明（`web/assets/student.js` 的 `EXPLAIN`） | B | 依審查結果產生學生看得懂的說明；不改判定。放在前端是為了不改動交接格式 |
 | 自然語言 What-if 模組（新增，如 `academic_twin/ask.py`） | B | AI 將學生問題轉成 `simulate` 參數；計算與回答依據只來自規劃器結果 |
-| `academic_twin/llm.py` | A（共用，變更需通知 B） | 以標準函式庫呼叫 Gemini；金鑰讀環境變數或未進版控的 `.env`；每個模型有總等待上限，主模型過載或逾時時改用備援模型；兩組的 AI 功能共用 |
+| `academic_twin/llm.py` | A（共用，變更需通知 B） | 以標準函式庫呼叫 Gemini；金鑰讀環境變數或未進版控的 `.env`；每個模型有總等待上限，主模型過載、逾時或輸出陷入重複迴圈時改用備援模型（串流接收、逐段檢查）；Gemini 3 以上用預設溫度；兩組的 AI 功能共用 |
 | `academic_twin/dashboard.py` | A | AI 解析儀表板 PDF 為待確認紀錄（附來源頁碼與原文）、檢查、與標準答案比對 |
 | `academic_twin/dashboard_batch.py` | A | 儀表板批次解析：檔名對名單、背景佇列、失敗重試、停止全部（系辦端 AI 停用）；結果仍逐份確認 |
 | `academic_twin/demo_dashboard.py` | A | 產生虛構儀表板 PDF 與標準答案（`data/samples/`）；`--bench` 產生 24 份虛構基準集（`data/samples/bench/`）；`--demo-batch` 產生比賽示範批次 DEMO-D03–D09（`data/samples/demo_batch/`） |
@@ -520,7 +520,7 @@ TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
 
 ### 測試
 
-- PR 合併前全部測試須通過（目前 307 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
+- PR 合併前全部測試須通過（目前 313 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
 - 新功能要附測試，放在自己組的測試檔；新增測試檔時在 PR 說明寫明歸屬。
 - **不得為了讓測試通過而刪除或放寬對方組的測試**。對方的測試若與新需求衝突，先找對方組討論，由對方修改。
 - `tests/test_contract.py` 的兩端一致性測試失敗，一律視為阻擋合併：同一份資料在兩端必須得到相同判定。
