@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import llm, pdf_text
+from . import llm, pdf_text, replay
 from .knowledge_base import KnowledgeBase
 from .records import REQUIRED, TERM_RE
 
@@ -49,6 +49,15 @@ PROMPT = """你是資料擷取工具。附件是一份大學「畢業資格審�
 小計、標題、學分區等不是修課紀錄的列不要輸出。跨頁的表格要完整列出每一頁的列。
 另外抄錄文件上宣告的數字：入學學年度、學分區的應修與實得學分，以及每個規則代碼段落標示的實得學分。
 文件看不清楚或無法辨識時，在 unreadable 說明原因，不要猜。"""
+
+# 有界自我修正：只回饋檢查理由（不加入學號或其他新資料），重新擷取 1 次；之後走同一道檢查。
+RETRY_VERSION = "dashboard-retry-v1"
+RETRY = """
+
+上一次擷取沒有通過程式檢查，問題如下（第幾列指上一次輸出的順序）：
+{errors}
+請重新對照文件，從頭完整輸出一次。只修正抄錯、漏抄或格式問題；
+如果文件上確實就是這樣寫，照原樣抄錄，不要為了通過檢查而改寫或補值。"""
 
 SCHEMA = {
     "type": "OBJECT",
@@ -92,18 +101,22 @@ class Extraction:
     fallback_from: str = ""  # 改用備援模型時，前面模型失敗的原因
     # 從 PDF 取出的逐頁文字，供 check 核對 AI 宣稱的原文與頁碼；None 表示未要求核對（舊行為）
     pages: pdf_text.PdfText | None = field(default=None, repr=False)
+    replay: dict | None = None  # 評審模式重播時為 {model, generated_at, reason}；即時呼叫為 None
 
 
-def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: bool = False) -> Extraction:
+def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: bool = False,
+            feedback: list[str] | None = None) -> Extraction:
     """送 Gemini 擷取；失敗時丟 llm.LLMError，呼叫端應保留手動上傳 CSV 的流程。
 
     指定 model 時只用該模型、不改用備援（交叉驗證的第二模型用）。
     read_text=True 時另從 PDF 取出逐頁文字（不送給 AI），check 會據以核對每列原文與頁碼。
+    feedback 為上一次的檢查理由（自我修正用），附在提示後面請模型重新擷取。
     """
     if not pdf.startswith(b"%PDF"):
         raise ValueError("不是 PDF 檔案")
     pages = pdf_text.extract_pages(pdf) if read_text else None
-    result = llm.generate_json(PROMPT, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
+    prompt = PROMPT + RETRY.format(errors="\n".join(f"- {m}" for m in feedback)) if feedback else PROMPT
+    result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
     data = result.data if isinstance(result.data, dict) else {}
     mapping = FORMATS[fmt]
     rows = []
@@ -115,7 +128,7 @@ def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: 
         rows.append(row)
     return Extraction(rows, data.get("sections", []), data.get("declared_required"), data.get("declared_earned"),
                       str(data.get("unreadable") or ""), result.model, result.generated_at, PROMPT_VERSION, fmt,
-                      data.get("cohort"), result.fallback_from, pages)
+                      data.get("cohort"), result.fallback_from, pages, getattr(result, "replay", None))
 
 
 def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = None) -> list[Issue]:
@@ -207,14 +220,33 @@ def _fields_not_in_source(r: dict, source: str) -> list[str]:
     if code and code not in pdf_text.normalize(source):
         out.append(f"科目代碼「{r.get('code')}」")
     numbers = {float(n) for n in re.findall(r"\d+(?:\.\d+)?", unicodedata.normalize("NFKC", source))}
+    glued = _glued_match(r, source)
     for k, label in (("credits", "學分"), ("grade", "成績")):
         value = str(r.get(k, "")).strip()
         try:
-            if float(value) not in numbers:
+            if float(value) not in numbers and not glued:
                 out.append(f"{label}「{value}」")
         except ValueError:
             continue  # 非數字已是錯誤
     return out
+
+
+def _glued_match(r: dict, source: str) -> bool:
+    """有些模型抄原文時把欄位黏在一起（如「計算機概論I389」，2026-11-06 實測備援模型），學分與成績就不是
+    獨立的數字。此時改看課名之後的文字：去掉空白後必須恰好是「學分」接「成績」，前後只能有非數字，
+    學期與課號裡的數字不算數。讀錯的值（例如把 89 讀成 8 或 38）不會對上。找不到課名時不採用。"""
+    text = re.sub(r"\s+", "", unicodedata.normalize("NFKC", source))
+    name = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(r.get("name", ""))))
+    at = text.rfind(name) if name else -1
+    if at < 0:
+        return False
+    tail = text[at + len(name):]
+    credits, grade = str(r.get("credits", "")).strip(), str(r.get("grade", "")).strip()
+    try:
+        forms = {(c, g) for c in {credits, f"{float(credits):g}"} for g in {grade, f"{float(grade):g}"}}
+    except ValueError:
+        return False
+    return any(re.fullmatch(rf"\D*{re.escape(c)}\D*{re.escape(g)}\D*", tail) for c, g in forms)
 
 
 def _grade(r: dict) -> float | None:
@@ -299,6 +331,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--case-set", default="demo-v1", help="案例集合版本，寫入量測紀錄")
     args = parser.parse_args(argv)
 
+    replay.disable()  # 量測一律即時呼叫，不用錄製結果
     kb = knowledge_base.load(KB_PATH)
     try:
         ext = extract(args.pdf.read_bytes(), read_text=True)
@@ -318,7 +351,7 @@ def main(argv: list[str]) -> None:
         print(f"  [{i.level}] {where}：{i.message}")
     entry = {"type": "extract", "file": args.pdf.name, "case_set": args.case_set, "model": ext.model,
              "prompt_version": ext.prompt_version, "format": ext.format, "generated_at": ext.generated_at,
-             "fallback_from": ext.fallback_from[:200], "errors": sum(i.level == "error" for i in issues), "warnings": sum(i.level == "warning" for i in issues)}
+             "fallback_from": ext.fallback_from[:200], "replay": bool(ext.replay), "errors": sum(i.level == "error" for i in issues), "warnings": sum(i.level == "warning" for i in issues)}
     if args.answer:
         answer = list(csv.DictReader(args.answer.read_text(encoding="utf-8-sig").splitlines()))
         result = compare(ext.rows, answer)

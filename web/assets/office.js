@@ -2,6 +2,15 @@
 let BATCH = [], statusFilter = null, flagFilter = "";
 const FLAG_LABELS = { overflow: "超修學分", repeatable: "可重複修習", substitution_pending: "待辦抵修" };
 const show = setupTabs("twin-office-view");
+// 網址可直接指定分頁（如 office.html#ingest），方便錄影與評審開啟；切換分頁時同步網址
+const viewFromHash = () => {
+  const v = location.hash.slice(1);
+  if (v && document.getElementById(`view-${v}`)) show(v);
+};
+viewFromHash();
+window.addEventListener("hashchange", viewFromHash);
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () =>
+  history.replaceState(null, "", `#${b.dataset.view}`)));
 
 // ---------- 共用：承辦人（全頁填一次）與訊息 ----------
 const officer = () => $("#officer").value.trim();
@@ -176,6 +185,7 @@ function renderRules() {
 function renderSource(src) {
   $("#data-source").textContent = `${src.students} 位學生・${src.records_count} 筆紀錄`;
   $("#data-source").title = `修課紀錄 ${src.records}・應屆名單 ${src.roster}（${src.roster_count} 位）`;
+  $("#judge-banner").hidden = src.replay_mode !== "only";
 }
 
 function fillStudentSelect() {
@@ -219,6 +229,11 @@ $("#upload-btn").addEventListener("click", async () => {
   await sendData("/api/upload", { records, roster });
 });
 $("#reset-btn").addEventListener("click", () => sendData("/api/reset", {}));
+$("#demo-btn").addEventListener("click", async () => {
+  await sendData("/api/demo-batch", {});
+  await refreshJobs();  // 上一輪的解析佇列已清空
+  $("#jobs-files").focus();
+});
 
 // ---------- AI 解析儀表板 ----------
 let DRAFT = null, draftFromBatch = false;
@@ -241,15 +256,36 @@ function crossCheckSummary(cc) {
   return `<div class="issue ${flagged ? "WARNING" : "PASS"}">${flagged ? "⚠" : "✔"} ${parts.join("・")}</div>`;
 }
 
+// 執行軌跡：AI 做了什麼、哪裡被程式檢查擋下、哪裡交給承辦人（只有計數，沒有課程內容）
+const TRACE_STEPS = {
+  extract: (s) => s.ok ? `${s.model} 擷取 ${s.rows} 列${s.fallback ? "（改用備援）" : ""}` : "主模型擷取失敗",
+  cross_check: (s) => s.ok ? `${s.model} 同時擷取供交叉比對` : "第二模型失敗，未交叉驗證",
+  check: (s) => s.ok ? "程式檢查通過" : `程式檢查擋下 ${s.errors} 個錯誤`
+    + (s.kept === "first" ? "（修正後沒有變好，保留第一次結果）" : ""),
+  retry: (s) => s.ok ? "只把檢查理由回饋給 AI，重新擷取 1 次" : "自我修正時 AI 失敗",
+};
+function traceSummary(t) {
+  if (!t) return "";
+  const end = t.to_manual ? "仍有錯誤，交給承辦人逐列修正" : t.corrected ? "自我修正成功" : "交給承辦人確認";
+  const replayed = t.replay ? ` <span class="replay">重播：${esc(t.replay.model)}・${esc(when(t.replay.generated_at))}產生`
+    + `（${esc(t.replay.reason)}）</span>` : "";
+  return `<div class="trace"><b>AI 做了什麼</b>${replayed}
+    <ol>${t.steps.map((s) => `<li class="${s.ok ? "" : "bad"}">${esc((TRACE_STEPS[s.step] || (() => s.step))(s))}</li>`).join("")}
+    <li class="${t.to_manual ? "bad" : ""}">${end}</li></ol>
+    <span class="hint">共 ${t.wait_seconds} 秒・提示 ${esc(t.prompt_version)}</span></div>`;
+}
+
 function renderDraft(fresh = false) {
   const d = DRAFT;
   $("#dash-draft").hidden = false;
   $("#dash-meta").textContent = `模型 ${d.model}${d.cross_check ? `／${d.cross_check.check_model}` : ""}・${when(d.generated_at)}・`
-    + `提示 ${d.prompt_version}・版型 ${d.format}` + (d.fallback_from ? `・已改用備援（${d.fallback_from}）` : "");
+    + `提示 ${d.prompt_version}・版型 ${d.format}` + (d.fallback_from ? `・已改用備援（${d.fallback_from}）` : "")
+    + (d.replay ? `・重播（${d.replay.reason}），非即時呼叫` : "");
   if (fresh) $("#dash-cohort").value = d.cohort ?? "";
   $("#dash-declared").textContent = `文件標示應修 ${d.declared_required ?? "—"}、實得 ${d.declared_earned ?? "—"} 學分`
     + (d.exists ? `；${d.student_id} 已有紀錄，確認後取代` : "");
   const rowIssues = (i) => d.issues.filter((x) => x.row === i);
+  $("#dash-trace").innerHTML = traceSummary(d.trace);
   $("#dash-cross").innerHTML = crossCheckSummary(d.cross_check);
   $("#dash-issues").innerHTML = d.issues.filter((i) => i.row === null).map((i) =>
     `<div class="issue ${i.level === "error" ? "FAIL" : "WARNING"}">${i.level === "error" ? "✘" : "⚠"} ${esc(i.message)}</div>`).join("");
@@ -361,7 +397,8 @@ function renderJobs(st) {
   $("#jobs-table").hidden = !jobs.length;
   $("#jobs-rows").innerHTML = jobs.map((j) => {
     const check = j.state === "done" || j.state === "confirmed"
-      ? `錯誤 ${j.errors}・警示 ${j.warnings}` + (j.cross_checked ? `・需核對 ${j.flagged_rows} 列` : "・未交叉驗證")
+      ? `錯誤 ${j.errors}・警示 ${j.warnings}` + (!j.cross_checked ? "・未交叉驗證" : j.flagged_rows ? `・需核對 ${j.flagged_rows} 列` : "・兩模型一致")
+        + (j.corrected ? `・<span class="tag">已自我修正</span>` : "")
       : j.error ? `<span class="hint">${esc(j.error)}</span>` : "";
     const button = j.state === "done" ? `<button class="primary" data-open="${esc(j.student_id)}">核對</button>`
       : (j.state === "failed" || j.state === "stopped") && !st.paused
@@ -444,7 +481,8 @@ function renderRuleDraft(d) {
   RULE_DRAFT = d;
   ruleEdited = false;
   $("#rule-draft-panel").hidden = false;
-  $("#rule-meta").textContent = `模型 ${d.model}・${when(d.generated_at)}`;
+  $("#rule-meta").textContent = `模型 ${d.model}・${when(d.generated_at)}`
+    + (d.replay ? `・重播（${d.replay.reason}），非即時呼叫` : "");
   $("#rule-issues").innerHTML = d.issues.map((i) => `<div class="issue FAIL">✘ ${esc(i.message)}</div>`).join("")
     + (d.warnings || []).map((w) => `<div class="issue WARNING">⚠ ${esc(w.message)}</div>`).join("")
     + (d.baseline_changed ? '<div class="issue WARNING">⚠ 現有規則在草擬後已改變，請重新核對差異。</div>' : "");

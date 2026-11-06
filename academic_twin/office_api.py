@@ -3,13 +3,21 @@ from __future__ import annotations
 
 import csv
 import io
+import threading
+import time
 import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
+from pathlib import Path
 
-from . import cross_check, dashboard, dashboard_batch, llm, pdf_text, report, rule_diff, rule_draft, rule_versions
+from . import (cross_check, dashboard, dashboard_batch, llm, pdf_text, replay, report, rule_diff, rule_draft,
+               rule_versions)
 from .records import REQUIRED, RecordsError, parse_records
+from .roster import parse_roster
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
+
+_BATCH_LOCK = threading.Lock()
+DEMO_ROSTER = Path(__file__).parent.parent / "data" / "students" / "demo_batch_roster.csv"
 
 
 class OfficeMixin:
@@ -22,7 +30,23 @@ class OfficeMixin:
             "students": len(self.students),
             "roster": self.roster_name,
             "roster_count": self.roster.roster_size,
+            "replay_mode": _replay_mode(),  # only＝評審模式（只重播預錄的虛構文件結果）
         }
+
+    def load_demo_batch(self) -> dict:
+        """比賽示範起點：應屆名單換成 DEMO-D03–D08（虛構），修課紀錄清空、待儀表板解析確認後才進入審查；
+        同時清掉上一輪的解析佇列與草稿。示例 S001–S005 不會出現在名單異常。"""
+        text = DEMO_ROSTER.read_text(encoding="utf-8-sig")
+        parse_roster(text, DEMO_ROSTER.name)  # 先檢查，失敗時現有資料完全不變
+        self.students, self.records_name = {}, "示範批次（待解析儀表板）"
+        self.load_data(roster=(DEMO_ROSTER.name, text))
+        with _BATCH_LOCK:
+            old = self.__dict__.pop("_dashboard_batch", None)
+            self._dashboard_drafts = {}
+            if old:  # 承辦人停用 AI 的狀態保留，不因換批次而恢復
+                old.close()
+                self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract, paused=old.paused)
+        return self.data_source()
 
     # ---------- 畢審 ----------
     def batch(self) -> list[dict]:
@@ -115,18 +139,91 @@ class OfficeMixin:
         """AI 擷取儀表板為草稿；草稿暫存於記憶體，只有確認後才會寫入修課紀錄。
 
         兩個模型同時擷取並逐列比對，不一致處列為警示；第二模型失敗時照常使用主模型並標示未交叉驗證。
+        主模型結果有錯誤等級的檢查問題時，把檢查理由回饋給主模型重新擷取 1 次（有界自我修正）；
+        仍有錯誤就交給承辦人逐列修正。每次執行留下執行軌跡（只記計數與代號，不記學號與課程內容）。
         """
         sid = _student_id(student_id)
         self._require_ai()
-        ext, other = cross_check.extract_pair(pdf)
+        began = time.monotonic()
+        trace = {"type": "extract_trace", "at": datetime.now().isoformat(timespec="seconds"),
+                 "prompt_version": dashboard.PROMPT_VERSION, "format": dashboard.FORMAT, "model": None,
+                 "steps": [], "corrected": False, "to_manual": False}
+
+        def finish(status: str) -> dict:
+            trace.update(status=status, wait_seconds=round(time.monotonic() - began, 2))
+            dashboard.log_run(trace)
+            return trace
+
+        try:
+            ext, other = cross_check.extract_pair(pdf)
+        except llm.LLMError:
+            trace["steps"].append({"step": "extract", "ok": False, "error": "llm_unavailable"})
+            trace["to_manual"] = True
+            finish("failed")
+            raise
+        trace["model"] = ext.model
+        trace["replay"] = ext.replay  # 評審模式重播：原本的模型與產生時間
+        trace["steps"].append({"step": "extract", "ok": True, "model": ext.model, "rows": len(ext.rows),
+                               "fallback": bool(ext.fallback_from), "replay": bool(ext.replay)})
+        trace["steps"].append({"step": "cross_check", "ok": not isinstance(other, str),
+                               "model": other.model if not isinstance(other, str) else cross_check.check_model()})
         ext.pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
+        ext = self._self_correct(pdf, ext, trace)
         cmp = cross_check.recheck(ext.rows, other, ext.model)
         drafts = self.__dict__.setdefault("_dashboard_drafts", {})
         draft_id = uuid.uuid4().hex
         drafts[draft_id] = (sid, ext, other)
         issues = self._dashboard_issues(ext, ext.cohort) + cross_check.issues(cmp)
+        # 轉人工：最後仍有任何錯誤（含入學年度沒有規則庫這類不回饋給模型的錯誤），確認會被擋下
+        trace["to_manual"] = any(i.level == "error" for i in issues)
+        trace["warnings"] = sum(i.level == "warning" for i in issues)
+        finish("draft")
         return {"draft_id": draft_id, "student_id": sid, "exists": sid in self.students,
-                **self._draft_view(ext, issues), "cross_check": _cross_check_view(cmp, len(ext.rows))}
+                **self._draft_view(ext, issues), "cross_check": _cross_check_view(cmp, len(ext.rows)),
+                "trace": trace}
+
+    def _self_correct(self, pdf: bytes, ext: dashboard.Extraction, trace: dict) -> dashboard.Extraction:
+        """有界自我修正：有錯誤時只把檢查理由回饋給主模型重新擷取 1 次，走同一道檢查。
+
+        修正結果要同時符合兩點才採用，否則保留第一次：錯誤變少，而且第一次沒有錯誤的列全部還在
+        （不能靠刪掉有問題的列讓錯誤變少，違反「不能靜默略過錯誤列」）。步驟寫入 trace。
+        """
+        errors = self._retryable_errors(ext)
+        trace["steps"].append({"step": "check", "ok": not errors, "errors": len(errors)})
+        if not errors:
+            return ext
+        try:
+            self._require_ai()  # 「停止全部」後不再送出新的模型呼叫
+            retry = dashboard.extract(pdf, feedback=[_issue_text(i) for i in errors])
+        except dashboard_batch.AIPaused:
+            trace["steps"].append({"step": "retry", "ok": False, "error": "ai_paused",
+                                   "prompt_version": dashboard.RETRY_VERSION})
+            return ext
+        except llm.LLMError:
+            trace["steps"].append({"step": "retry", "ok": False, "error": "llm_unavailable",
+                                   "prompt_version": dashboard.RETRY_VERSION})
+            return ext
+        retry.pages = ext.pages
+        again = self._retryable_errors(retry)
+        bad_rows = {i.row for i in errors if i.row is not None}
+        kept_rows = {_row_key(r) for i, r in enumerate(ext.rows) if i not in bad_rows}
+        dropped = len(kept_rows - {_row_key(r) for r in retry.rows})
+        adopt = len(again) < len(errors) and not dropped
+        trace["steps"].append({"step": "retry", "ok": True, "model": retry.model, "rows": len(retry.rows),
+                               "prompt_version": dashboard.RETRY_VERSION})
+        trace["steps"].append({"step": "check", "ok": not again, "errors": len(again), "dropped_rows": dropped,
+                               "kept": "retry" if adopt else "first"})
+        if not adopt:
+            return ext
+        trace["corrected"] = not again
+        trace["model"], trace["replay"] = retry.model, retry.replay  # 草稿改用修正後的擷取
+        return retry
+
+    def _retryable_errors(self, ext: dashboard.Extraction) -> list[dashboard.Issue]:
+        """可回饋給模型的錯誤：擷取內容本身的問題。入學年度沒有規則庫不回饋，免得模型改寫年度去配合。
+        原文核對只產生警示，這裡略過（pages=None），不重複逐列定位。"""
+        kb = self.rulesets[ext.cohort].kb if ext.cohort in self.rulesets else self.kb
+        return [i for i in dashboard.check(replace(ext, pages=None), kb) if i.level == "error"]
 
     def dashboard_confirm(self, draft_id: str, rows: list[dict], reviewer: str, cohort: int | None = None,
                           acknowledge_warnings: bool = False) -> dict:
@@ -164,13 +261,16 @@ class OfficeMixin:
 
     # ---------- 儀表板批次解析（背景排隊；每份結果仍走上方的確認流程） ----------
     def _batch(self) -> dashboard_batch.DashboardBatch:
-        if "_dashboard_batch" not in self.__dict__:
-            self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract)
-        return self._dashboard_batch
+        with _BATCH_LOCK:  # 網頁伺服器多執行緒，避免同時建出兩個佇列
+            if "_dashboard_batch" not in self.__dict__:
+                self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract)
+            return self._dashboard_batch
 
     def _require_ai(self) -> None:
-        if "_dashboard_batch" in self.__dict__ and self._dashboard_batch.paused:
-            raise llm.LLMError("系辦端 AI 已由承辦人停用，請按「恢復 AI」後再試")
+        with _BATCH_LOCK:
+            batch = self.__dict__.get("_dashboard_batch")
+        if batch is not None and batch.paused:
+            raise dashboard_batch.AIPaused("系辦端 AI 已由承辦人停用，請按「恢復 AI」後再試")
 
     def dashboard_batch_add(self, filename: str, pdf: bytes) -> dict:
         """檔名「<學號>.pdf」；學號須在應屆名單上才排入解析。"""
@@ -209,7 +309,8 @@ class OfficeMixin:
         return {"rows": ext.rows, "issues": [asdict(i) for i in issues], "cohort": ext.cohort,
                 "declared_required": ext.declared_required, "declared_earned": ext.declared_earned,
                 "model": ext.model, "generated_at": ext.generated_at, "prompt_version": ext.prompt_version,
-                "format": ext.format, "fallback_from": ext.fallback_from, "cohorts": sorted(self.rulesets),
+                "format": ext.format, "fallback_from": ext.fallback_from, "replay": ext.replay,
+                "cohorts": sorted(self.rulesets),
                 "categories": sorted(set(dashboard.FORMATS[ext.format].values()) - {""})}
 
     def _replace_student(self, sid: str, records: list, cohort: int | None) -> None:
@@ -290,6 +391,18 @@ class OfficeMixin:
         """單一學生審查明細（可列印）。"""
         rs = self.ruleset(sid)
         return report.render(self.student(sid), rs.kb.program, rs.kb.cohort, rs.rule_version, audited_at)
+
+
+def _replay_mode() -> str:
+    """環境變數設錯時回報 invalid，不讓已套用的上傳因為顯示資料來源失敗而被誤報成未套用。"""
+    try:
+        return replay.mode()
+    except ValueError:
+        return "invalid"
+
+
+def _row_key(r: dict) -> tuple[str, str]:
+    return str(r.get("code", "")).strip().upper(), str(r.get("term", "")).strip()
 
 
 def _student_id(value: str) -> str:

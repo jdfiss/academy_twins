@@ -16,9 +16,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable
 
+from . import llm
+
 DEFAULT_WORKERS = 3
 QUEUED, RUNNING, DONE, FAILED, STOPPED, CONFIRMED = "queued", "running", "done", "failed", "stopped", "confirmed"
 PENDING = (QUEUED, RUNNING)
+
+
+class AIPaused(llm.LLMError):
+    """系辦端 AI 已由承辦人停用（「停止全部」）；只有這種失敗會記為「已停止」，其他失敗照實記錄。"""
 
 
 def workers() -> int:
@@ -54,19 +60,21 @@ class Job:
         d = self.draft or {}
         issues = d.get("issues", [])
         cc = d.get("cross_check") or {}
+        trace = d.get("trace") or {}
         return {"student_id": self.student_id, "filename": self.filename, "state": self.state,
                 "queued_at": self.queued_at, "error": self.error, "seconds": self.seconds,
                 "draft_id": d.get("draft_id"), "rows": len(d.get("rows", [])),
                 "errors": sum(i["level"] == "error" for i in issues),
                 "warnings": sum(i["level"] == "warning" for i in issues),
                 "cross_checked": cc.get("status") == "ok",
-                "flagged_rows": cc.get("flagged_rows", 0) + cc.get("missing_in_primary", 0)}
+                "flagged_rows": cc.get("flagged_rows", 0) + cc.get("missing_in_primary", 0),
+                "corrected": bool(trace.get("corrected")), "to_manual": bool(trace.get("to_manual"))}
 
 
 class DashboardBatch:
     """extract(pdf, student_id) 為單份解析（OfficeMixin.dashboard_extract），回傳待確認草稿。"""
 
-    def __init__(self, extract: Callable[[bytes, str], dict], max_workers: int | None = None):
+    def __init__(self, extract: Callable[[bytes, str], dict], max_workers: int | None = None, paused: bool = False):
         self._extract = extract
         self.max_workers = max_workers or workers()
         self._pool = ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="dashboard-batch")
@@ -74,7 +82,7 @@ class DashboardBatch:
         self._futures = []
         self.jobs: dict[str, Job] = {}
         self.unmatched: list[dict] = []  # 檔名學號不在應屆名單，未解析
-        self.paused = False
+        self.paused = paused
 
     def add(self, filename: str, pdf: bytes, roster_ids: set[str]) -> dict:
         """加入佇列；學號不在名單上時不解析，記為名單異常並回傳 {"unmatched": ...}。"""
@@ -117,6 +125,14 @@ class DashboardBatch:
             for job in self.jobs.values():
                 if job.state == QUEUED:
                     job.state, job.error = STOPPED, "已由承辦人停止"
+
+    def close(self) -> None:
+        """換新批次時呼叫：還沒開始的不再開始；執行中的模型呼叫無法中斷，結果不會出現在新批次。"""
+        with self._lock:
+            for job in self.jobs.values():
+                if job.state == QUEUED:
+                    job.state = STOPPED
+        self._pool.shutdown(wait=False, cancel_futures=True)
 
     def resume(self) -> None:
         with self._lock:
@@ -162,13 +178,18 @@ class DashboardBatch:
                 return
             job.state = RUNNING
         started = time.monotonic()
+        stopped = False
         try:
             draft, error = self._extract(job.pdf, job.student_id), ""
+        except AIPaused:  # 開始前一刻被「停止全部」擋下，算已停止，不算失敗
+            draft, error, stopped = None, "", True
         except Exception as e:  # 單份失敗只記在該份，不影響其他份與既有資料
             draft, error = None, str(e.args[0] if e.args else e)[:300] or type(e).__name__
         with self._lock:
             job.seconds = round(time.monotonic() - started, 1)
-            if draft is None:
+            if stopped:
+                job.state, job.error = STOPPED, "已由承辦人停止"
+            elif draft is None:
                 job.state, job.error = FAILED, error
             else:
                 job.state, job.draft, job.pdf = DONE, draft, None  # 成功後不再保留 PDF

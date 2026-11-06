@@ -201,6 +201,158 @@ class DashboardTest(unittest.TestCase):
         draft = self.extract(response)
         self.assertEqual(draft["fallback_from"], response.fallback_from)
 
+    # ---------- 有界自我修正與執行軌跡 ----------
+    def scripted(self, first, retry):
+        """主模型第一次回 first、自我修正那次回 retry；第二模型都回正確答案。記下每次呼叫的提示。"""
+        prompts = []
+
+        def generate(prompt, *args, model=None, **kwargs):
+            prompts.append((prompt, model))
+            if model:
+                return dataclasses.replace(fake_response(), model=model)
+            return retry if dashboard.RETRY.split("{")[0] in prompt else first
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(llm, "generate_json", side_effect=generate))
+        stack.enter_context(pdf_pages(fake_response()))
+        return stack, prompts
+
+    def bad_response(self):
+        rows = fake_response().data["rows"]
+        rows[0] = {**rows[0], "grade": "優"}
+        return fake_response(rows)
+
+    def traces(self):
+        return [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()
+                if json.loads(line)["type"] == "extract_trace"]
+
+    def test_self_correction_fixes_error_once(self):
+        stack, prompts = self.scripted(self.bad_response(), fake_response())
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertFalse(any(i["level"] == "error" for i in draft["issues"]))
+        self.assertTrue(draft["trace"]["corrected"])
+        self.assertFalse(draft["trace"]["to_manual"])
+        retries = [p for p, m in prompts if m is None and "上一次擷取" in p]
+        self.assertEqual(len(retries), 1)
+        self.assertIn("成績", retries[0])  # 回饋的是檢查理由
+        self.assertNotIn("DEMO-D02", retries[0])  # 不加入學號
+        self.assertEqual([s["step"] for s in draft["trace"]["steps"]],
+                         ["extract", "cross_check", "check", "retry", "check"])
+
+    def test_self_correction_still_failing_goes_to_manual(self):
+        stack, prompts = self.scripted(self.bad_response(), self.bad_response())
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertTrue(any(i["level"] == "error" for i in draft["issues"]))
+        self.assertTrue(draft["trace"]["to_manual"])
+        self.assertFalse(draft["trace"]["corrected"])
+        self.assertEqual(sum(1 for p, m in prompts if m is None), 2)  # 只重來 1 次
+
+    def test_worse_retry_is_not_used(self):
+        worse = fake_response(rows=[])
+        stack, _ = self.scripted(self.bad_response(), worse)
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertEqual(len(draft["rows"]), len(answer_rows()))
+        self.assertEqual(draft["trace"]["steps"][-1]["kept"], "first")
+
+    def test_retry_that_drops_good_rows_is_not_used(self):
+        """審查 #1：修正版刪掉有錯的列、錯誤變少，但也刪掉了沒問題的列，不能採用。"""
+        bad = self.bad_response()
+        dropped = fake_response(rows=fake_response().data["rows"][5:])  # 少了第 1–5 列（第 2–5 列原本沒問題）
+        stack, _ = self.scripted(bad, dropped)
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertEqual(len(draft["rows"]), len(answer_rows()))
+        last = draft["trace"]["steps"][-1]
+        self.assertEqual((last["kept"], last["dropped_rows"]), ("first", 4))
+        self.assertFalse(draft["trace"]["corrected"])
+        self.assertTrue(draft["trace"]["to_manual"])
+
+    def test_retry_may_drop_only_the_bad_row(self):
+        """有錯的那一列被修正版拿掉（例如 AI 多抄的列）可以採用；其他列都要在。"""
+        rows = fake_response().data["rows"]
+        extra = rows + [{**rows[0], "code": "XX999", "grade": "優", "source_text": "XX999"}]
+        stack, _ = self.scripted(fake_response(extra), fake_response())
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertTrue(draft["trace"]["corrected"])
+        self.assertEqual(len(draft["rows"]), len(answer_rows()))
+
+    def test_retry_is_skipped_when_ai_is_stopped(self):
+        """審查 #3：擷取途中按了「停止全部」，自我修正不得再呼叫模型。"""
+        prompts = []
+        batch = self.service._batch()
+
+        def generate(prompt, *args, model=None, **kwargs):
+            prompts.append(prompt)
+            batch.paused = True  # 第一次擷取進行中被停止
+            return dataclasses.replace(self.bad_response(), model=model or "fake-model")
+        with mock.patch.object(llm, "generate_json", side_effect=generate), pdf_pages(fake_response()):
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertFalse(any("上一次擷取" in p for p in prompts))
+        self.assertEqual(draft["trace"]["steps"][-1], {"step": "retry", "ok": False, "error": "ai_paused",
+                                                       "prompt_version": dashboard.RETRY_VERSION})
+
+    def test_trace_to_manual_counts_cohort_error(self):
+        """審查 #10：入學年度沒有規則庫不回饋模型，但確認會被擋，軌跡要標示轉人工。"""
+        draft = self.extract(fake_response(cohort=99))
+        self.assertTrue(draft["trace"]["to_manual"])
+
+    def test_adopted_retry_model_is_traced(self):
+        fixed = dataclasses.replace(fake_response(), model="backup-model")
+        stack, _ = self.scripted(self.bad_response(), fixed)
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertEqual((draft["trace"]["model"], draft["model"]), ("backup-model", "backup-model"))
+
+    def test_clean_extraction_does_not_retry(self):
+        draft = self.extract(fake_response())
+        self.assertNotIn("retry", [s["step"] for s in draft["trace"]["steps"]])
+        self.assertFalse(draft["trace"]["to_manual"])
+
+    def test_missing_cohort_rules_is_not_fed_back(self):
+        draft = self.extract(fake_response(cohort=99))
+        self.assertTrue(any(i["level"] == "error" and "規則庫" in i["message"] for i in draft["issues"]))
+        self.assertNotIn("retry", [s["step"] for s in draft["trace"]["steps"]])
+
+    def test_trace_is_logged_with_counts_only(self):
+        stack, _ = self.scripted(self.bad_response(), fake_response())
+        with stack:
+            self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        [trace] = self.traces()
+        text = json.dumps(trace, ensure_ascii=False)
+        self.assertNotIn("DEMO-D02", text)
+        for r in answer_rows()[:3]:
+            self.assertNotIn(r["code"], text)
+        self.assertNotIn("優", text)
+        for key in ("model", "prompt_version", "at", "corrected", "to_manual", "wait_seconds", "steps"):
+            self.assertIn(key, trace)
+
+    def test_llm_failure_is_traced(self):
+        with mock.patch.object(llm, "generate_json", side_effect=llm.LLMError("503")), \
+                self.assertRaises(llm.LLMError):
+            self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        [trace] = self.traces()
+        self.assertEqual((trace["status"], trace["to_manual"]), ("failed", True))
+
+    def test_source_text_without_spaces_is_not_flagged(self):
+        """備援模型把原文欄位黏在一起（2026-11-06 實測 DEMO-D07）時，正確的學分與成績不應被誤報。"""
+        row = {"code": "IM1001", "name": "計算機概論I", "credits": "3", "grade": "89"}
+        self.assertEqual(dashboard._fields_not_in_source(row, "114-1IM1001計算機概論I389"), [])
+        self.assertEqual(dashboard._fields_not_in_source(
+            {"code": "SL-1", "name": "服務學習(一)", "credits": "0", "grade": "80"}, "114-1SL-1服務學習(一)080"), [])
+        # 讀錯的值仍要抓到：黏在一起的數字裡剛好含有該數字也不算（審查指出 8、38 會被 389 蓋過）
+        glued = "114-1IM1001計算機概論I389"
+        for grade in ("8", "38", "75", "9"):
+            with self.subTest(grade=grade):
+                self.assertIn(f"成績「{grade}」", dashboard._fields_not_in_source({**row, "grade": grade}, glued))
+        # 學期、課號裡的數字不算數
+        self.assertEqual(dashboard._fields_not_in_source({**row, "credits": "4", "grade": "11"}, glued),
+                         ["學分「4」", "成績「11」"])
+        # 有空白分隔時照舊逐一比對
+        self.assertEqual(dashboard._fields_not_in_source(row, "114-1 IM1001 計算機概論I 3 89"), [])
+
     def test_demo_answer_files_are_fictional(self):
         for path in SAMPLES.glob("dashboard_*_answer.csv"):
             ids = {r["student_id"] for r in csv.DictReader(path.read_text(encoding="utf-8").splitlines())}
