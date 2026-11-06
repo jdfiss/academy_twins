@@ -176,6 +176,7 @@ function renderRules() {
 function renderSource(src) {
   $("#data-source").textContent = `${src.students} 位學生・${src.records_count} 筆紀錄`;
   $("#data-source").title = `修課紀錄 ${src.records}・應屆名單 ${src.roster}（${src.roster_count} 位）`;
+  $("#judge-banner").hidden = src.replay_mode !== "only";
 }
 
 function fillStudentSelect() {
@@ -252,7 +253,9 @@ const TRACE_STEPS = {
 function traceSummary(t) {
   if (!t) return "";
   const end = t.to_manual ? "仍有錯誤，交給承辦人逐列修正" : t.corrected ? "自我修正成功" : "交給承辦人確認";
-  return `<div class="trace"><b>AI 做了什麼</b>
+  const replayed = t.replay ? ` <span class="replay">重播：${esc(t.replay.model)}・${esc(when(t.replay.generated_at))}產生`
+    + `（${esc(t.replay.reason)}）</span>` : "";
+  return `<div class="trace"><b>AI 做了什麼</b>${replayed}
     <ol>${t.steps.map((s) => `<li class="${s.ok ? "" : "bad"}">${esc((TRACE_STEPS[s.step] || (() => s.step))(s))}</li>`).join("")}
     <li class="${t.to_manual ? "bad" : ""}">${end}</li></ol>
     <span class="hint">共 ${t.wait_seconds} 秒・提示 ${esc(t.prompt_version)}</span></div>`;
@@ -262,7 +265,8 @@ function renderDraft(fresh = false) {
   const d = DRAFT;
   $("#dash-draft").hidden = false;
   $("#dash-meta").textContent = `模型 ${d.model}${d.cross_check ? `／${d.cross_check.check_model}` : ""}・${when(d.generated_at)}・`
-    + `提示 ${d.prompt_version}・版型 ${d.format}` + (d.fallback_from ? `・已改用備援（${d.fallback_from}）` : "");
+    + `提示 ${d.prompt_version}・版型 ${d.format}` + (d.fallback_from ? `・已改用備援（${d.fallback_from}）` : "")
+    + (d.replay ? `・重播（${d.replay.reason}），非即時呼叫` : "");
   if (fresh) $("#dash-cohort").value = d.cohort ?? "";
   $("#dash-declared").textContent = `文件標示應修 ${d.declared_required ?? "—"}、實得 ${d.declared_earned ?? "—"} 學分`
     + (d.exists ? `；${d.student_id} 已有紀錄，確認後取代` : "");
@@ -463,7 +467,8 @@ function renderRuleDraft(d) {
   RULE_DRAFT = d;
   ruleEdited = false;
   $("#rule-draft-panel").hidden = false;
-  $("#rule-meta").textContent = `模型 ${d.model}・${when(d.generated_at)}`;
+  $("#rule-meta").textContent = `模型 ${d.model}・${when(d.generated_at)}`
+    + (d.replay ? `・重播（${d.replay.reason}），非即時呼叫` : "");
   $("#rule-issues").innerHTML = d.issues.map((i) => `<div class="issue FAIL">✘ ${esc(i.message)}</div>`).join("")
     + (d.warnings || []).map((w) => `<div class="issue WARNING">⚠ ${esc(w.message)}</div>`).join("")
     + (d.baseline_changed ? '<div class="issue WARNING">⚠ 現有規則在草擬後已改變，請重新核對差異。</div>' : "");

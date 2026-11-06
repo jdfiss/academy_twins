@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import knowledge_base, llm, pdf_text
+from . import knowledge_base, llm, pdf_text, replay
 
 ROOT = Path(__file__).parent.parent
 BASELINE_PATH = ROOT / "data" / "curriculum_im_114.json"
@@ -289,7 +289,7 @@ def run_draft(pdf: bytes, year: int = 114, answer: Path | None = None) -> dict:
                            courses=json.dumps({c["code"]: c["name"] for c in context["courses"]}, ensure_ascii=False),
                            categories=json.dumps(list(context["categories"]), ensure_ascii=False))
     try:
-        result = llm.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)])
+        result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)])
     except llm.LLMError:
         failure = {"type": "draft_failed", "model": llm.model_name(), "prompt_version": PROMPT_VERSION,
                    "at": now(), "errors": 1, "year": year, "baseline_version": _hash(context)}
@@ -305,6 +305,7 @@ def run_draft(pdf: bytes, year: int = 114, answer: Path | None = None) -> dict:
     draft = {"draft_id": uuid.uuid4().hex, "state": "draft", "active": False, "label": LABEL, "year": year,
              "requirements": rows, "unreadable": data.get("unreadable", "") if isinstance(data, dict) else "",
              "response_errors": shape_errors, "model": result.model, "generated_at": result.generated_at,
+             "replay": getattr(result, "replay", None),  # 評審模式重播時標示原本的模型與時間
              "prompt_version": PROMPT_VERSION, "source_sha256": hashlib.sha256(pdf).hexdigest(),
              "baseline_sha256": _hash(context),
              # 公開規章的逐頁文字，供重新檢查時核對引文；不送給 AI，也不寫入量測紀錄

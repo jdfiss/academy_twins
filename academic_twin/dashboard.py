@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import llm, pdf_text
+from . import llm, pdf_text, replay
 from .knowledge_base import KnowledgeBase
 from .records import REQUIRED, TERM_RE
 
@@ -101,6 +101,7 @@ class Extraction:
     fallback_from: str = ""  # 改用備援模型時，前面模型失敗的原因
     # 從 PDF 取出的逐頁文字，供 check 核對 AI 宣稱的原文與頁碼；None 表示未要求核對（舊行為）
     pages: pdf_text.PdfText | None = field(default=None, repr=False)
+    replay: dict | None = None  # 評審模式重播時為 {model, generated_at, reason}；即時呼叫為 None
 
 
 def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: bool = False,
@@ -115,7 +116,7 @@ def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: 
         raise ValueError("不是 PDF 檔案")
     pages = pdf_text.extract_pages(pdf) if read_text else None
     prompt = PROMPT + RETRY.format(errors="\n".join(f"- {m}" for m in feedback)) if feedback else PROMPT
-    result = llm.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
+    result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
     data = result.data if isinstance(result.data, dict) else {}
     mapping = FORMATS[fmt]
     rows = []
@@ -127,7 +128,7 @@ def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: 
         rows.append(row)
     return Extraction(rows, data.get("sections", []), data.get("declared_required"), data.get("declared_earned"),
                       str(data.get("unreadable") or ""), result.model, result.generated_at, PROMPT_VERSION, fmt,
-                      data.get("cohort"), result.fallback_from, pages)
+                      data.get("cohort"), result.fallback_from, pages, getattr(result, "replay", None))
 
 
 def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = None) -> list[Issue]:

@@ -39,6 +39,8 @@ body.office { font-size: 16px; }
 .office .trace { padding: 10px 14px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 8px; }
 .office .trace ol { margin: 6px 0; padding-left: 22px; }
 .office .trace li.bad { color: var(--warn); }
+.office .judge { background: var(--warn-soft); border-color: var(--warn); }
+.office .replay { color: var(--warn); font-weight: 600; }
 .office blockquote { margin: 8px 0; padding: 8px 14px; border-left: 3px solid var(--line); white-space: pre-wrap; }
 /* 解析表格：代碼與數字欄窄，課名與原文寬 */
 .dash-table { min-width: 1100px; table-layout: fixed; }
@@ -73,6 +75,10 @@ body.office { font-size: 16px; }
 </header>
 <!-- 系辦端（A 組）。共用外框與樣式見 assets/common.*，變更需通知 B 組 -->
 <main>
+  <div class="card section judge" id="judge-banner" hidden>
+    <b>評審模式</b>：AI 結果為預先錄製的重播，不呼叫模型；只能解析 <code>data/samples/demo_batch/</code> 的虛構儀表板。
+    畫面上每份結果都標示原本的模型與產生時間。
+  </div>
   <!-- 畢審總表 -->
   <section class="view active" id="view-batch">
     <div class="card section">

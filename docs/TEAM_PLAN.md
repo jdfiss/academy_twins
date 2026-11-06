@@ -122,6 +122,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `academic_twin/dashboard.py` | A | AI 解析儀表板 PDF 為待確認紀錄（附來源頁碼與原文）、檢查、與標準答案比對 |
 | `academic_twin/dashboard_batch.py` | A | 儀表板批次解析：檔名對名單、背景佇列、失敗重試、停止全部（系辦端 AI 停用）；結果仍逐份確認 |
 | `academic_twin/demo_dashboard.py` | A | 產生虛構儀表板 PDF 與標準答案（`data/samples/`）；`--bench` 產生 24 份虛構基準集（`data/samples/bench/`）；`--demo-batch` 產生比賽示範批次 DEMO-D03–D09（`data/samples/demo_batch/`） |
+| `academic_twin/replay.py` | A | 評審模式：錄製虛構文件的真實 AI 回應並重播（`ACADEMIC_TWIN_REPLAY`＝fallback／only／off）；重播一律標示原模型與產生時間 |
 | `academic_twin/rule_draft.py` | A | AI 草擬 114 少量規則、來源與差異，重用知識庫驗證；人工確認只存獨立草稿，不啟用 |
 | `academic_twin/rule_versions.py` | A | 已確認草稿產生新規則版本，由承辦人明確啟用、可還原；不覆寫正式規則庫 |
 | `academic_twin/cross_check.py` | A | 雙模型交叉驗證：同一份儀表板由兩個模型各自擷取，不一致處列為警示；一致不代表正確 |
@@ -161,6 +162,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_dashboard.py` | A |
 | `tests/test_demo_batch.py` | A |
 | `tests/test_dashboard_batch.py` | A |
+| `tests/test_replay.py` | A |
 | `tests/test_rule_draft.py` | A |
 | `tests/test_rule_versions.py` | A |
 | `tests/test_evaluate.py` | A |
@@ -518,7 +520,7 @@ TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
 
 ### 測試
 
-- PR 合併前全部測試須通過（目前 288 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
+- PR 合併前全部測試須通過（目前 294 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
 - 新功能要附測試，放在自己組的測試檔；新增測試檔時在 PR 說明寫明歸屬。
 - **不得為了讓測試通過而刪除或放寬對方組的測試**。對方的測試若與新需求衝突，先找對方組討論，由對方修改。
 - `tests/test_contract.py` 的兩端一致性測試失敗，一律視為阻擋合併：同一份資料在兩端必須得到相同判定。

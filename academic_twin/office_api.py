@@ -9,7 +9,8 @@ import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 
-from . import cross_check, dashboard, dashboard_batch, llm, pdf_text, report, rule_diff, rule_draft, rule_versions
+from . import (cross_check, dashboard, dashboard_batch, llm, pdf_text, replay, report, rule_diff, rule_draft,
+               rule_versions)
 from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
 
@@ -26,6 +27,7 @@ class OfficeMixin:
             "students": len(self.students),
             "roster": self.roster_name,
             "roster_count": self.roster.roster_size,
+            "replay_mode": replay.mode(),  # only＝評審模式（只重播預錄的虛構文件結果）
         }
 
     # ---------- 畢審 ----------
@@ -142,8 +144,9 @@ class OfficeMixin:
             finish("failed")
             raise
         trace["model"] = ext.model
+        trace["replay"] = ext.replay  # 評審模式重播：原本的模型與產生時間
         trace["steps"].append({"step": "extract", "ok": True, "model": ext.model, "rows": len(ext.rows),
-                               "fallback": bool(ext.fallback_from)})
+                               "fallback": bool(ext.fallback_from), "replay": bool(ext.replay)})
         trace["steps"].append({"step": "cross_check", "ok": not isinstance(other, str),
                                "model": other.model if not isinstance(other, str) else cross_check.check_model()})
         pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
@@ -266,7 +269,8 @@ class OfficeMixin:
         return {"rows": ext.rows, "issues": [asdict(i) for i in issues], "cohort": ext.cohort,
                 "declared_required": ext.declared_required, "declared_earned": ext.declared_earned,
                 "model": ext.model, "generated_at": ext.generated_at, "prompt_version": ext.prompt_version,
-                "format": ext.format, "fallback_from": ext.fallback_from, "cohorts": sorted(self.rulesets),
+                "format": ext.format, "fallback_from": ext.fallback_from, "replay": ext.replay,
+                "cohorts": sorted(self.rulesets),
                 "categories": sorted(set(dashboard.FORMATS[ext.format].values()) - {""})}
 
     def _replace_student(self, sid: str, records: list, cohort: int | None) -> None:
