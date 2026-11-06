@@ -1,7 +1,7 @@
 {
  "model": "gemini-2.5-flash",
- "generated_at": "2026-11-06T21:31:23",
- "recorded_at": "2026-11-06T21:31:23",
+ "generated_at": "2026-11-06T21:40:48",
+ "recorded_at": "2026-11-06T21:40:48",
  "fallback_from": "Gemini（gemini-3.5-flash）等待逾時，90 秒內未回應",
  "data": {
   "rows": [
@@ -580,6 +580,7 @@
   ],
   "cohort": 114,
   "declared_earned": 133,
-  "declared_required": 128
+  "declared_required": 128,
+  "unreadable": ""
  }
 }

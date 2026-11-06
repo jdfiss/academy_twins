@@ -1,0 +1,586 @@
+{
+ "model": "gemini-2.5-flash",
+ "generated_at": "2026-11-06T21:38:38",
+ "recorded_at": "2026-11-06T21:38:38",
+ "fallback_from": "",
+ "data": {
+  "rows": [
+   {
+    "rule_code": "A01",
+    "term": "114-1",
+    "code": "IM1001",
+    "name": "計算機概論I",
+    "credits": "3",
+    "grade": "89",
+    "source_page": 1,
+    "source_text": "114-1IM1001計算機概論I389"
+   },
+   {
+    "rule_code": "A01",
+    "term": "114-1",
+    "code": "MA1005",
+    "name": "微積分",
+    "credits": "3",
+    "grade": "82",
+    "source_page": 1,
+    "source_text": "114-1MA1005微積分382"
+   },
+   {
+    "rule_code": "A01",
+    "term": "114-1",
+    "code": "MT1021",
+    "name": "企業概論",
+    "credits": "3",
+    "grade": "89",
+    "source_page": 1,
+    "source_text": "114-1MT1021企業概論389"
+   },
+   {
+    "rule_code": "A01",
+    "term": "114-1",
+    "code": "MT1031",
+    "name": "會計學(上)",
+    "credits": "3",
+    "grade": "63",
+    "source_page": 1,
+    "source_text": "114-1MT1031會計學(上)363"
+   },
+   {
+    "rule_code": "A01",
+    "term": "114-2",
+    "code": "IM1018",
+    "name": "資訊管理導論",
+    "credits": "3",
+    "grade": "90",
+    "source_page": 1,
+    "source_text": "114-2IM1018資訊管理導論390"
+   },
+   {
+    "rule_code": "A01",
+    "term": "114-2",
+    "code": "IM1023",
+    "name": "程式設計",
+    "credits": "3",
+    "grade": "62",
+    "source_page": 1,
+    "source_text": "114-2IM1023程式設計362"
+   },
+   {
+    "rule_code": "A01",
+    "term": "114-2",
+    "code": "MT1032",
+    "name": "會計學(下)",
+    "credits": "3",
+    "grade": "89",
+    "source_page": 1,
+    "source_text": "114-2MT1032會計學(下)389"
+   },
+   {
+    "rule_code": "A01",
+    "term": "115-1",
+    "code": "IM2011",
+    "name": "資料與檔案結構",
+    "credits": "3",
+    "grade": "72",
+    "source_page": 1,
+    "source_text": "115-1IM2011資料與檔案結構372"
+   },
+   {
+    "rule_code": "A01",
+    "term": "115-1",
+    "code": "IM2046",
+    "name": "作業系統",
+    "credits": "3",
+    "grade": "76",
+    "source_page": 1,
+    "source_text": "115-1IM2046作業系統376"
+   },
+   {
+    "rule_code": "A01",
+    "term": "115-1",
+    "code": "MT1011",
+    "name": "經濟學(上)",
+    "credits": "3",
+    "grade": "82",
+    "source_page": 1,
+    "source_text": "115-1MT1011經濟學(上)382"
+   },
+   {
+    "rule_code": "A01",
+    "term": "115-1",
+    "code": "MT2041",
+    "name": "統計學(上)",
+    "credits": "3",
+    "grade": "96",
+    "source_page": 1,
+    "source_text": "115-1MT2041統計學(上)396"
+   },
+   {
+    "rule_code": "A01",
+    "term": "115-2",
+    "code": "IM2002",
+    "name": "資料庫管理",
+    "credits": "3",
+    "grade": "74",
+    "source_page": 1,
+    "source_text": "115-2IM2002資料庫管理374"
+   },
+   {
+    "rule_code": "A01",
+    "term": "115-2",
+    "code": "IM3061",
+    "name": "企業資料通訊",
+    "credits": "3",
+    "grade": "76",
+    "source_page": 1,
+    "source_text": "115-2IM3061企業資料通訊376"
+   },
+   {
+    "rule_code": "A01",
+    "term": "115-2",
+    "code": "MT1012",
+    "name": "經濟學(下)",
+    "credits": "3",
+    "grade": "68",
+    "source_page": 1,
+    "source_text": "115-2MT1012經濟學(下)368"
+   },
+   {
+    "rule_code": "A01",
+    "term": "115-2",
+    "code": "MT2042",
+    "name": "統計學(下)",
+    "credits": "3",
+    "grade": "72",
+    "source_page": 1,
+    "source_text": "115-2MT2042統計學(下)372"
+   },
+   {
+    "rule_code": "A01",
+    "term": "116-1",
+    "code": "IM3003",
+    "name": "作業研究I",
+    "credits": "3",
+    "grade": "88",
+    "source_page": 1,
+    "source_text": "116-1IM3003作業研究I388"
+   },
+   {
+    "rule_code": "A01",
+    "term": "116-1",
+    "code": "IM3059",
+    "name": "行銷學",
+    "credits": "3",
+    "grade": "82",
+    "source_page": 1,
+    "source_text": "116-1IM3059行銷學382"
+   },
+   {
+    "rule_code": "A01",
+    "term": "116-1",
+    "code": "IM3069",
+    "name": "系統分析與設計",
+    "credits": "3",
+    "grade": "93",
+    "source_page": 1,
+    "source_text": "116-1IM3069系統分析與設計393"
+   },
+   {
+    "rule_code": "A01",
+    "term": "116-1",
+    "code": "IM3070",
+    "name": "組織行為",
+    "credits": "3",
+    "grade": "73",
+    "source_page": 1,
+    "source_text": "116-1IM3070組織行為373"
+   },
+   {
+    "rule_code": "A01",
+    "term": "116-2",
+    "code": "IM2037",
+    "name": "演算法",
+    "credits": "3",
+    "grade": "76",
+    "source_page": 1,
+    "source_text": "116-2IM2037演算法376"
+   },
+   {
+    "rule_code": "A01",
+    "term": "116-2",
+    "code": "IM3028",
+    "name": "資訊系統發展專題I",
+    "credits": "3",
+    "grade": "63",
+    "source_page": 1,
+    "source_text": "116-2IM3028資訊系統發展專題I363"
+   },
+   {
+    "rule_code": "A01",
+    "term": "116-2",
+    "code": "IM3031",
+    "name": "電子商務",
+    "credits": "3",
+    "grade": "76",
+    "source_page": 1,
+    "source_text": "116-2IM3031電子商務376"
+   },
+   {
+    "rule_code": "A01",
+    "term": "116-2",
+    "code": "IM3078",
+    "name": "人工智慧與機器學習",
+    "credits": "3",
+    "grade": "98",
+    "source_page": 1,
+    "source_text": "116-2IM3078人工智慧與機器學習398"
+   },
+   {
+    "rule_code": "A01",
+    "term": "117-1",
+    "code": "IM4001",
+    "name": "資訊系統發展專題II",
+    "credits": "3",
+    "grade": "72",
+    "source_page": 1,
+    "source_text": "117-1IM4001資訊系統發展專題II372"
+   },
+   {
+    "rule_code": "A01",
+    "term": "117-1",
+    "code": "IM4048",
+    "name": "管理資訊系統",
+    "credits": "3",
+    "grade": "62",
+    "source_page": 1,
+    "source_text": "117-1IM4048管理資訊系統362"
+   },
+   {
+    "rule_code": "A02",
+    "term": "114-1",
+    "code": "IM1013",
+    "name": "初階程式設計",
+    "credits": "3",
+    "grade": "93",
+    "source_page": 2,
+    "source_text": "114-1IM1013初階程式設計393"
+   },
+   {
+    "rule_code": "A02",
+    "term": "114-2",
+    "code": "MA1006",
+    "name": "微積分(下)",
+    "credits": "3",
+    "grade": "79",
+    "source_page": 2,
+    "source_text": "114-2MA1006微積分(下)379"
+   },
+   {
+    "rule_code": "A02",
+    "term": "115-1",
+    "code": "IM3029",
+    "name": "網頁程式設計",
+    "credits": "3",
+    "grade": "64",
+    "source_page": 2,
+    "source_text": "115-1IM3029網頁程式設計364"
+   },
+   {
+    "rule_code": "B01",
+    "term": "117-1",
+    "code": "IM9001",
+    "name": "Python(示意課號)",
+    "credits": "3",
+    "grade": "83",
+    "source_page": 2,
+    "source_text": "117-1IM9001Python(示意課號)383"
+   },
+   {
+    "rule_code": "B01",
+    "term": "117-1",
+    "code": "IM9002",
+    "name": "電腦網路安全(示意課號)",
+    "credits": "3",
+    "grade": "96",
+    "source_page": 2,
+    "source_text": "117-1IM9002電腦網路安全(示意課號)396"
+   },
+   {
+    "rule_code": "B01",
+    "term": "117-1",
+    "code": "IM9003",
+    "name": "商業智慧(示意課號)",
+    "credits": "3",
+    "grade": "73",
+    "source_page": 2,
+    "source_text": "117-1IM9003商業智慧(示意課號)373"
+   },
+   {
+    "rule_code": "B01",
+    "term": "117-2",
+    "code": "IM9001",
+    "name": "Python(示意課號)",
+    "credits": "3",
+    "grade": "90",
+    "source_page": 2,
+    "source_text": "117-2IM9001Python(示意課號)390"
+   },
+   {
+    "rule_code": "B01",
+    "term": "117-2",
+    "code": "IM9004",
+    "name": "資料科學與機器學習(示意課號)",
+    "credits": "3",
+    "grade": "77",
+    "source_page": 2,
+    "source_text": "117-2IM9004資料科學與機器學習(示意課號)377"
+   },
+   {
+    "rule_code": "B01",
+    "term": "117-2",
+    "code": "IM9005",
+    "name": "顧客關係管理(示意課號)",
+    "credits": "3",
+    "grade": "66",
+    "source_page": 2,
+    "source_text": "117-2IM9005顧客關係管理(示意課號)366"
+   },
+   {
+    "rule_code": "B02",
+    "term": "117-2",
+    "code": "EE1001",
+    "name": "電路學(外系)",
+    "credits": "3",
+    "grade": "75",
+    "source_page": 2,
+    "source_text": "117-2EE1001電路學(外系)375"
+   },
+   {
+    "rule_code": "B02",
+    "term": "117-2",
+    "code": "FN3001",
+    "name": "財務管理(外系)",
+    "credits": "3",
+    "grade": "95",
+    "source_page": 2,
+    "source_text": "117-2FN3001財務管理(外系)395"
+   },
+   {
+    "rule_code": "C01",
+    "term": "114-1",
+    "code": "CH-1",
+    "name": "國文(上)",
+    "credits": "3",
+    "grade": "64",
+    "source_page": 2,
+    "source_text": "114-1CH-1國文(上)364"
+   },
+   {
+    "rule_code": "C01",
+    "term": "114-2",
+    "code": "CH-2",
+    "name": "國文(下)",
+    "credits": "2",
+    "grade": "67",
+    "source_page": 2,
+    "source_text": "114-2CH-2國文(下)267"
+   },
+   {
+    "rule_code": "C02",
+    "term": "114-1",
+    "code": "EN-1",
+    "name": "大一英文(上)",
+    "credits": "3",
+    "grade": "92",
+    "source_page": 2,
+    "source_text": "114-1EN-1大一英文(上)392"
+   },
+   {
+    "rule_code": "C02",
+    "term": "114-2",
+    "code": "EN-2",
+    "name": "大一英文(下)",
+    "credits": "3",
+    "grade": "91",
+    "source_page": 2,
+    "source_text": "114-2EN-2大一英文(下)391"
+   },
+   {
+    "rule_code": "C03",
+    "term": "115-2",
+    "code": "GE-1",
+    "name": "通識:科技與社會",
+    "credits": "3",
+    "grade": "79",
+    "source_page": 2,
+    "source_text": "115-2GE-1通識:科技與社會379"
+   },
+   {
+    "rule_code": "C03",
+    "term": "116-1",
+    "code": "GE-2",
+    "name": "通識:藝術欣賞",
+    "credits": "3",
+    "grade": "76",
+    "source_page": 2,
+    "source_text": "116-1GE-2通識:藝術欣賞376"
+   },
+   {
+    "rule_code": "C03",
+    "term": "116-2",
+    "code": "GE-3",
+    "name": "通識:環境永續",
+    "credits": "3",
+    "grade": "85",
+    "source_page": 2,
+    "source_text": "116-2GE-3通識:環境永續385"
+   },
+   {
+    "rule_code": "C03",
+    "term": "117-1",
+    "code": "GE-4",
+    "name": "通識:心理與生活",
+    "credits": "2",
+    "grade": "80",
+    "source_page": 2,
+    "source_text": "117-1GE-4通識:心理與生活280"
+   },
+   {
+    "rule_code": "C04",
+    "term": "115-1",
+    "code": "CC0109",
+    "name": "亞洲藝術",
+    "credits": "3",
+    "grade": "61",
+    "source_page": 3,
+    "source_text": "115-1CC0109亞洲藝術361"
+   },
+   {
+    "rule_code": "C05",
+    "term": "114-1",
+    "code": "PE-1",
+    "name": "大一體育",
+    "credits": "0",
+    "grade": "80",
+    "source_page": 3,
+    "source_text": "114-1PE-1大一體育080"
+   },
+   {
+    "rule_code": "C05",
+    "term": "114-2",
+    "code": "PE-2",
+    "name": "大一體育",
+    "credits": "0",
+    "grade": "80",
+    "source_page": 3,
+    "source_text": "114-2PE-2大一體育080"
+   },
+   {
+    "rule_code": "C05",
+    "term": "115-1",
+    "code": "PE-3",
+    "name": "體育",
+    "credits": "0",
+    "grade": "80",
+    "source_page": 3,
+    "source_text": "115-1PE-3體育080"
+   },
+   {
+    "rule_code": "C05",
+    "term": "115-2",
+    "code": "PE-4",
+    "name": "體育",
+    "credits": "0",
+    "grade": "80",
+    "source_page": 3,
+    "source_text": "115-2PE-4體育080"
+   },
+   {
+    "rule_code": "C05",
+    "term": "116-1",
+    "code": "PE-5",
+    "name": "體育",
+    "credits": "0",
+    "grade": "80",
+    "source_page": 3,
+    "source_text": "116-1PE-5體育080"
+   },
+   {
+    "rule_code": "C06",
+    "term": "114-1",
+    "code": "SL-1",
+    "name": "服務學習(一)",
+    "credits": "0",
+    "grade": "80",
+    "source_page": 3,
+    "source_text": "114-1SL-1服務學習(一)080"
+   },
+   {
+    "rule_code": "C06",
+    "term": "116-2",
+    "code": "SL-2",
+    "name": "服務學習(二)",
+    "credits": "0",
+    "grade": "80",
+    "source_page": 3,
+    "source_text": "116-2SL-2服務學習(二)080"
+   }
+  ],
+  "sections": [
+   {
+    "rule_code": "A01",
+    "declared_earned": 75,
+    "title": "院系必修"
+   },
+   {
+    "rule_code": "A02",
+    "declared_earned": 9,
+    "title": "必選"
+   },
+   {
+    "rule_code": "B01",
+    "declared_earned": 18,
+    "title": "系選修"
+   },
+   {
+    "rule_code": "B02",
+    "declared_earned": 6,
+    "title": "外系選修"
+   },
+   {
+    "rule_code": "C01",
+    "declared_earned": 5,
+    "title": "國文"
+   },
+   {
+    "rule_code": "C02",
+    "declared_earned": 6,
+    "title": "外文"
+   },
+   {
+    "rule_code": "C03",
+    "declared_earned": 11,
+    "title": "通識"
+   },
+   {
+    "rule_code": "C04",
+    "declared_earned": 3,
+    "title": "通識核心"
+   },
+   {
+    "rule_code": "C05",
+    "declared_earned": 0,
+    "title": "體育"
+   },
+   {
+    "rule_code": "C06",
+    "declared_earned": 0,
+    "title": "服務學習"
+   }
+  ],
+  "cohort": 114,
+  "declared_earned": 133,
+  "declared_required": 128,
+  "unreadable": ""
+ }
+}
