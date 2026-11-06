@@ -48,11 +48,44 @@ class DashboardBatchTest(unittest.TestCase):
 
         def blocked(pdf, sid):
             batch.paused = True  # 模擬「停止全部」剛好發生在這一份開始呼叫模型前
-            raise llm.LLMError("系辦端 AI 已由承辦人停用")
+            return self.service.dashboard_extract(pdf, sid)
         batch._extract = blocked
         batch.add("DEMO-D02.pdf", PDF, {"DEMO-D02"})
         batch.wait()
         self.assertEqual(self.job("DEMO-D02")["state"], dashboard_batch.STOPPED)
+
+    def test_real_failure_while_paused_keeps_its_error(self):
+        batch = self.service._batch()
+
+        def broken(pdf, sid):
+            batch.paused = True  # 執行中按了停止，但這一份是因為別的原因失敗
+            raise llm.LLMError("Gemini 回應錯誤 429")
+        batch._extract = broken
+        batch.add("DEMO-D02.pdf", PDF, {"DEMO-D02"})
+        batch.wait()
+        job = self.job("DEMO-D02")
+        self.assertEqual((job["state"], job["error"]), (dashboard_batch.FAILED, "Gemini 回應錯誤 429"))
+
+    def test_demo_batch_keeps_ai_paused(self):
+        self.service.dashboard_batch_stop()
+        self.service.load_demo_batch()
+        self.assertTrue(self.service.dashboard_batch_status()["paused"])
+        with mock.patch.object(llm, "generate_json") as live, self.assertRaises(llm.LLMError):
+            self.service.dashboard_extract(PDF, "DEMO-D03")
+        live.assert_not_called()
+
+    def test_failed_demo_roster_leaves_data_unchanged(self):
+        before = (dict(self.service.students), self.service.records_name)
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "bad_roster.csv"
+            bad.write_text("name,score\nx,1\n", encoding="utf-8")  # 沒有 student_id 欄
+            with mock.patch("academic_twin.office_api.DEMO_ROSTER", bad), self.assertRaises(ValueError):
+                self.service.load_demo_batch()
+        self.assertEqual((self.service.students, self.service.records_name), before)
+
+    def test_invalid_replay_setting_does_not_break_data_source(self):
+        with mock.patch.dict("os.environ", {"ACADEMIC_TWIN_REPLAY": "Only1"}):
+            self.assertEqual(self.service.data_source()["replay_mode"], "invalid")
 
     def test_demo_batch_starts_with_roster_only_and_clears_queue(self):
         self.run_batch("DEMO-D02.pdf")

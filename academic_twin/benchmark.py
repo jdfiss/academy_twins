@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
-from . import cross_check, dashboard, llm
+from . import cross_check, dashboard, llm, replay
 
 ROOT = Path(__file__).parent.parent
 CASES = ROOT / "data" / "samples" / "bench"
@@ -325,6 +325,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--cases-dir", type=Path, default=CASES)
     parser.add_argument("--out", type=Path, default=OUT, help="輸出目錄（預設 data/eval/，不進版控）")
     args = parser.parse_args(argv)
+    replay.disable()  # 量測一律即時呼叫，不用錄製結果
     if args.runs < 1:
         parser.error("--runs 至少為 1")
     try:

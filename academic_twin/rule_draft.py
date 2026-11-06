@@ -315,7 +315,8 @@ def run_draft(pdf: bytes, year: int = 114, answer: Path | None = None) -> dict:
     entry = {"type": "draft", "model": result.model, "prompt_version": PROMPT_VERSION, "at": now(),
              "year": year, "baseline_version": draft["baseline_sha256"],
              "errors": len(review["issues"]), "citation_warnings": len(review["warnings"]),
-             "requirements": len(rows) if isinstance(rows, list) else 0}
+             "requirements": len(rows) if isinstance(rows, list) else 0,
+             "replay": bool(draft["replay"])}  # 重播結果不是模型的即時表現，彙整量測時要排除
     if expected is not None:
         entry["before_correction"] = compare(rows if isinstance(rows, list) else [], expected)
         entry["answer_version"] = _hash({"requirements": expected})
@@ -357,6 +358,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--year", type=int, required=True)
     parser.add_argument("--answer", type=Path, help="人工確認草稿 JSON，用於計數量測")
     args = parser.parse_args(argv)
+    replay.disable()  # 量測一律即時呼叫，不用錄製結果
     try:
         draft = run_draft(args.pdf.read_bytes(), args.year, args.answer)
     except (OSError, ValueError, llm.LLMError) as exc:

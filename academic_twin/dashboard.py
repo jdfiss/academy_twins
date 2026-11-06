@@ -220,29 +220,33 @@ def _fields_not_in_source(r: dict, source: str) -> list[str]:
     if code and code not in pdf_text.normalize(source):
         out.append(f"科目代碼「{r.get('code')}」")
     numbers = {float(n) for n in re.findall(r"\d+(?:\.\d+)?", unicodedata.normalize("NFKC", source))}
-    tail = _after_name(r, source)
+    glued = _glued_match(r, source)
     for k, label in (("credits", "學分"), ("grade", "成績")):
         value = str(r.get(k, "")).strip()
         try:
-            if float(value) not in numbers and not _in_tail(value, tail):
+            if float(value) not in numbers and not glued:
                 out.append(f"{label}「{value}」")
         except ValueError:
             continue  # 非數字已是錯誤
     return out
 
 
-def _after_name(r: dict, source: str) -> str:
-    """課名之後的原文（去空白）。有些模型抄原文時把欄位黏在一起（如「計算機概論I389」），
-    學分與成績就不是獨立的數字；改在課名之後找，學期與課號裡的數字不算數。找不到課名時回傳空字串。"""
+def _glued_match(r: dict, source: str) -> bool:
+    """有些模型抄原文時把欄位黏在一起（如「計算機概論I389」，2026-11-06 實測備援模型），學分與成績就不是
+    獨立的數字。此時改看課名之後的文字：去掉空白後必須恰好是「學分」接「成績」，前後只能有非數字，
+    學期與課號裡的數字不算數。讀錯的值（例如把 89 讀成 8 或 38）不會對上。找不到課名時不採用。"""
     text = re.sub(r"\s+", "", unicodedata.normalize("NFKC", source))
     name = re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(r.get("name", ""))))
     at = text.rfind(name) if name else -1
-    return text[at + len(name):] if at >= 0 else ""
-
-
-def _in_tail(value: str, tail: str) -> bool:
-    forms = {value, f"{float(value):g}"}
-    return any(f and f in tail for f in forms)
+    if at < 0:
+        return False
+    tail = text[at + len(name):]
+    credits, grade = str(r.get("credits", "")).strip(), str(r.get("grade", "")).strip()
+    try:
+        forms = {(c, g) for c in {credits, f"{float(credits):g}"} for g in {grade, f"{float(grade):g}"}}
+    except ValueError:
+        return False
+    return any(re.fullmatch(rf"\D*{re.escape(c)}\D*{re.escape(g)}\D*", tail) for c, g in forms)
 
 
 def _grade(r: dict) -> float | None:
@@ -327,6 +331,7 @@ def main(argv: list[str]) -> None:
     parser.add_argument("--case-set", default="demo-v1", help="案例集合版本，寫入量測紀錄")
     args = parser.parse_args(argv)
 
+    replay.disable()  # 量測一律即時呼叫，不用錄製結果
     kb = knowledge_base.load(KB_PATH)
     try:
         ext = extract(args.pdf.read_bytes(), read_text=True)
@@ -346,7 +351,7 @@ def main(argv: list[str]) -> None:
         print(f"  [{i.level}] {where}：{i.message}")
     entry = {"type": "extract", "file": args.pdf.name, "case_set": args.case_set, "model": ext.model,
              "prompt_version": ext.prompt_version, "format": ext.format, "generated_at": ext.generated_at,
-             "fallback_from": ext.fallback_from[:200], "errors": sum(i.level == "error" for i in issues), "warnings": sum(i.level == "warning" for i in issues)}
+             "fallback_from": ext.fallback_from[:200], "replay": bool(ext.replay), "errors": sum(i.level == "error" for i in issues), "warnings": sum(i.level == "warning" for i in issues)}
     if args.answer:
         answer = list(csv.DictReader(args.answer.read_text(encoding="utf-8-sig").splitlines()))
         result = compare(ext.rows, answer)

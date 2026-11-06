@@ -32,6 +32,12 @@ def mode() -> str:
     return raw
 
 
+def disable() -> None:
+    """量測用的命令列（基準量測、單份量測、規則草擬量測）呼叫：一律即時呼叫模型，
+    錄製結果不能算成模型表現。"""
+    os.environ["ACADEMIC_TWIN_REPLAY"] = "off"
+
+
 def recording() -> bool:
     return os.environ.get("ACADEMIC_TWIN_RECORD", "").strip() == "1"
 
@@ -57,7 +63,7 @@ def generate_json(prompt: str, schema: dict, attachments=(), *, model: str | Non
         if m == "fallback" and path.exists():
             return _load(path, "", reason=str(e)[:200])
         raise
-    if recording():
+    if recording() and not result.fallback_from:  # 備援模型的回應不能存成主模型的錄製結果
         _save(path, result)
     return result
 

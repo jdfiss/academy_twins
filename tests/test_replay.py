@@ -64,6 +64,23 @@ class ReplayTest(unittest.TestCase):
                 self.assertRaises(llm.LLMError):
             replay.generate_json("提示", {}, ATTACH)
 
+    def test_fallback_model_response_is_not_recorded(self):
+        """審查 #2：主模型逾時改用備援時，不能把備援的回應存成主模型的錄製結果。"""
+        response = fake_response()
+        response.fallback_from = "Gemini（primary）等待逾時"
+        with self.env(ACADEMIC_TWIN_RECORD="1"), mock.patch.object(llm, "generate_json", return_value=response):
+            replay.generate_json("提示", {}, ATTACH)
+        self.assertFalse(self.dir.exists())
+
+    def test_measurement_entry_points_disable_replay(self):
+        """審查 #6：量測命令列一律即時呼叫，主模型失敗時不能拿錄製結果充數。"""
+        self.record()
+        with self.env():
+            replay.disable()
+            with mock.patch.object(llm, "generate_json", side_effect=llm.LLMError("503")), \
+                    self.assertRaises(llm.LLMError):
+                replay.generate_json("提示", {}, ATTACH)
+
     def test_invalid_mode_is_rejected(self):
         with self.env(ACADEMIC_TWIN_REPLAY="maybe"), self.assertRaises(ValueError):
             replay.mode()

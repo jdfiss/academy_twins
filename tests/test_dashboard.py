@@ -256,6 +256,56 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(len(draft["rows"]), len(answer_rows()))
         self.assertEqual(draft["trace"]["steps"][-1]["kept"], "first")
 
+    def test_retry_that_drops_good_rows_is_not_used(self):
+        """審查 #1：修正版刪掉有錯的列、錯誤變少，但也刪掉了沒問題的列，不能採用。"""
+        bad = self.bad_response()
+        dropped = fake_response(rows=fake_response().data["rows"][5:])  # 少了第 1–5 列（第 2–5 列原本沒問題）
+        stack, _ = self.scripted(bad, dropped)
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertEqual(len(draft["rows"]), len(answer_rows()))
+        last = draft["trace"]["steps"][-1]
+        self.assertEqual((last["kept"], last["dropped_rows"]), ("first", 4))
+        self.assertFalse(draft["trace"]["corrected"])
+        self.assertTrue(draft["trace"]["to_manual"])
+
+    def test_retry_may_drop_only_the_bad_row(self):
+        """有錯的那一列被修正版拿掉（例如 AI 多抄的列）可以採用；其他列都要在。"""
+        rows = fake_response().data["rows"]
+        extra = rows + [{**rows[0], "code": "XX999", "grade": "優", "source_text": "XX999"}]
+        stack, _ = self.scripted(fake_response(extra), fake_response())
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertTrue(draft["trace"]["corrected"])
+        self.assertEqual(len(draft["rows"]), len(answer_rows()))
+
+    def test_retry_is_skipped_when_ai_is_stopped(self):
+        """審查 #3：擷取途中按了「停止全部」，自我修正不得再呼叫模型。"""
+        prompts = []
+        batch = self.service._batch()
+
+        def generate(prompt, *args, model=None, **kwargs):
+            prompts.append(prompt)
+            batch.paused = True  # 第一次擷取進行中被停止
+            return dataclasses.replace(self.bad_response(), model=model or "fake-model")
+        with mock.patch.object(llm, "generate_json", side_effect=generate), pdf_pages(fake_response()):
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertFalse(any("上一次擷取" in p for p in prompts))
+        self.assertEqual(draft["trace"]["steps"][-1], {"step": "retry", "ok": False, "error": "ai_paused",
+                                                       "prompt_version": dashboard.RETRY_VERSION})
+
+    def test_trace_to_manual_counts_cohort_error(self):
+        """審查 #10：入學年度沒有規則庫不回饋模型，但確認會被擋，軌跡要標示轉人工。"""
+        draft = self.extract(fake_response(cohort=99))
+        self.assertTrue(draft["trace"]["to_manual"])
+
+    def test_adopted_retry_model_is_traced(self):
+        fixed = dataclasses.replace(fake_response(), model="backup-model")
+        stack, _ = self.scripted(self.bad_response(), fixed)
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertEqual((draft["trace"]["model"], draft["model"]), ("backup-model", "backup-model"))
+
     def test_clean_extraction_does_not_retry(self):
         draft = self.extract(fake_response())
         self.assertNotIn("retry", [s["step"] for s in draft["trace"]["steps"]])
@@ -292,11 +342,16 @@ class DashboardTest(unittest.TestCase):
         self.assertEqual(dashboard._fields_not_in_source(row, "114-1IM1001計算機概論I389"), [])
         self.assertEqual(dashboard._fields_not_in_source(
             {"code": "SL-1", "name": "服務學習(一)", "credits": "0", "grade": "80"}, "114-1SL-1服務學習(一)080"), [])
-        # 錯的值仍要抓到；學期、課號裡的數字不算數
-        wrong = dashboard._fields_not_in_source({**row, "grade": "75"}, "114-1IM1001計算機概論I389")
-        self.assertEqual(wrong, ["成績「75」"])
-        self.assertEqual(dashboard._fields_not_in_source({**row, "credits": "4", "grade": "11"},
-                                                         "114-1IM1001計算機概論I389"), ["學分「4」", "成績「11」"])
+        # 讀錯的值仍要抓到：黏在一起的數字裡剛好含有該數字也不算（審查指出 8、38 會被 389 蓋過）
+        glued = "114-1IM1001計算機概論I389"
+        for grade in ("8", "38", "75", "9"):
+            with self.subTest(grade=grade):
+                self.assertIn(f"成績「{grade}」", dashboard._fields_not_in_source({**row, "grade": grade}, glued))
+        # 學期、課號裡的數字不算數
+        self.assertEqual(dashboard._fields_not_in_source({**row, "credits": "4", "grade": "11"}, glued),
+                         ["學分「4」", "成績「11」"])
+        # 有空白分隔時照舊逐一比對
+        self.assertEqual(dashboard._fields_not_in_source(row, "114-1 IM1001 計算機概論I 3 89"), [])
 
     def test_demo_answer_files_are_fictional(self):
         for path in SAMPLES.glob("dashboard_*_answer.csv"):
