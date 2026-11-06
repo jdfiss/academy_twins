@@ -8,6 +8,7 @@ import time
 import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
+from pathlib import Path
 
 from . import (cross_check, dashboard, dashboard_batch, llm, pdf_text, replay, report, rule_diff, rule_draft,
                rule_versions)
@@ -15,6 +16,7 @@ from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
 
 _BATCH_LOCK = threading.Lock()
+DEMO_ROSTER = Path(__file__).parent.parent / "data" / "students" / "demo_batch_roster.csv"
 
 
 class OfficeMixin:
@@ -29,6 +31,17 @@ class OfficeMixin:
             "roster_count": self.roster.roster_size,
             "replay_mode": replay.mode(),  # only＝評審模式（只重播預錄的虛構文件結果）
         }
+
+    def load_demo_batch(self) -> dict:
+        """比賽示範起點：應屆名單換成 DEMO-D03–D08（虛構），修課紀錄清空、待儀表板解析確認後才進入審查；
+        同時清掉上一輪的解析佇列與草稿。示例 S001–S005 不會出現在名單異常。"""
+        text = DEMO_ROSTER.read_text(encoding="utf-8-sig")
+        self.students, self.records_name = {}, "示範批次（待解析儀表板）"
+        self.load_data(roster=(DEMO_ROSTER.name, text))
+        with _BATCH_LOCK:
+            self.__dict__.pop("_dashboard_batch", None)
+            self.__dict__.pop("_dashboard_drafts", None)
+        return self.data_source()
 
     # ---------- 畢審 ----------
     def batch(self) -> list[dict]:
@@ -149,27 +162,8 @@ class OfficeMixin:
                                "fallback": bool(ext.fallback_from), "replay": bool(ext.replay)})
         trace["steps"].append({"step": "cross_check", "ok": not isinstance(other, str),
                                "model": other.model if not isinstance(other, str) else cross_check.check_model()})
-        pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
-        ext.pages = pages
-        errors = self._retryable_errors(ext)
-        trace["steps"].append({"step": "check", "ok": not errors, "errors": len(errors)})
-        if errors:
-            try:
-                retry = dashboard.extract(pdf, feedback=[_issue_text(i) for i in errors])
-            except llm.LLMError:
-                trace["steps"].append({"step": "retry", "ok": False, "error": "llm_unavailable",
-                                       "prompt_version": dashboard.RETRY_VERSION})
-            else:
-                retry.pages = pages
-                again = self._retryable_errors(retry)
-                kept = len(again) < len(errors)  # 修正後錯誤變少才採用；一樣多時保留第一次
-                trace["steps"].append({"step": "retry", "ok": True, "model": retry.model, "rows": len(retry.rows),
-                                       "prompt_version": dashboard.RETRY_VERSION})
-                trace["steps"].append({"step": "check", "ok": not again, "errors": len(again),
-                                       "kept": "retry" if kept else "first"})
-                if kept:
-                    ext, errors = retry, again
-                    trace["corrected"] = not again
+        ext.pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
+        ext, errors = self._self_correct(pdf, ext, trace)
         trace["to_manual"] = bool(errors)
         cmp = cross_check.recheck(ext.rows, other, ext.model)
         drafts = self.__dict__.setdefault("_dashboard_drafts", {})
@@ -181,6 +175,32 @@ class OfficeMixin:
         return {"draft_id": draft_id, "student_id": sid, "exists": sid in self.students,
                 **self._draft_view(ext, issues), "cross_check": _cross_check_view(cmp, len(ext.rows)),
                 "trace": trace}
+
+    def _self_correct(self, pdf: bytes, ext: dashboard.Extraction,
+                      trace: dict) -> tuple[dashboard.Extraction, list[dashboard.Issue]]:
+        """有界自我修正：有錯誤時只把檢查理由回饋給主模型重新擷取 1 次，走同一道檢查；
+        錯誤變少才採用（一樣多時保留第一次）。回傳採用的擷取與剩下的錯誤，步驟寫入 trace。"""
+        errors = self._retryable_errors(ext)
+        trace["steps"].append({"step": "check", "ok": not errors, "errors": len(errors)})
+        if not errors:
+            return ext, errors
+        try:
+            retry = dashboard.extract(pdf, feedback=[_issue_text(i) for i in errors])
+        except llm.LLMError:
+            trace["steps"].append({"step": "retry", "ok": False, "error": "llm_unavailable",
+                                   "prompt_version": dashboard.RETRY_VERSION})
+            return ext, errors
+        retry.pages = ext.pages
+        again = self._retryable_errors(retry)
+        kept = len(again) < len(errors)
+        trace["steps"].append({"step": "retry", "ok": True, "model": retry.model, "rows": len(retry.rows),
+                               "prompt_version": dashboard.RETRY_VERSION})
+        trace["steps"].append({"step": "check", "ok": not again, "errors": len(again),
+                               "kept": "retry" if kept else "first"})
+        if not kept:
+            return ext, errors
+        trace["corrected"] = not again
+        return retry, again
 
     def _retryable_errors(self, ext: dashboard.Extraction) -> list[dashboard.Issue]:
         """可回饋給模型的錯誤：擷取內容本身的問題。入學年度沒有規則庫不回饋，免得模型改寫年度去配合。"""

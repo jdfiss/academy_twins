@@ -2,6 +2,15 @@
 let BATCH = [], statusFilter = null, flagFilter = "";
 const FLAG_LABELS = { overflow: "超修學分", repeatable: "可重複修習", substitution_pending: "待辦抵修" };
 const show = setupTabs("twin-office-view");
+// 網址可直接指定分頁（如 office.html#ingest），方便錄影與評審開啟；切換分頁時同步網址
+const viewFromHash = () => {
+  const v = location.hash.slice(1);
+  if (v && document.getElementById(`view-${v}`)) show(v);
+};
+viewFromHash();
+window.addEventListener("hashchange", viewFromHash);
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () =>
+  history.replaceState(null, "", `#${b.dataset.view}`)));
 
 // ---------- 共用：承辦人（全頁填一次）與訊息 ----------
 const officer = () => $("#officer").value.trim();
@@ -220,6 +229,11 @@ $("#upload-btn").addEventListener("click", async () => {
   await sendData("/api/upload", { records, roster });
 });
 $("#reset-btn").addEventListener("click", () => sendData("/api/reset", {}));
+$("#demo-btn").addEventListener("click", async () => {
+  await sendData("/api/demo-batch", {});
+  await refreshJobs();  // 上一輪的解析佇列已清空
+  $("#jobs-files").focus();
+});
 
 // ---------- AI 解析儀表板 ----------
 let DRAFT = null, draftFromBatch = false;
@@ -383,7 +397,7 @@ function renderJobs(st) {
   $("#jobs-table").hidden = !jobs.length;
   $("#jobs-rows").innerHTML = jobs.map((j) => {
     const check = j.state === "done" || j.state === "confirmed"
-      ? `錯誤 ${j.errors}・警示 ${j.warnings}` + (j.cross_checked ? `・需核對 ${j.flagged_rows} 列` : "・未交叉驗證")
+      ? `錯誤 ${j.errors}・警示 ${j.warnings}` + (!j.cross_checked ? "・未交叉驗證" : j.flagged_rows ? `・需核對 ${j.flagged_rows} 列` : "・兩模型一致")
         + (j.corrected ? `・<span class="tag">已自我修正</span>` : "")
       : j.error ? `<span class="hint">${esc(j.error)}</span>` : "";
     const button = j.state === "done" ? `<button class="primary" data-open="${esc(j.student_id)}">核對</button>`

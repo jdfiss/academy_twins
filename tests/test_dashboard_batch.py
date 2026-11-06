@@ -54,6 +54,19 @@ class DashboardBatchTest(unittest.TestCase):
         batch.wait()
         self.assertEqual(self.job("DEMO-D02")["state"], dashboard_batch.STOPPED)
 
+    def test_demo_batch_starts_with_roster_only_and_clears_queue(self):
+        self.run_batch("DEMO-D02.pdf")
+        src = self.service.load_demo_batch()
+        self.assertEqual((src["students"], src["roster_count"]), (0, 6))
+        self.assertEqual(self.service.batch(), [])  # 確認前沒有任何人進入審查
+        kinds = {(a["id"], a["kind"]) for a in self.service.roster_anomalies()}
+        self.assertEqual(kinds, {(f"DEMO-D0{i}", "no_records") for i in range(3, 9)})  # 沒有 S001 等示例
+        self.assertEqual(self.service.dashboard_batch_status()["jobs"], [])
+        with two_models(fake_response()):
+            draft = self.service.dashboard_extract(PDF, "DEMO-D03")
+        self.service.dashboard_confirm(draft["draft_id"], draft["rows"], "虛構確認人")
+        self.assertEqual([r["id"] for r in self.service.batch()], ["DEMO-D03"])
+
     def test_filename_must_be_student_id_pdf(self):
         for bad in ("DEMO-D02.csv", ".pdf", "", "DEMO,D02.pdf"):
             with self.subTest(name=bad), self.assertRaises(ValueError):

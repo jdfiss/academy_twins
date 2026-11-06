@@ -91,6 +91,7 @@ class Handler(BaseHTTPRequestHandler):
 
         POST /api/upload  {"records": {"name", "text"}?, "roster": {"name", "text"}?}
         POST /api/reset   回到示例資料
+        POST /api/demo-batch  比賽示範起點：名單換成虛構 DEMO-D03–D08，修課紀錄清空，待解析儀表板
         POST /api/students/<id>/reviews  {"code", "term", "action", "category"?, "reviewer", "note"?}
         POST /api/dashboard/extract  {"student_id", "data"（PDF 的 base64）}：AI 解析為待確認草稿
         POST /api/dashboard/confirm  {"draft_id", "rows", "reviewer", "cohort"?, "acknowledge_warnings"?}
@@ -190,6 +191,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body.get("question"), str):
                     return self._json({"error": "缺少欄位：question"}, 400)
                 return self._json(service.ask(unquote(route.split("/")[2]), body["question"]))
+            elif route == "api/demo-batch":
+                service.load_demo_batch()
             elif route == "api/reset":
                 service.load_data(
                     (STUDENTS_PATH.name, STUDENTS_PATH.read_text(encoding="utf-8-sig")),
