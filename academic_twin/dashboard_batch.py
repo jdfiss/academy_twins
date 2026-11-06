@@ -54,13 +54,15 @@ class Job:
         d = self.draft or {}
         issues = d.get("issues", [])
         cc = d.get("cross_check") or {}
+        trace = d.get("trace") or {}
         return {"student_id": self.student_id, "filename": self.filename, "state": self.state,
                 "queued_at": self.queued_at, "error": self.error, "seconds": self.seconds,
                 "draft_id": d.get("draft_id"), "rows": len(d.get("rows", [])),
                 "errors": sum(i["level"] == "error" for i in issues),
                 "warnings": sum(i["level"] == "warning" for i in issues),
                 "cross_checked": cc.get("status") == "ok",
-                "flagged_rows": cc.get("flagged_rows", 0) + cc.get("missing_in_primary", 0)}
+                "flagged_rows": cc.get("flagged_rows", 0) + cc.get("missing_in_primary", 0),
+                "corrected": bool(trace.get("corrected")), "to_manual": bool(trace.get("to_manual"))}
 
 
 class DashboardBatch:
@@ -168,7 +170,9 @@ class DashboardBatch:
             draft, error = None, str(e.args[0] if e.args else e)[:300] or type(e).__name__
         with self._lock:
             job.seconds = round(time.monotonic() - started, 1)
-            if draft is None:
+            if draft is None and self.paused:  # 開始前一刻被「停止全部」擋下，算已停止，不算失敗
+                job.state, job.error = STOPPED, "已由承辦人停止"
+            elif draft is None:
                 job.state, job.error = FAILED, error
             else:
                 job.state, job.draft, job.pdf = DONE, draft, None  # 成功後不再保留 PDF

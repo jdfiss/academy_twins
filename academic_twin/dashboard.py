@@ -50,6 +50,15 @@ PROMPT = """你是資料擷取工具。附件是一份大學「畢業資格審�
 另外抄錄文件上宣告的數字：入學學年度、學分區的應修與實得學分，以及每個規則代碼段落標示的實得學分。
 文件看不清楚或無法辨識時，在 unreadable 說明原因，不要猜。"""
 
+# 有界自我修正：只回饋檢查理由（不加入學號或其他新資料），重新擷取 1 次；之後走同一道檢查。
+RETRY_VERSION = "dashboard-retry-v1"
+RETRY = """
+
+上一次擷取沒有通過程式檢查，問題如下（第幾列指上一次輸出的順序）：
+{errors}
+請重新對照文件，從頭完整輸出一次。只修正抄錯、漏抄或格式問題；
+如果文件上確實就是這樣寫，照原樣抄錄，不要為了通過檢查而改寫或補值。"""
+
 SCHEMA = {
     "type": "OBJECT",
     "properties": {
@@ -94,16 +103,19 @@ class Extraction:
     pages: pdf_text.PdfText | None = field(default=None, repr=False)
 
 
-def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: bool = False) -> Extraction:
+def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: bool = False,
+            feedback: list[str] | None = None) -> Extraction:
     """送 Gemini 擷取；失敗時丟 llm.LLMError，呼叫端應保留手動上傳 CSV 的流程。
 
     指定 model 時只用該模型、不改用備援（交叉驗證的第二模型用）。
     read_text=True 時另從 PDF 取出逐頁文字（不送給 AI），check 會據以核對每列原文與頁碼。
+    feedback 為上一次的檢查理由（自我修正用），附在提示後面請模型重新擷取。
     """
     if not pdf.startswith(b"%PDF"):
         raise ValueError("不是 PDF 檔案")
     pages = pdf_text.extract_pages(pdf) if read_text else None
-    result = llm.generate_json(PROMPT, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
+    prompt = PROMPT + RETRY.format(errors="\n".join(f"- {m}" for m in feedback)) if feedback else PROMPT
+    result = llm.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
     data = result.data if isinstance(result.data, dict) else {}
     mapping = FORMATS[fmt]
     rows = []

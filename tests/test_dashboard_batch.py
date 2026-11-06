@@ -43,6 +43,17 @@ class DashboardBatchTest(unittest.TestCase):
         self.assertEqual([a["id"] for a in anomalies], ["X999"])
         self.assertIn("ROSTER_DASHBOARD_NOT_ON_ROSTER", self.service.export_csv())
 
+    def test_job_blocked_by_stop_just_before_start_is_stopped_not_failed(self):
+        batch = self.service._batch()
+
+        def blocked(pdf, sid):
+            batch.paused = True  # 模擬「停止全部」剛好發生在這一份開始呼叫模型前
+            raise llm.LLMError("系辦端 AI 已由承辦人停用")
+        batch._extract = blocked
+        batch.add("DEMO-D02.pdf", PDF, {"DEMO-D02"})
+        batch.wait()
+        self.assertEqual(self.job("DEMO-D02")["state"], dashboard_batch.STOPPED)
+
     def test_filename_must_be_student_id_pdf(self):
         for bad in ("DEMO-D02.csv", ".pdf", "", "DEMO,D02.pdf"):
             with self.subTest(name=bad), self.assertRaises(ValueError):

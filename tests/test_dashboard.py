@@ -201,6 +201,91 @@ class DashboardTest(unittest.TestCase):
         draft = self.extract(response)
         self.assertEqual(draft["fallback_from"], response.fallback_from)
 
+    # ---------- 有界自我修正與執行軌跡 ----------
+    def scripted(self, first, retry):
+        """主模型第一次回 first、自我修正那次回 retry；第二模型都回正確答案。記下每次呼叫的提示。"""
+        prompts = []
+
+        def generate(prompt, *args, model=None, **kwargs):
+            prompts.append((prompt, model))
+            if model:
+                return dataclasses.replace(fake_response(), model=model)
+            return retry if dashboard.RETRY.split("{")[0] in prompt else first
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(llm, "generate_json", side_effect=generate))
+        stack.enter_context(pdf_pages(fake_response()))
+        return stack, prompts
+
+    def bad_response(self):
+        rows = fake_response().data["rows"]
+        rows[0] = {**rows[0], "grade": "優"}
+        return fake_response(rows)
+
+    def traces(self):
+        return [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()
+                if json.loads(line)["type"] == "extract_trace"]
+
+    def test_self_correction_fixes_error_once(self):
+        stack, prompts = self.scripted(self.bad_response(), fake_response())
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertFalse(any(i["level"] == "error" for i in draft["issues"]))
+        self.assertTrue(draft["trace"]["corrected"])
+        self.assertFalse(draft["trace"]["to_manual"])
+        retries = [p for p, m in prompts if m is None and "上一次擷取" in p]
+        self.assertEqual(len(retries), 1)
+        self.assertIn("成績", retries[0])  # 回饋的是檢查理由
+        self.assertNotIn("DEMO-D02", retries[0])  # 不加入學號
+        self.assertEqual([s["step"] for s in draft["trace"]["steps"]],
+                         ["extract", "cross_check", "check", "retry", "check"])
+
+    def test_self_correction_still_failing_goes_to_manual(self):
+        stack, prompts = self.scripted(self.bad_response(), self.bad_response())
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertTrue(any(i["level"] == "error" for i in draft["issues"]))
+        self.assertTrue(draft["trace"]["to_manual"])
+        self.assertFalse(draft["trace"]["corrected"])
+        self.assertEqual(sum(1 for p, m in prompts if m is None), 2)  # 只重來 1 次
+
+    def test_worse_retry_is_not_used(self):
+        worse = fake_response(rows=[])
+        stack, _ = self.scripted(self.bad_response(), worse)
+        with stack:
+            draft = self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        self.assertEqual(len(draft["rows"]), len(answer_rows()))
+        self.assertEqual(draft["trace"]["steps"][-1]["kept"], "first")
+
+    def test_clean_extraction_does_not_retry(self):
+        draft = self.extract(fake_response())
+        self.assertNotIn("retry", [s["step"] for s in draft["trace"]["steps"]])
+        self.assertFalse(draft["trace"]["to_manual"])
+
+    def test_missing_cohort_rules_is_not_fed_back(self):
+        draft = self.extract(fake_response(cohort=99))
+        self.assertTrue(any(i["level"] == "error" and "規則庫" in i["message"] for i in draft["issues"]))
+        self.assertNotIn("retry", [s["step"] for s in draft["trace"]["steps"]])
+
+    def test_trace_is_logged_with_counts_only(self):
+        stack, _ = self.scripted(self.bad_response(), fake_response())
+        with stack:
+            self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        [trace] = self.traces()
+        text = json.dumps(trace, ensure_ascii=False)
+        self.assertNotIn("DEMO-D02", text)
+        for r in answer_rows()[:3]:
+            self.assertNotIn(r["code"], text)
+        self.assertNotIn("優", text)
+        for key in ("model", "prompt_version", "at", "corrected", "to_manual", "wait_seconds", "steps"):
+            self.assertIn(key, trace)
+
+    def test_llm_failure_is_traced(self):
+        with mock.patch.object(llm, "generate_json", side_effect=llm.LLMError("503")), \
+                self.assertRaises(llm.LLMError):
+            self.service.dashboard_extract(b"%PDF-1.7 fake", "DEMO-D02")
+        [trace] = self.traces()
+        self.assertEqual((trace["status"], trace["to_manual"]), ("failed", True))
+
     def test_demo_answer_files_are_fictional(self):
         for path in SAMPLES.glob("dashboard_*_answer.csv"):
             ids = {r["student_id"] for r in csv.DictReader(path.read_text(encoding="utf-8").splitlines())}

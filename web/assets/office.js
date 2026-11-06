@@ -241,6 +241,23 @@ function crossCheckSummary(cc) {
   return `<div class="issue ${flagged ? "WARNING" : "PASS"}">${flagged ? "⚠" : "✔"} ${parts.join("・")}</div>`;
 }
 
+// 執行軌跡：AI 做了什麼、哪裡被程式檢查擋下、哪裡交給承辦人（只有計數，沒有課程內容）
+const TRACE_STEPS = {
+  extract: (s) => s.ok ? `${s.model} 擷取 ${s.rows} 列${s.fallback ? "（改用備援）" : ""}` : "主模型擷取失敗",
+  cross_check: (s) => s.ok ? `${s.model} 同時擷取供交叉比對` : "第二模型失敗，未交叉驗證",
+  check: (s) => s.ok ? "程式檢查通過" : `程式檢查擋下 ${s.errors} 個錯誤`
+    + (s.kept === "first" ? "（修正後沒有變好，保留第一次結果）" : ""),
+  retry: (s) => s.ok ? "只把檢查理由回饋給 AI，重新擷取 1 次" : "自我修正時 AI 失敗",
+};
+function traceSummary(t) {
+  if (!t) return "";
+  const end = t.to_manual ? "仍有錯誤，交給承辦人逐列修正" : t.corrected ? "自我修正成功" : "交給承辦人確認";
+  return `<div class="trace"><b>AI 做了什麼</b>
+    <ol>${t.steps.map((s) => `<li class="${s.ok ? "" : "bad"}">${esc((TRACE_STEPS[s.step] || (() => s.step))(s))}</li>`).join("")}
+    <li class="${t.to_manual ? "bad" : ""}">${end}</li></ol>
+    <span class="hint">共 ${t.wait_seconds} 秒・提示 ${esc(t.prompt_version)}</span></div>`;
+}
+
 function renderDraft(fresh = false) {
   const d = DRAFT;
   $("#dash-draft").hidden = false;
@@ -250,6 +267,7 @@ function renderDraft(fresh = false) {
   $("#dash-declared").textContent = `文件標示應修 ${d.declared_required ?? "—"}、實得 ${d.declared_earned ?? "—"} 學分`
     + (d.exists ? `；${d.student_id} 已有紀錄，確認後取代` : "");
   const rowIssues = (i) => d.issues.filter((x) => x.row === i);
+  $("#dash-trace").innerHTML = traceSummary(d.trace);
   $("#dash-cross").innerHTML = crossCheckSummary(d.cross_check);
   $("#dash-issues").innerHTML = d.issues.filter((i) => i.row === null).map((i) =>
     `<div class="issue ${i.level === "error" ? "FAIL" : "WARNING"}">${i.level === "error" ? "✘" : "⚠"} ${esc(i.message)}</div>`).join("");
@@ -362,6 +380,7 @@ function renderJobs(st) {
   $("#jobs-rows").innerHTML = jobs.map((j) => {
     const check = j.state === "done" || j.state === "confirmed"
       ? `錯誤 ${j.errors}・警示 ${j.warnings}` + (j.cross_checked ? `・需核對 ${j.flagged_rows} 列` : "・未交叉驗證")
+        + (j.corrected ? `・<span class="tag">已自我修正</span>` : "")
       : j.error ? `<span class="hint">${esc(j.error)}</span>` : "";
     const button = j.state === "done" ? `<button class="primary" data-open="${esc(j.student_id)}">核對</button>`
       : (j.state === "failed" || j.state === "stopped") && !st.paused

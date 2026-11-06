@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import csv
 import io
+import threading
+import time
 import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
@@ -10,6 +12,8 @@ from datetime import datetime
 from . import cross_check, dashboard, dashboard_batch, llm, pdf_text, report, rule_diff, rule_draft, rule_versions
 from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
+
+_BATCH_LOCK = threading.Lock()
 
 
 class OfficeMixin:
@@ -115,18 +119,70 @@ class OfficeMixin:
         """AI 擷取儀表板為草稿；草稿暫存於記憶體，只有確認後才會寫入修課紀錄。
 
         兩個模型同時擷取並逐列比對，不一致處列為警示；第二模型失敗時照常使用主模型並標示未交叉驗證。
+        主模型結果有錯誤等級的檢查問題時，把檢查理由回饋給主模型重新擷取 1 次（有界自我修正）；
+        仍有錯誤就交給承辦人逐列修正。每次執行留下執行軌跡（只記計數與代號，不記學號與課程內容）。
         """
         sid = _student_id(student_id)
         self._require_ai()
-        ext, other = cross_check.extract_pair(pdf)
-        ext.pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
+        began = time.monotonic()
+        trace = {"type": "extract_trace", "at": datetime.now().isoformat(timespec="seconds"),
+                 "prompt_version": dashboard.PROMPT_VERSION, "format": dashboard.FORMAT, "model": None,
+                 "steps": [], "corrected": False, "to_manual": False}
+
+        def finish(status: str) -> dict:
+            trace.update(status=status, wait_seconds=round(time.monotonic() - began, 2))
+            dashboard.log_run(trace)
+            return trace
+
+        try:
+            ext, other = cross_check.extract_pair(pdf)
+        except llm.LLMError:
+            trace["steps"].append({"step": "extract", "ok": False, "error": "llm_unavailable"})
+            trace["to_manual"] = True
+            finish("failed")
+            raise
+        trace["model"] = ext.model
+        trace["steps"].append({"step": "extract", "ok": True, "model": ext.model, "rows": len(ext.rows),
+                               "fallback": bool(ext.fallback_from)})
+        trace["steps"].append({"step": "cross_check", "ok": not isinstance(other, str),
+                               "model": other.model if not isinstance(other, str) else cross_check.check_model()})
+        pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
+        ext.pages = pages
+        errors = self._retryable_errors(ext)
+        trace["steps"].append({"step": "check", "ok": not errors, "errors": len(errors)})
+        if errors:
+            try:
+                retry = dashboard.extract(pdf, feedback=[_issue_text(i) for i in errors])
+            except llm.LLMError:
+                trace["steps"].append({"step": "retry", "ok": False, "error": "llm_unavailable",
+                                       "prompt_version": dashboard.RETRY_VERSION})
+            else:
+                retry.pages = pages
+                again = self._retryable_errors(retry)
+                kept = len(again) < len(errors)  # 修正後錯誤變少才採用；一樣多時保留第一次
+                trace["steps"].append({"step": "retry", "ok": True, "model": retry.model, "rows": len(retry.rows),
+                                       "prompt_version": dashboard.RETRY_VERSION})
+                trace["steps"].append({"step": "check", "ok": not again, "errors": len(again),
+                                       "kept": "retry" if kept else "first"})
+                if kept:
+                    ext, errors = retry, again
+                    trace["corrected"] = not again
+        trace["to_manual"] = bool(errors)
         cmp = cross_check.recheck(ext.rows, other, ext.model)
         drafts = self.__dict__.setdefault("_dashboard_drafts", {})
         draft_id = uuid.uuid4().hex
         drafts[draft_id] = (sid, ext, other)
         issues = self._dashboard_issues(ext, ext.cohort) + cross_check.issues(cmp)
+        trace["warnings"] = sum(i.level == "warning" for i in issues)
+        finish("draft")
         return {"draft_id": draft_id, "student_id": sid, "exists": sid in self.students,
-                **self._draft_view(ext, issues), "cross_check": _cross_check_view(cmp, len(ext.rows))}
+                **self._draft_view(ext, issues), "cross_check": _cross_check_view(cmp, len(ext.rows)),
+                "trace": trace}
+
+    def _retryable_errors(self, ext: dashboard.Extraction) -> list[dashboard.Issue]:
+        """可回饋給模型的錯誤：擷取內容本身的問題。入學年度沒有規則庫不回饋，免得模型改寫年度去配合。"""
+        kb = self.rulesets[ext.cohort].kb if ext.cohort in self.rulesets else self.kb
+        return [i for i in dashboard.check(ext, kb) if i.level == "error"]
 
     def dashboard_confirm(self, draft_id: str, rows: list[dict], reviewer: str, cohort: int | None = None,
                           acknowledge_warnings: bool = False) -> dict:
@@ -164,9 +220,10 @@ class OfficeMixin:
 
     # ---------- 儀表板批次解析（背景排隊；每份結果仍走上方的確認流程） ----------
     def _batch(self) -> dashboard_batch.DashboardBatch:
-        if "_dashboard_batch" not in self.__dict__:
-            self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract)
-        return self._dashboard_batch
+        with _BATCH_LOCK:  # 網頁伺服器多執行緒，避免同時建出兩個佇列
+            if "_dashboard_batch" not in self.__dict__:
+                self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract)
+            return self._dashboard_batch
 
     def _require_ai(self) -> None:
         if "_dashboard_batch" in self.__dict__ and self._dashboard_batch.paused:

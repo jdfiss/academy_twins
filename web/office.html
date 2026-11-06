@@ -35,6 +35,10 @@ body.office { font-size: 16px; }
 .office .confirm label { display: flex; align-items: center; gap: 8px; }
 .office details.fold { margin-top: 14px; }
 .office details.fold > summary { font-size: 15px; }
+/* 執行軌跡：AI 做了什麼、哪裡被擋下、哪裡交給人 */
+.office .trace { padding: 10px 14px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.office .trace ol { margin: 6px 0; padding-left: 22px; }
+.office .trace li.bad { color: var(--warn); }
 .office blockquote { margin: 8px 0; padding: 8px 14px; border-left: 3px solid var(--line); white-space: pre-wrap; }
 /* 解析表格：代碼與數字欄窄，課名與原文寬 */
 .dash-table { min-width: 1100px; table-layout: fixed; }
@@ -195,6 +199,7 @@ body.office { font-size: 16px; }
         <label>入學學年度 <input id="dash-cohort" style="width: 80px"></label>
       </div>
       <p class="hint" id="dash-declared" style="margin: 0 0 12px"></p>
+      <div id="dash-trace"></div>
       <div id="dash-cross"></div>
       <div id="dash-issues"></div>
       <div style="overflow-x: auto; margin-top: 8px">
