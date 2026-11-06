@@ -7,7 +7,7 @@ import uuid
 from dataclasses import asdict, replace
 from datetime import datetime
 
-from . import cross_check, dashboard, pdf_text, report, rule_diff, rule_draft, rule_versions
+from . import cross_check, dashboard, dashboard_batch, llm, pdf_text, report, rule_diff, rule_draft, rule_versions
 from .records import REQUIRED, RecordsError, parse_records
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
 
@@ -63,6 +63,9 @@ class OfficeMixin:
                for sid, c in r.other_cohort.items()]
             + [{"id": sid, "kind": "duplicate", "message": "應屆名單重複列出"} for sid in r.duplicates]
             + [{"id": None, "kind": "blank", "message": f"名單第 {line} 行學號空白"} for line in r.blank_rows]
+            + [{"id": u["student_id"], "kind": "dashboard_not_on_roster",
+                "message": f"上傳了儀表板 {u['filename']}，但學號不在應屆名單，未解析"}
+               for u in self._batch().unmatched]
         )
 
     EXPORT_FIELDS = ["student_id", "status", "total_credits", "satisfied", "requirements", "reasons",
@@ -114,6 +117,7 @@ class OfficeMixin:
         兩個模型同時擷取並逐列比對，不一致處列為警示；第二模型失敗時照常使用主模型並標示未交叉驗證。
         """
         sid = _student_id(student_id)
+        self._require_ai()
         ext, other = cross_check.extract_pair(pdf)
         ext.pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
         cmp = cross_check.recheck(ext.rows, other, ext.model)
@@ -147,6 +151,7 @@ class OfficeMixin:
         records = parse_records(dashboard.to_records_csv(sid, edited.rows))[sid]
         self._replace_student(sid, records, cohort)
         del drafts[draft_id]
+        self._batch().mark_confirmed(draft_id)
         initial = cross_check.recheck(ext.rows, other, ext.model)
         dashboard.log_run({
             "type": "confirm", "model": ext.model, "prompt_version": ext.prompt_version, "format": ext.format,
@@ -156,6 +161,40 @@ class OfficeMixin:
                             "flagged_after_edit": len(cmp.flagged_rows) + len(cmp.only_check)},
         })
         return self.student(sid)
+
+    # ---------- 儀表板批次解析（背景排隊；每份結果仍走上方的確認流程） ----------
+    def _batch(self) -> dashboard_batch.DashboardBatch:
+        if "_dashboard_batch" not in self.__dict__:
+            self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract)
+        return self._dashboard_batch
+
+    def _require_ai(self) -> None:
+        if "_dashboard_batch" in self.__dict__ and self._dashboard_batch.paused:
+            raise llm.LLMError("系辦端 AI 已由承辦人停用，請按「恢復 AI」後再試")
+
+    def dashboard_batch_add(self, filename: str, pdf: bytes) -> dict:
+        """檔名「<學號>.pdf」；學號須在應屆名單上才排入解析。"""
+        _student_id(dashboard_batch.student_id_from_filename(filename))
+        return self._batch().add(filename, pdf, set(self._roster_parsed.ids))
+
+    def dashboard_batch_status(self) -> dict:
+        return self._batch().status()
+
+    def dashboard_batch_draft(self, sid: str) -> dict:
+        return self._batch().draft(sid)
+
+    def dashboard_batch_retry(self, sid: str | None = None) -> dict:
+        self._batch().retry(sid)
+        return self._batch().status()
+
+    def dashboard_batch_stop(self) -> dict:
+        """停止全部，兼作系辦端 AI 停用開關（批次、單份解析與規則草擬都暫停）。"""
+        self._batch().stop()
+        return self._batch().status()
+
+    def dashboard_batch_resume(self) -> dict:
+        self._batch().resume()
+        return self._batch().status()
 
     def _dashboard_issues(self, ext: dashboard.Extraction, cohort: int | None) -> list[dashboard.Issue]:
         """依入學年度的規則庫檢查；沒有該年度規則庫時為錯誤，不能送入審查，也不套用其他年度。"""
@@ -197,6 +236,7 @@ class OfficeMixin:
     # ---------- AI 草擬規則（獨立存檔，確認也不啟用） ----------
     def rule_draft_extract(self, pdf: bytes, year: int = 114) -> dict:
         """公開應修科目表產生少量草稿；不接觸 self.kb 或審查資料。"""
+        self._require_ai()
         return rule_draft.run_draft(pdf, year)
 
     def rule_draft_check(self, draft_id: str, requirements: list[dict]) -> dict:

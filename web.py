@@ -51,6 +51,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(service.data_source())
             if route == ["roster-anomalies"]:
                 return self._json(service.roster_anomalies())
+            if route == ["dashboard", "batch"]:
+                return self._json(service.dashboard_batch_status())
+            if len(route) == 3 and route[:2] == ["dashboard", "batch"]:
+                return self._json(service.dashboard_batch_draft(route[2]))
             if route == ["export.csv"]:
                 return self._csv(service.export_csv(), f"audit_{service.rule_version}.csv")
             if len(route) == 2 and route[0] == "students":
@@ -90,6 +94,9 @@ class Handler(BaseHTTPRequestHandler):
         POST /api/students/<id>/reviews  {"code", "term", "action", "category"?, "reviewer", "note"?}
         POST /api/dashboard/extract  {"student_id", "data"（PDF 的 base64）}：AI 解析為待確認草稿
         POST /api/dashboard/confirm  {"draft_id", "rows", "reviewer", "cohort"?, "acknowledge_warnings"?}
+        POST /api/dashboard/batch  {"filename"（學號.pdf）, "data"（PDF 的 base64）}：加入背景解析佇列
+        POST /api/dashboard/batch/retry  {"student_id"?}：重試一份或全部失敗／已停止的
+        POST /api/dashboard/batch/stop 或 resume：停止全部並停用系辦端 AI／恢復
         POST /api/rule-drafts/extract  {"data"（公開 PDF 的 base64）, "year"}
         POST /api/rule-drafts/check 或 confirm  {"draft_id", "requirements", "reviewer"?, "acknowledge"?}
         POST /api/rule-versions/activate  {"draft_id", "activated_by", "acknowledge"}：以已確認草稿啟用新規則版本
@@ -132,6 +139,19 @@ class Handler(BaseHTTPRequestHandler):
                 except (binascii.Error, ValueError):
                     return self._json({"error": "PDF 內容無法讀取"}, 400)
                 return self._json(service.dashboard_extract(pdf, str(body.get("student_id") or "")))
+            elif route == "api/dashboard/batch":
+                try:
+                    pdf = base64.b64decode(str(body.get("data") or ""), validate=True)
+                except (binascii.Error, ValueError):
+                    return self._json({"error": "PDF 內容無法讀取"}, 400)
+                return self._json(service.dashboard_batch_add(str(body.get("filename") or ""), pdf))
+            elif route == "api/dashboard/batch/retry":
+                sid = body.get("student_id")
+                return self._json(service.dashboard_batch_retry(str(sid) if sid else None))
+            elif route == "api/dashboard/batch/stop":
+                return self._json(service.dashboard_batch_stop())
+            elif route == "api/dashboard/batch/resume":
+                return self._json(service.dashboard_batch_resume())
             elif route == "api/dashboard/confirm":
                 if not isinstance(body.get("rows"), list) or not all(isinstance(r, dict) for r in body["rows"]):
                     return self._json({"error": "rows 需為紀錄陣列"}, 400)

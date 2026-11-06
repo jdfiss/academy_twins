@@ -161,7 +161,25 @@ body.office { font-size: 16px; }
   <!-- AI 解析儀表板：AI 擷取 → 承辦人對照原文修正與確認 → 才進入審查 -->
   <section class="view" id="view-ingest">
     <div class="card section">
-      <h2>AI 解析儀表板</h2>
+      <h2>批次解析</h2>
+      <div class="row">
+        <input type="file" id="jobs-files" accept=".pdf,application/pdf" multiple aria-label="儀表板 PDF（可多選）">
+        <button class="primary" id="jobs-add">加入佇列</button>
+        <span class="spacer"></span>
+        <span class="hint" id="jobs-progress" aria-live="polite"></span>
+        <button class="ghost" id="jobs-retry-all" hidden>全部重試</button>
+        <button class="ghost" id="jobs-stop">停止全部</button>
+      </div>
+      <p class="hint" style="margin: 12px 0 0">檔名須為「學號.pdf」，學號要在應屆名單上，否則不解析並列入名單異常。
+        在背景解析<span id="jobs-workers"></span>，解析完逐份核對確認。只上傳去識別化或虛構文件，內容會送至 Gemini。</p>
+      <div id="jobs-msg" role="status" aria-live="polite"></div>
+      <table id="jobs-table" style="margin-top: 14px" hidden>
+        <thead><tr><th>學號</th><th>狀態</th><th>列數</th><th>檢查</th><th class="hide-sm">等待</th><th></th></tr></thead>
+        <tbody id="jobs-rows"></tbody>
+      </table>
+    </div>
+    <div class="card section">
+      <h2>單份解析</h2>
       <div class="row">
         <input type="file" id="dash-file" accept=".pdf,application/pdf" aria-label="儀表板 PDF">
         <input id="dash-sid" placeholder="學號（去識別化代號）" aria-label="學號">
