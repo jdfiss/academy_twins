@@ -117,7 +117,8 @@ def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: 
         raise ValueError("不是 PDF 檔案")
     pages = pdf_text.extract_pages(pdf) if read_text else None
     prompt = PROMPT + RETRY.format(errors="\n".join(f"- {m}" for m in feedback)) if feedback else PROMPT
-    result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model)
+    result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model,
+                                  purpose="dashboard")
     data = result.data if isinstance(result.data, dict) else {}
     mapping = FORMATS[fmt]
     rows = []

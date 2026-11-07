@@ -167,7 +167,7 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(draft["state"], "manual")
 
 
-def responder(prompt, schema=None):
+def responder(prompt, schema=None, **_):
     """背景擬稿用的替身：先查進度；問 XFER-01 的再查紀錄並提出覆核建議；問英檢更正的歸資料更正。"""
     history = prompt.split("目前為止的工具呼叫與結果（JSON）：")[1]
     if "多益" in prompt:

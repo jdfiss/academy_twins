@@ -1,0 +1,30 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:08:19",
+ "recorded_at": "2026-11-07T16:08:19",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 821,
+  "candidatesTokenCount": 83,
+  "totalTokenCount": 904,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 821
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "call_tool",
+  "tool": "find_record",
+  "args": {
+   "code": "XFER-01",
+   "id": "XFER-01"
+  },
+  "type": "course",
+  "reply": "",
+  "citations": [],
+  "proposals": []
+ }
+}

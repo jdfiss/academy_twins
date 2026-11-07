@@ -289,7 +289,7 @@ def run_draft(pdf: bytes, year: int = 114, answer: Path | None = None) -> dict:
                            courses=json.dumps({c["code"]: c["name"] for c in context["courses"]}, ensure_ascii=False),
                            categories=json.dumps(list(context["categories"]), ensure_ascii=False))
     try:
-        result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)])
+        result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], purpose="rule_draft")
     except llm.LLMError:
         failure = {"type": "draft_failed", "model": llm.model_name(), "prompt_version": PROMPT_VERSION,
                    "at": now(), "errors": 1, "year": year, "baseline_version": _hash(context)}

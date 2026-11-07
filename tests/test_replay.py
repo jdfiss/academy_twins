@@ -1,3 +1,4 @@
+import json
 """評審模式：預錄 AI 回應的錄製與重播。以假的 AI 回應測試，不連網。（A 組）"""
 import tempfile
 import unittest
@@ -80,6 +81,30 @@ class ReplayTest(unittest.TestCase):
             with mock.patch.object(llm, "generate_json", side_effect=llm.LLMError("503")), \
                     self.assertRaises(llm.LLMError):
                 replay.generate_json("提示", {}, ATTACH)
+
+    def test_live_call_logs_token_usage_counts_only(self):
+        log = Path(self.dir.parent) / "usage.jsonl"
+        response = fake_response()
+        response.usage = {"promptTokenCount": 1200, "candidatesTokenCount": 300, "thoughtsTokenCount": 50,
+                          "totalTokenCount": 1550}
+        with self.env(ACADEMIC_TWIN_RECORD="1"), mock.patch.object(replay, "USAGE_LOG", log),                 mock.patch.object(llm, "generate_json", return_value=response):
+            replay.generate_json("提示含個資以外的內容", {}, ATTACH, purpose="dashboard")
+        entries = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(entries), 1)
+        e = entries[0]
+        self.assertEqual((e["purpose"], e["input_tokens"], e["output_tokens"], e["thinking_tokens"]),
+                         ("dashboard", 1200, 300, 50))
+        self.assertNotIn("提示", json.dumps(e, ensure_ascii=False))  # 只記計數
+        saved = json.loads(next(self.dir.glob("*.json")).read_text(encoding="utf-8"))
+        self.assertEqual(saved["usage"]["promptTokenCount"], 1200)  # 錄製檔也保留用量
+        self.assertEqual(replay.usage_summary(entries)["rows"][0]["avg_output"], 350)
+
+    def test_replay_and_stub_results_do_not_log_usage(self):
+        log = Path(self.dir.parent) / "usage.jsonl"
+        self.record()  # 替身沒有 usage
+        with mock.patch.object(replay, "USAGE_LOG", log), self.env(ACADEMIC_TWIN_REPLAY="only"):
+            replay.generate_json("提示", {}, ATTACH)
+        self.assertFalse(log.exists())
 
     def test_invalid_mode_is_rejected(self):
         with self.env(ACADEMIC_TWIN_REPLAY="maybe"), self.assertRaises(ValueError):

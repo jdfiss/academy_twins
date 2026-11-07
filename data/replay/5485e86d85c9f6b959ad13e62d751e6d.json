@@ -1,0 +1,40 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:08:49",
+ "recorded_at": "2026-11-07T16:08:49",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1123,
+  "candidatesTokenCount": 229,
+  "totalTokenCount": 1352,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 1123
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "find_record",
+  "args": {
+   "code": "IM9001",
+   "id": "IM9001"
+  },
+  "type": "course",
+  "reply": "同學你好，關於你修習兩次的 IM9001 Python，系統顯示有 117-1 與 117-2 的及格紀錄。其中 117-2 紀錄可進行人工覆核，已請承辦人確認採計方式，承辦單位待系辦確認。",
+  "citations": [
+   "IM9001"
+  ],
+  "proposals": [
+   {
+    "code": "IM9001",
+    "term": "117-2",
+    "action": "dept_elective",
+    "category": "",
+    "reason": "重修或重複修習課程之採計"
+   }
+  ]
+ }
+}

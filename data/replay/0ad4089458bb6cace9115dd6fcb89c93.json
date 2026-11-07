@@ -1,0 +1,30 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:08:54",
+ "recorded_at": "2026-11-07T16:08:54",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 967,
+  "candidatesTokenCount": 100,
+  "totalTokenCount": 1067,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 967
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "get_flags",
+  "args": {
+   "code": "",
+   "id": ""
+  },
+  "type": "procedure",
+  "reply": "同學你好，關於通識超修學分如需申請認列，承辦單位待系辦確認，請靜候後續通知。",
+  "citations": [],
+  "proposals": []
+ }
+}

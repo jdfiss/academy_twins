@@ -1,0 +1,40 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:08:16",
+ "recorded_at": "2026-11-07T16:08:16",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1034,
+  "candidatesTokenCount": 238,
+  "totalTokenCount": 1272,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 1034
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "find_record",
+  "args": {
+   "code": "XFER-01",
+   "id": "XFER-01"
+  },
+  "type": "course",
+  "reply": "同學你好，關於你提到已辦理抵免的程式語言（課號 XFER-01），目前系統紀錄顯示該課程已修過且及格，學分為 3 學分。已請承辦人確認採計方式，若有進一步消息會再通知你。",
+  "citations": [
+   "XFER-01"
+  ],
+  "proposals": [
+   {
+    "code": "XFER-01",
+    "term": "114-1",
+    "action": "dept_elective",
+    "category": "抵免",
+    "reason": "轉學抵免課程尚未計入畢業學分，提請人工覆核採計為系選修。"
+   }
+  ]
+ }
+}

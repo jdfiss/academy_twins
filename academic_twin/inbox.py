@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
 import re
 import threading
 import time
@@ -33,10 +34,17 @@ from .rule_engine import CATEGORY, DEPT_ELECTIVE, EXCLUDE, OUTSIDE
 ROOT = Path(__file__).parent.parent
 EVAL_LOG = ROOT / "data" / "eval" / "inbox_runs.jsonl"
 DEMO_INBOX = ROOT / "data" / "samples" / "inbox_demo.json"
-PROMPT_VERSION = "inbox-v1"
+PROMPT_VERSION = "inbox-v2"  # v2：回覆不得出現系統代號；釐清 course 與 correction
 MAX_ROUNDS = 5
 MAX_BODY = 1000
 WORKERS = 2
+# 費用控制：收件匣只做分類、查工具與短回覆，用最便宜的 lite 模型；指定模型時不改用備援模型，
+# 失敗就轉人工或由監控者重試，不會靜默升級到較貴的模型。改模型名稱會使收件匣的評審模式錄製失效。
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
+
+
+def model_name() -> str:
+    return os.environ.get("GEMINI_INBOX_MODEL", "").strip() or DEFAULT_MODEL
 
 TYPES = {"progress": "進度查詢", "course": "課程採計", "misjudge": "疑似誤判", "procedure": "辦理流程",
          "correction": "資料更正", "other": "其他（轉人工）"}
@@ -64,7 +72,7 @@ SCHEMA = {
     "properties": {
         "action": {"type": "STRING", "enum": ["call_tool", "answer"]},
         "tool": STRING,
-        "args": {"type": "OBJECT", "properties": {"code": STRING, "id": STRING}},
+        "args": {"type": "OBJECT", "properties": {"code": STRING, "id": STRING}, "required": ["code", "id"]},
         "type": {"type": "STRING", "enum": list(TYPES)},
         "reply": STRING,
         "citations": {"type": "ARRAY", "items": STRING},
@@ -72,7 +80,8 @@ SCHEMA = {
             "code": STRING, "term": STRING, "action": STRING, "category": STRING, "reason": STRING},
             "required": ["code", "term", "action"]}},
     },
-    "required": ["action"],
+    # 全部欄位必填（不適用的填空字串／空陣列）：lite 模型遇到選填欄位常直接省略回覆或工具參數
+    "required": ["action", "tool", "args", "type", "reply", "citations", "proposals"],
 }
 
 PROMPT = """你是大學系辦的回信助理，替承辦人草擬給學生的回覆。你不能計算學分、不能改變審查結果，只能引用工具查到的審查結果。
@@ -88,10 +97,10 @@ PROMPT = """你是大學系辦的回信助理，替承辦人草擬給學生的�
 
 問題類型：
 - progress 進度查詢（還差什麼、能不能畢業）
-- course 課程採計（某門課怎麼算）
+- course 課程採計（某門已有紀錄的課怎麼算、為什麼沒算進某項要求，包括已辦抵免但審查結果沒算進去）
 - misjudge 疑似誤判（校務系統結果和預期不同、學分超修）
 - procedure 辦理流程（要找哪個單位辦）
-- correction 資料更正（成績、紀錄有誤，或宣稱有未登錄的證明）
+- correction 資料更正（紀錄本身的成績、學分、學期寫錯，或宣稱有系統裡完全沒有的成績或證明）
 - other 其他（規章解讀、例外或專案申請、抱怨、與畢業審查無關）
 
 規則：
@@ -101,7 +110,8 @@ PROMPT = """你是大學系辦的回信助理，替承辦人草擬給學生的�
 4. correction 與 other 類型只要分類，reply 可留空，會改由承辦人處理。
 5. course 類型中，若 find_record 顯示該紀錄「可人工覆核」，可在 proposals 提出覆核建議（code、term、action、category、reason），
    action 只能是 review_options 列出的方式；不確定就不要提。建議只是草稿，由承辦人決定。
-6. 回覆用繁體中文、口吻親切簡潔，200 字以內。
+6. 回覆用繁體中文、口吻親切簡潔，200 字以內。回覆是給學生看的：不要寫出 review_options、dept_elective、category:… 這類系統代號或英文欄位名，
+   覆核方式只寫在 proposals，回覆中只說「已請承辦人確認採計方式」。
 
 學生來信（學號已遮罩）：
 {question}
@@ -248,7 +258,7 @@ def check_proposals(proposals: list, history: list[dict]) -> tuple[list[dict], i
 # ---------- Agent 迴圈 ----------
 def draft_reply(service, message: dict, generate=None) -> tuple[dict, dict]:
     """擬一封回覆；回傳（擬稿欄位, 執行軌跡）。generate 預設為 replay.generate_json（可錄製、重播）。"""
-    generate = generate or (lambda prompt: replay.generate_json(prompt, SCHEMA))
+    generate = generate or (lambda prompt: replay.generate_json(prompt, SCHEMA, model=model_name(), purpose="inbox"))
     sid = message["student_id"]
     tools = Tools(service, sid)
     question = mask(f"主旨：{message['subject']}\n{message['body']}", sid)
@@ -634,7 +644,7 @@ def main(argv: list[str]) -> None:
     replay.disable()  # 量測一律即時呼叫，不用錄製結果
     data = json.loads(EVAL_SET.read_text(encoding="utf-8"))
     cases = [c for c in data["cases"] if not args.split or c["split"] == args.split]
-    report = {"eval_version": data["version"], "prompt_version": PROMPT_VERSION, "model": llm.model_name(),
+    report = {"eval_version": data["version"], "prompt_version": PROMPT_VERSION, "model": model_name(),
               "started_at": datetime.now().isoformat(timespec="seconds"), **evaluate(eval_service(), cases)}
     out = ROOT / "data" / "eval" / f"inbox_eval_{report['started_at'].replace(':', '').replace('-', '')}.json"
     out.parent.mkdir(parents=True, exist_ok=True)

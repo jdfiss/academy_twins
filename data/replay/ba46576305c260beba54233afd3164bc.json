@@ -1,0 +1,30 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:08:40",
+ "recorded_at": "2026-11-07T16:08:40",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 809,
+  "candidatesTokenCount": 86,
+  "totalTokenCount": 895,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 809
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "call_tool",
+  "tool": "find_record",
+  "args": {
+   "code": "IM9001",
+   "id": "IM9001"
+  },
+  "type": "course",
+  "reply": "",
+  "citations": [],
+  "proposals": []
+ }
+}
