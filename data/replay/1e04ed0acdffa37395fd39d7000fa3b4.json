@@ -1,0 +1,30 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:37:42",
+ "recorded_at": "2026-11-07T16:37:42",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1091,
+  "candidatesTokenCount": 121,
+  "totalTokenCount": 1212,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 1091
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "get_flags",
+  "args": {
+   "code": "",
+   "id": ""
+  },
+  "type": "procedure",
+  "reply": "同學你好，關於通識超修學分要申請人工認列，需辦理事項為「確認通識超修學分的人工認列」，承辦單位待系辦確認。如有疑問，建議洽系辦詢問。",
+  "citations": [],
+  "proposals": []
+ }
+}

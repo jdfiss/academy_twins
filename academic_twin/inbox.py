@@ -29,12 +29,12 @@ from datetime import datetime
 from pathlib import Path
 
 from . import dashboard, dashboard_batch, llm, replay
-from .rule_engine import CATEGORY, DEPT_ELECTIVE, EXCLUDE, OUTSIDE
+from .rule_engine import CATEGORY, DEPT_ELECTIVE, EXCLUDE, OUTSIDE, placement
 
 ROOT = Path(__file__).parent.parent
 EVAL_LOG = ROOT / "data" / "eval" / "inbox_runs.jsonl"
 DEMO_INBOX = ROOT / "data" / "samples" / "inbox_demo.json"
-PROMPT_VERSION = "inbox-v2"  # v2：回覆不得出現系統代號；釐清 course 與 correction
+PROMPT_VERSION = "inbox-v3"  # v3：缺額附單位；沒有覆核建議不得聲稱已轉承辦人；離校等一般行政與詢問他人歸 other
 MAX_ROUNDS = 5
 MAX_BODY = 1000
 WORKERS = 2
@@ -99,19 +99,21 @@ PROMPT = """你是大學系辦的回信助理，替承辦人草擬給學生的�
 - progress 進度查詢（還差什麼、能不能畢業）
 - course 課程採計（某門已有紀錄的課怎麼算、為什麼沒算進某項要求，包括已辦抵免但審查結果沒算進去）
 - misjudge 疑似誤判（校務系統結果和預期不同、學分超修）
-- procedure 辦理流程（要找哪個單位辦）
+- procedure 辦理流程（get_flags 列出的需辦理事項，例如抵修、抵免、人工認列，要找哪個單位辦）
 - correction 資料更正（紀錄本身的成績、學分、學期寫錯，或宣稱有系統裡完全沒有的成績或證明）
-- other 其他（規章解讀、例外或專案申請、抱怨、與畢業審查無關）
+- other 其他（規章解讀、例外或專案申請、抱怨、詢問其他學生的資料、離校或證書等與畢業審查無關的行政手續）
 
 規則：
 1. 先用工具查，再回答。回覆裡出現的每個數字、課號、要求編號、承辦單位，都必須出現在工具結果中；工具沒有的不要寫，也不要推算。
+   描述缺額時照工具的 unit 或 shortfall_text 寫（看門數的寫「門」，看學分的寫「學分」）；問某門課算什麼，照 find_record 的 counted_as 回答。
 2. 不要用條列編號，不要寫學號。不要說「保證」「一定可以畢業」「已核准」「已幫你辦好」這類斷言；判定以「目前審查結果」描述。
 3. 承辦單位只能照 get_flags 的需辦理事項寫；工具沒有寫明單位時，說明「承辦單位待系辦確認」，不要自己猜。
 4. correction 與 other 類型只要分類，reply 可留空，會改由承辦人處理。
 5. course 類型中，若 find_record 顯示該紀錄「可人工覆核」，可在 proposals 提出覆核建議（code、term、action、category、reason），
    action 只能是 review_options 列出的方式；不確定就不要提。建議只是草稿，由承辦人決定。
 6. 回覆用繁體中文、口吻親切簡潔，200 字以內。回覆是給學生看的：不要寫出 review_options、dept_elective、category:… 這類系統代號或英文欄位名，
-   覆核方式只寫在 proposals，回覆中只說「已請承辦人確認採計方式」。
+   覆核方式只寫在 proposals。有提出 proposals 時，回覆可說「已請承辦人確認採計方式」；沒有 proposals 時，不要說已請、已轉、已通知任何人，
+   需要進一步確認就建議學生洽系辦。
 
 學生來信（學號已遮罩）：
 {question}
@@ -124,6 +126,14 @@ PROMPT = """你是大學系辦的回信助理，替承辦人草擬給學生的�
 FEEDBACK = """
 上一次的回答沒有通過程式檢查，原因如下；請依工具結果修正後重新回答（可再呼叫工具）：
 {problems}"""
+
+
+# 各類要求的 have／need 單位（看門數或看學分），讓回覆不把「缺 3 門」寫成「缺 3 學分」
+COUNT_KINDS = ("all_of", "taken_all", "n_of", "category_count")
+
+
+def unit_of(kind: str) -> str:
+    return "門" if kind in COUNT_KINDS else "學分"
 
 
 # ---------- 唯讀工具（綁定寄件學生） ----------
@@ -146,8 +156,10 @@ class Tools:
             "requirements_satisfied": sum(r["satisfied"] for r in s["requirements"]),
             "requirements_total": len(s["requirements"]),
             "unmet_or_pending": [
-                {"id": r["id"], "title": r["title"], "have": r["have"], "need": r["need"], "pending": r["pending"],
-                 "shortfall": r["shortfall"], "missing": [{"code": c["code"], "name": c["name"]} for c in r["missing"]],
+                {"id": r["id"], "title": r["title"], "unit": unit_of(r["kind"]), "have": r["have"], "need": r["need"],
+                 "pending": r["pending"], "shortfall": r["shortfall"],
+                 "shortfall_text": f"還缺 {r['shortfall']} {unit_of(r['kind'])}" if r["shortfall"] else "",
+                 "missing": [{"code": c["code"], "name": c["name"]} for c in r["missing"]],
                  "detail": r["detail"]}
                 for r in s["requirements"] if not r["satisfied"] or r["pending"]],
             "records_needing_review": len(s["issues"]["review"]) + len(s["issues"]["dept_unverified"]),
@@ -164,10 +176,13 @@ class Tools:
             raise ToolError("請在 args 提供 code（課號）")
         s = self._student()
         kb = self.service.ruleset(self.sid).kb
+        transcript = self.service._report(self.sid).transcript  # 引擎的分類結果，只讀
         reviewable = {(r["code"], r["term"]) for r in s["issues"]["review"] + s["issues"]["dept_unverified"]}
         reviewed = {(r["code"], r["term"]): r["label"] for r in s["reviews"]}
         records = [{"term": r["term"], "name": r["name"], "credits": r["credits"],
-                    "passed": r["grade"] >= kb.passing_grade, "category": r["category"],
+                    "passed": r["grade"] >= kb.passing_grade,
+                    "counted_as": placement(kb, transcript, r["code"], r["term"]) if r["grade"] >= kb.passing_grade
+                    else "不及格，未採計",
                     "reviewable": (r["code"], r["term"]) in reviewable,
                     "reviewed_as": reviewed.get((r["code"], r["term"]))}
                    for r in s["records"] if r["code"].upper() == code]
@@ -181,7 +196,8 @@ class Tools:
         rid = str(args.get("id") or "").strip().upper()
         for r in self._student()["requirements"]:
             if r["id"].upper() == rid:
-                return {k: r[k] for k in ("id", "title", "satisfied", "pending", "have", "need", "detail", "citation")}
+                return {**{k: r[k] for k in ("id", "title", "satisfied", "pending", "have", "need", "detail", "citation")},
+                        "unit": unit_of(r["kind"])}
         raise ToolError(f"沒有畢業要求 {rid}")
 
 
@@ -232,6 +248,16 @@ def check_reply(reply: str, evidence: str) -> list[str]:
     return problems
 
 
+CLAIM = re.compile(r"已(?:經)?(?:請|轉|交由|交給|通知|幫|替|為你|協助|送)")
+
+
+def check_claims(reply: str, has_proposals: bool) -> list[str]:
+    """沒有提出任何覆核建議時，回覆不能聲稱已經轉交、通知或請承辦人處理（擬稿階段系統什麼都還沒做）。"""
+    if has_proposals or not CLAIM.search(reply):
+        return []
+    return ["沒有提出覆核建議，回覆不能說已請承辦人或已轉交處理；請改成建議學生洽系辦，或只說明目前審查結果"]
+
+
 def check_proposals(proposals: list, history: list[dict]) -> tuple[list[dict], int]:
     """只保留 find_record 回報可人工覆核的紀錄，且採計方式在 review_options 內；回傳（保留, 丟棄數）。"""
     allowed: dict[tuple[str, str], set[str]] = {}
@@ -255,6 +281,14 @@ def check_proposals(proposals: list, history: list[dict]) -> tuple[list[dict], i
     return kept, len(proposals or []) - len(kept)
 
 
+def mentions_other_student(service, sid: str, text: str) -> bool:
+    """信中出現名單或已載入紀錄中「其他」學生的學號：一律轉人工，不送模型（程式判斷，不靠 AI 分類）。"""
+    roster = getattr(service, "_roster_parsed", None)
+    ids = set(getattr(roster, "ids", []) or []) | set(getattr(service, "students", {}) or {})
+    upper = text.upper()
+    return any(i and i.upper() != sid.upper() and i.upper() in upper for i in ids)
+
+
 # ---------- Agent 迴圈 ----------
 def draft_reply(service, message: dict, generate=None) -> tuple[dict, dict]:
     """擬一封回覆；回傳（擬稿欄位, 執行軌跡）。generate 預設為 replay.generate_json（可錄製、重播）。"""
@@ -267,6 +301,10 @@ def draft_reply(service, message: dict, generate=None) -> tuple[dict, dict]:
              "prompt_version": PROMPT_VERSION, "model": None, "rounds": 0, "tools": [], "invalid_tools": 0,
              "reflected": False, "grounding": "skipped", "to_manual": True, "question_type": None,
              "proposals_kept": 0, "proposals_dropped": 0, "replay": None}
+    if mentions_other_student(service, sid, f"{message['subject']}\n{message['body']}"):
+        trace.update(status=MANUAL, question_type="other", guard="other_student", wait_seconds=0.0)
+        return {"state": MANUAL, "type": "other", "reply": TEMPLATES["other"], "grounded": True, "proposals": [],
+                "notes": ["信中提到其他學生的學號，不由 AI 處理；只能回覆寄件學生本人的資料"], "citations": []}, trace
     history: list[dict] = []
     feedback = ""
     answer = None
@@ -302,7 +340,7 @@ def draft_reply(service, message: dict, generate=None) -> tuple[dict, dict]:
         evidence = json.dumps([h.get("result") for h in history if "result" in h], ensure_ascii=False)
         reply = str(data.get("reply") or "").strip()
         problems = (["回覆是空的"] if not reply else []) + (
-            ["沒有查詢任何審查結果就回答"] if not any("result" in h for h in history) else []) + check_reply(reply, evidence)
+            ["沒有查詢任何審查結果就回答"] if not any("result" in h for h in history) else []) + check_reply(reply, evidence)             + check_claims(reply, bool(check_proposals(data.get("proposals") or [], history)[0]))
         if not problems:
             trace["grounding"] = "reflected_passed" if trace["reflected"] else "passed"
             break

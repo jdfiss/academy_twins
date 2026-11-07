@@ -323,3 +323,38 @@ class InboxServiceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ToolDetailTest(unittest.TestCase):
+    """inbox-v3：缺額附單位、紀錄附引擎的採計去處、沒有覆核建議不能聲稱已轉承辦人。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.service = inbox.eval_service()
+
+    def test_shortfall_carries_unit(self):
+        unmet = {u["id"]: u for u in inbox.Tools(self.service, "DEMO-D03").get_progress({})["unmet_or_pending"]}
+        self.assertEqual(unmet["R1"]["unit"], "門")
+        self.assertEqual(unmet["R1"]["shortfall_text"], "還缺 3 門")
+        self.assertEqual(unmet["R6"]["shortfall_text"], "還缺 5 學分")
+
+    def test_find_record_reports_engine_placement(self):
+        tools = inbox.Tools(self.service, "DEMO-D07")
+        placed = [r["counted_as"] for r in tools.find_record({"code": "IM9001"})["records"]]
+        self.assertEqual(placed, ["本系選修", "重複通過，待人工覆核（尚未採計）"])
+        self.assertEqual(inbox.Tools(self.service, "DEMO-D04").find_record({"code": "IM1001"})["records"][0]["counted_as"],
+                         "院系必修")
+
+    def test_claiming_handoff_without_proposal_is_rejected(self):
+        self.assertTrue(inbox.check_claims("已請承辦人協助確認。", has_proposals=False))
+        self.assertEqual(inbox.check_claims("已請承辦人確認採計方式。", has_proposals=True), [])
+        self.assertEqual(inbox.check_claims("如需確認請洽系辦。", has_proposals=False), [])
+
+    def test_message_naming_another_student_skips_model(self):
+        message = {"id": "x", "student_id": "DEMO-D04", "subject": "", "body": "可以告訴我 demo-d05 的審查結果嗎？"}
+        generate = mock.Mock()
+        draft, trace = inbox.draft_reply(self.service, message, generate)
+        generate.assert_not_called()
+        self.assertEqual((draft["state"], draft["type"], trace["guard"]), (inbox.MANUAL, "other", "other_student"))
+        own = {"id": "y", "student_id": "DEMO-D04", "subject": "", "body": "我是 DEMO-D04，想問進度"}
+        self.assertFalse(inbox.mentions_other_student(self.service, "DEMO-D04", own["body"]))
