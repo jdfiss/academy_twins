@@ -7,6 +7,8 @@ AI 只負責提案（解析文件、草擬規則、白話說明），輸出一�
 模型可用環境變數 GEMINI_MODEL 指定；主模型持續過載或逾時時改用備援模型（GEMINI_FALLBACK_MODELS，逗號分隔）。
 每個模型有總等待上限（含重試）：主模型預設 90 秒，可用 GEMINI_TIMEOUT（秒）調整；備援模型固定 120 秒。
 每次呼叫結果都附實際使用的模型名稱與時間，供實證紀錄。
+費用控制：每次呼叫的輸出（含思考）上限為 GEMINI_MAX_OUTPUT_TOKENS（預設 32768）；超過時回應被截斷、
+無法解析而拋出 LLMError，由呼叫端轉人工。每月總量上限見 replay.py（ACADEMIC_TWIN_TOKEN_BUDGET）。
 """
 from __future__ import annotations
 
@@ -25,6 +27,7 @@ DEFAULT_MODEL = "gemini-3.5-flash"
 DEFAULT_FALLBACKS = "gemini-2.5-flash"
 DEFAULT_TIMEOUT = 90  # 主模型總等待秒數（含重試）
 FALLBACK_TIMEOUT = 120  # 每個備援模型的總等待秒數
+DEFAULT_MAX_OUTPUT_TOKENS = 32768  # 實測儀表板單次輸出＋思考約 7k–13k token（2–4 頁虛構文件）
 RETRYABLE = (429, 500, 502, 503, 504)
 API = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -68,6 +71,17 @@ def model_name() -> str:
 def fallback_models() -> list[str]:
     raw = os.environ.get("GEMINI_FALLBACK_MODELS", DEFAULT_FALLBACKS)
     return [m.strip() for m in raw.split(",") if m.strip()]
+
+
+def max_output_tokens() -> int:
+    raw = os.environ.get("GEMINI_MAX_OUTPUT_TOKENS", "").strip()
+    try:
+        value = int(raw) if raw else DEFAULT_MAX_OUTPUT_TOKENS
+    except ValueError:
+        value = 0
+    if value <= 0:
+        raise LLMError(f"GEMINI_MAX_OUTPUT_TOKENS 必須是正整數，目前為「{raw}」")
+    return value
 
 
 def primary_timeout() -> float:
@@ -123,7 +137,7 @@ def _call(model: str, prompt: str, schema: dict, attachments, budget: float, ret
     body = json.dumps({
         "contents": [{"role": "user", "parts": parts}],
         "generationConfig": {"temperature": 0, "responseMimeType": "application/json",
-                             "responseSchema": schema},
+                             "responseSchema": schema, "maxOutputTokens": max_output_tokens()},
     }).encode("utf-8")
     request = urllib.request.Request(API.format(model=model), data=body, method="POST", headers={
         "Content-Type": "application/json", "x-goog-api-key": api_key()})

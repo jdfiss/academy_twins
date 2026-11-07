@@ -635,7 +635,13 @@ async function loadMetrics() {
       <tr><td>需人工優先看的列</td><td>${p(b.review_share)}</td></tr>
     </tbody></table><p class="hint">${esc(b.disclaimer)}</p>`
     : `<table><thead><tr><th>虛構基準集量測</th></tr></thead><tbody><tr><td class="hint">尚未量測：python -m academic_twin.benchmark --runs 3</td></tr></tbody></table>`;
-  $("#metrics").innerHTML = `<div>${both(dash, "dashboard")}</div><div>${both(inbox, "inbox")}</div><div>${bench}</div>`;
+  const g = m.ai_budget || {};
+  const budget = g.error ? `<td class="hint">${esc(g.error)}</td>`
+    : `<td>${(g.used || 0).toLocaleString()} ／ ${g.budget ? g.budget.toLocaleString() : "未設上限"}${g.exceeded ? "（已達預算，AI 暫停）" : ""}</td>`;
+  const cost = `<table><thead><tr><th colspan="2">AI 費用上限（${esc(g.month || "")}）</th></tr></thead><tbody>
+      <tr><td>本月 token 已用／預算</td>${budget}</tr></tbody></table>
+    <p class="hint">達到預算即停止呼叫模型，改走人工流程；可用 ACADEMIC_TWIN_TOKEN_BUDGET 調整。</p>`;
+  $("#metrics").innerHTML = `<div>${both(dash, "dashboard")}</div><div>${both(inbox, "inbox")}</div><div>${bench}${cost}</div>`;
   $("#metrics-note").textContent = `${m.note}；樣本少於 ${m.min_n} 時只顯示件數。`;
 }
 $("#metrics-refresh").addEventListener("click", loadMetrics);

@@ -87,8 +87,12 @@ class OfficeMixin(MonitorMixin, InboxMixin):
         }, self._state_dir)
 
     def office_metrics(self) -> dict:
-        """監控台指標：本批次與累計（只有彙總數字）。"""
-        return compute_metrics(self.batch_uid())
+        """監控台指標：本批次與累計（只有彙總數字），加上本月 AI token 用量與預算。"""
+        try:
+            budget = replay.budget_status()
+        except llm.LLMError as e:  # 預算設定錯誤時仍顯示其他指標
+            budget = {"error": str(e)}
+        return {**compute_metrics(self.batch_uid()), "ai_budget": budget}
 
     def data_source(self) -> dict:
         return {

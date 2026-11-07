@@ -11,6 +11,7 @@ from tests.test_dashboard import fake_response, pdf_pages, two_models
 
 PDF = b"%PDF-1.7 fictional demo"
 ATTACH = [llm.Attachment("application/pdf", PDF)]
+NL = "\n"
 
 
 class ReplayTest(unittest.TestCase):
@@ -105,6 +106,34 @@ class ReplayTest(unittest.TestCase):
         with mock.patch.object(replay, "USAGE_LOG", log), self.env(ACADEMIC_TWIN_REPLAY="only"):
             replay.generate_json("提示", {}, ATTACH)
         self.assertFalse(log.exists())
+
+    def test_monthly_budget_stops_live_calls(self):
+        log = Path(self.dir.parent) / "usage.jsonl"
+        month = replay.datetime.now().strftime("%Y-%m")
+        log.write_text(json.dumps({"at": f"{month}-01T00:00:00", "total_tokens": 1000}) + NL
+                       + json.dumps({"at": "2000-01-01T00:00:00", "total_tokens": 10**9}) + NL, encoding="utf-8")
+        with mock.patch.object(replay, "USAGE_LOG", log), mock.patch.object(llm, "generate_json") as live:
+            with self.env(ACADEMIC_TWIN_TOKEN_BUDGET="1000"), self.assertRaises(llm.LLMError) as e:
+                replay.generate_json("提示", {}, ATTACH)
+            self.assertIn("預算", str(e.exception))
+            live.assert_not_called()
+            live.return_value = fake_response()
+            with self.env(ACADEMIC_TWIN_TOKEN_BUDGET="1001"):  # 只算本月，舊月份不計
+                replay.generate_json("提示", {}, ATTACH)
+            with self.env(ACADEMIC_TWIN_TOKEN_BUDGET="0"):  # 0＝不設上限
+                replay.generate_json("提示", {}, ATTACH)
+            self.assertEqual(live.call_count, 2)
+
+    def test_budget_exceeded_falls_back_to_recording(self):
+        log = Path(self.dir.parent) / "usage.jsonl"
+        self.record()
+        month = replay.datetime.now().strftime("%Y-%m")
+        log.write_text(json.dumps({"at": f"{month}-02T00:00:00", "total_tokens": 50}) + NL, encoding="utf-8")
+        with mock.patch.object(replay, "USAGE_LOG", log), self.env(ACADEMIC_TWIN_TOKEN_BUDGET="10"), \
+                mock.patch.object(llm, "generate_json") as live:
+            result = replay.generate_json("提示", {}, ATTACH)
+        live.assert_not_called()
+        self.assertIn("預算", result.replay["reason"])
 
     def test_invalid_mode_is_rejected(self):
         with self.env(ACADEMIC_TWIN_REPLAY="maybe"), self.assertRaises(ValueError):

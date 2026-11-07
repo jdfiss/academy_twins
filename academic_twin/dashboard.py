@@ -16,6 +16,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import re
 import sys
 import threading
@@ -105,6 +106,23 @@ class Extraction:
     replay: dict | None = None  # 評審模式重播時為 {model, generated_at, reason}；即時呼叫為 None
 
 
+PAGE = re.compile(rb"/Type\s*/Page(?![A-Za-z])")
+DEFAULT_MAX_PAGES = 10  # 虛構儀表板 2–4 頁；真實版型確認後再調整
+
+
+def page_count(pdf: bytes) -> int:
+    """以頁面物件計數（不需完整解析 PDF）；用於費用上限，不用於判斷內容。"""
+    return len(PAGE.findall(pdf))
+
+
+def max_pages() -> int:
+    raw = os.environ.get("ACADEMIC_TWIN_MAX_PDF_PAGES", "").strip()
+    try:
+        return max(1, int(raw)) if raw else DEFAULT_MAX_PAGES
+    except ValueError:
+        return DEFAULT_MAX_PAGES
+
+
 def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: bool = False,
             feedback: list[str] | None = None) -> Extraction:
     """送 Gemini 擷取；失敗時丟 llm.LLMError，呼叫端應保留手動上傳 CSV 的流程。
@@ -115,6 +133,9 @@ def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: 
     """
     if not pdf.startswith(b"%PDF"):
         raise ValueError("不是 PDF 檔案")
+    count, limit = page_count(pdf), max_pages()
+    if count > limit:  # 費用控制：PDF 整份送模型，頁數越多 token 越多；異常大的檔案不送
+        raise ValueError(f"PDF 有 {count} 頁，超過 AI 解析上限 {limit} 頁；請確認是否為畢審儀表板，或改由人工輸入")
     pages = pdf_text.extract_pages(pdf) if read_text else None
     prompt = PROMPT + RETRY.format(errors="\n".join(f"- {m}" for m in feedback)) if feedback else PROMPT
     result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model,

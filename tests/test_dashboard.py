@@ -519,3 +519,32 @@ class DashboardCohortTest(unittest.TestCase):
         default, extra = rule_versions.startup_paths(d / "curriculum_im_114.json", d / "versions")
         self.assertEqual((default.name, [p.name for p in extra]),
                          ("curriculum_im_114.json", ["curriculum_im_112.json"]))
+
+
+class PageLimitTest(unittest.TestCase):
+    def test_oversized_pdf_is_not_sent_to_model(self):
+        pdf = b"%PDF-1.7 " + b"<< /Type /Page >> " * 11 + b"<< /Type /Pages >>"
+        self.assertEqual(dashboard.page_count(pdf), 11)
+        with mock.patch.object(llm, "generate_json") as live, self.assertRaises(ValueError) as e:
+            dashboard.extract(pdf)
+        live.assert_not_called()
+        self.assertIn("11 頁", str(e.exception))
+
+
+class LLMOutputCapTest(unittest.TestCase):
+    """費用控制：每次呼叫都帶輸出 token 上限（含思考）。不連網。"""
+
+    def test_request_carries_max_output_tokens(self):
+        bodies = []
+
+        def fake(request, timeout):
+            bodies.append(json.loads(request.data))
+            return ok_response()
+        for env, expected in (({}, llm.DEFAULT_MAX_OUTPUT_TOKENS), ({"GEMINI_MAX_OUTPUT_TOKENS": "4096"}, 4096)):
+            with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "k", "GEMINI_MAX_OUTPUT_TOKENS": "", **env}), \
+                    mock.patch.object(llm.urllib.request, "urlopen", side_effect=fake):
+                llm.generate_json("p", {}, model="m")
+            self.assertEqual(bodies[-1]["generationConfig"]["maxOutputTokens"], expected)
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "k", "GEMINI_MAX_OUTPUT_TOKENS": "-1"}), \
+                self.assertRaises(llm.LLMError):
+            llm.generate_json("p", {}, model="m")

@@ -64,6 +64,7 @@ def generate_json(prompt: str, schema: dict, attachments=(), *, model: str | Non
     if m == "only":
         return _load(path, "評審模式只能重播預先錄製的虛構文件，這份文件沒有錄製結果")
     try:
+        check_budget()
         result = llm.generate_json(prompt, schema, attachments, model=model)
     except llm.LLMError as e:
         if m == "fallback" and path.exists():
@@ -101,6 +102,56 @@ def log_usage(result: llm.LLMResult, purpose: str, m: str) -> None:
         USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
         with USAGE_LOG.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+# ---------- 每月 token 預算（費用上限） ----------
+# 超過預算時不再呼叫模型，拋出 LLMError：各功能本來就把 LLMError 視為「AI 無法使用」改走人工流程，
+# 所以超支的結果是變慢而不是多花錢。0 表示不設上限（需明確設定）。
+# 檢查與呼叫之間不加鎖：同時進行的呼叫最多多用「同時呼叫數 × 單次上限」，量小且可預估。
+DEFAULT_MONTHLY_BUDGET = 3_000_000
+
+
+def monthly_budget() -> int:
+    raw = os.environ.get("ACADEMIC_TWIN_TOKEN_BUDGET", "").strip()
+    try:
+        value = int(raw) if raw else DEFAULT_MONTHLY_BUDGET
+    except ValueError:
+        raise llm.LLMError(f"ACADEMIC_TWIN_TOKEN_BUDGET 必須是整數（token 數），目前為「{raw}」") from None
+    if value < 0:
+        raise llm.LLMError("ACADEMIC_TWIN_TOKEN_BUDGET 不能是負數")
+    return value
+
+
+def read_usage() -> list[dict]:
+    if not USAGE_LOG.is_file():
+        return []
+    entries = []
+    for line in USAGE_LOG.read_text(encoding="utf-8").splitlines():
+        try:
+            entries.append(json.loads(line))
+        except ValueError:
+            continue  # 寫到一半的行不影響計算
+    return entries
+
+
+def month_usage(entries: list[dict], month: str | None = None) -> int:
+    month = month or datetime.now().strftime("%Y-%m")
+    return sum(int(e.get("total_tokens") or 0) for e in entries if str(e.get("at", "")).startswith(month))
+
+
+def budget_status() -> dict:
+    """監控台用：本月已用 token、預算與是否已停用。"""
+    budget = monthly_budget()
+    used = month_usage(read_usage())
+    return {"month": datetime.now().strftime("%Y-%m"), "used": used, "budget": budget,
+            "exceeded": bool(budget) and used >= budget}
+
+
+def check_budget() -> None:
+    s = budget_status()
+    if s["exceeded"]:
+        raise llm.LLMError(f"本月 AI 用量已達預算（{s['used']:,}／{s['budget']:,} token），暫停呼叫模型；"
+                           "其餘功能照常，可改由人工處理，或由負責人調整 ACADEMIC_TWIN_TOKEN_BUDGET")
 
 
 def usage_summary(entries: list[dict]) -> dict:
@@ -142,10 +193,13 @@ def main() -> None:
     if "--usage" not in sys.argv[1:]:
         print("用法：python -m academic_twin.replay --usage")
         return
-    if not USAGE_LOG.is_file():
+    b = budget_status()
+    print(f"{b['month']} 已用 {b['used']:,} token；每月預算 {b['budget']:,}" if b["budget"]
+          else f"{b['month']} 已用 {b['used']:,} token；未設預算上限")
+    entries = read_usage()
+    if not entries:
         print(f"尚無用量紀錄（{USAGE_LOG}）：真實模型呼叫後才會產生")
         return
-    entries = [json.loads(line) for line in USAGE_LOG.read_text(encoding="utf-8").splitlines() if line.strip()]
     s = usage_summary(entries)
     print(f"共 {s['calls']} 次真實模型呼叫（不含重播）；輸出含思考 token")
     for r in s["rows"]:
