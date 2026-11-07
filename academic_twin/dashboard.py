@@ -18,6 +18,7 @@ import io
 import json
 import re
 import sys
+import threading
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
@@ -314,11 +315,16 @@ def normalize(k: str, v) -> object:
     return v
 
 
+_LOG_LOCK = threading.Lock()
+
+
 def log_run(entry: dict, path: Path | None = None) -> None:
+    """追加一行執行紀錄；批次解析與收件匣在多個執行緒同時寫，需加鎖，否則可能少一行。"""
     path = path or EVAL_LOG
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    line = json.dumps(entry, ensure_ascii=False) + "\n"
+    with _LOG_LOCK, path.open("a", encoding="utf-8") as f:
+        f.write(line)
 
 
 def main(argv: list[str]) -> None:

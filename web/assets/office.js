@@ -1,18 +1,20 @@
-// 系辦端（A 組）：畢審總表、學生明細與人工覆核、AI 解析儀表板、規則（草擬、版本啟用、來源）
-let BATCH = [], statusFilter = null, flagFilter = "";
+// 系辦端（A 組）：監控台（分流、批次放行與抽查、AI 處理流程、指標）、收件匣、學生明細與覆核、規則、工具
+let BATCH = [], statusFilter = null, flagFilter = "", JOBS = null, jobFilter = null;
 const FLAG_LABELS = { overflow: "超修學分", repeatable: "可重複修習", substitution_pending: "待辦抵修" };
 const show = setupTabs("twin-office-view");
-// 網址可直接指定分頁（如 office.html#ingest），方便錄影與評審開啟；切換分頁時同步網址
+// 網址可直接指定分頁（如 office.html#inbox），方便錄影與評審開啟；舊網址 #ingest、#batch 導向監控台
+const ALIASES = { ingest: "monitor", batch: "monitor" };
 const viewFromHash = () => {
-  const v = location.hash.slice(1);
+  const raw = location.hash.slice(1), v = ALIASES[raw] || raw;
   if (v && document.getElementById(`view-${v}`)) show(v);
 };
 viewFromHash();
 window.addEventListener("hashchange", viewFromHash);
 document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () =>
   history.replaceState(null, "", `#${b.dataset.view}`)));
+const go = (view) => { show(view); history.replaceState(null, "", `#${view}`); };
 
-// ---------- 共用：承辦人（全頁填一次）與訊息 ----------
+// ---------- 共用：監控者（全頁填一次）與訊息 ----------
 const officer = () => $("#officer").value.trim();
 try { $("#officer").value = localStorage.getItem("twin-reviewer") || ""; } catch {}
 $("#officer").addEventListener("change", () => { try { localStorage.setItem("twin-reviewer", officer()); } catch {} });
@@ -23,7 +25,7 @@ function msg(el, html, kind = "") {
 
 function needOfficer(el) {
   if (officer()) return true;
-  msg(el, "請先在右上角填寫承辦人。", "err");
+  msg(el, "請先在右上角填寫監控者姓名。", "err");
   $("#officer").focus();
   return false;
 }
@@ -85,7 +87,7 @@ function renderBatch() {
     </tr>`;
   }).join("") || `<tr><td colspan="6" class="empty">沒有符合的學生</td></tr>`;
   document.querySelectorAll("#batch-rows tr[data-id]").forEach((tr) =>
-    tr.addEventListener("click", () => { loadStudent(tr.dataset.id); show("student"); }));
+    tr.addEventListener("click", () => { loadStudent(tr.dataset.id); go("student"); }));
 }
 
 // 原因最多列 3 條，其餘在學生明細看
@@ -181,7 +183,7 @@ function renderRules() {
   $("#assumptions").innerHTML = META.assumptions.map((a) => `<li>${esc(a)}</li>`).join("");
 }
 
-// ---------- 資料上傳 ----------
+// ---------- 資料（工具頁） ----------
 function renderSource(src) {
   $("#data-source").textContent = `${src.students} 位學生・${src.records_count} 筆紀錄`;
   $("#data-source").title = `修課紀錄 ${src.records}・應屆名單 ${src.roster}（${src.roster_count} 位）`;
@@ -202,19 +204,22 @@ async function loadData() {
   flagFilter = "";
   $("#flag-filter").value = "";
   renderBatch();
+  renderEmpty();
   const first = BATCH.find((s) => s.status === "FAIL") || BATCH[0];
   if (first) await loadStudent(first.id);
 }
 
-async function sendData(path, payload) {
-  msg("#upload-msg", "處理中…");
+async function sendData(path, payload, el = "#upload-msg") {
+  msg(el, "處理中…");
   try {
     await postJSON(path, payload);
     await loadData();
-    msg("#upload-msg", "已更新審查結果。", "ok");
+    msg(el, "已更新審查結果。", "ok");
     $("#records-file").value = $("#roster-file").value = "";
+    return true;
   } catch (e) {
-    msg("#upload-msg", errorList(e) + "<div>目前資料維持不變。</div>", "err");
+    msg(el, errorList(e) + "<div>目前資料維持不變。</div>", "err");
+    return false;
   }
 }
 
@@ -229,14 +234,24 @@ $("#upload-btn").addEventListener("click", async () => {
   await sendData("/api/upload", { records, roster });
 });
 $("#reset-btn").addEventListener("click", () => sendData("/api/reset", {}));
-$("#demo-btn").addEventListener("click", async () => {
-  await sendData("/api/demo-batch", {});
-  await refreshJobs();  // 上一輪的解析佇列已清空
-  $("#jobs-files").focus();
-});
+async function loadDemo(el) {
+  if (await sendData("/api/demo-batch", {}, el)) {
+    DRAFT = null;
+    $("#dash-draft").hidden = true;
+    await Promise.all([refreshJobs(), refreshInbox(), loadMetrics()]);
+    go("monitor");
+    $("#jobs-files").focus();
+  }
+}
+$("#demo-btn").addEventListener("click", () => loadDemo("#upload-msg"));
+$("#empty-demo").addEventListener("click", () => loadDemo("#jobs-msg"));
 
-// ---------- AI 解析儀表板 ----------
-let DRAFT = null, draftFromBatch = false;
+function renderEmpty() {
+  $("#monitor-empty").hidden = !(JOBS && !JOBS.jobs.length && !BATCH.length);
+}
+
+// ---------- 核對 AI 解析結果（逐份） ----------
+let DRAFT = null;
 const DASH_FIELDS = ["rule_code", "term", "code", "name", "credits", "grade"];
 const DASH_LABELS = { rule_code: "規則代碼", term: "學期", code: "課號", name: "課名", credits: "學分", grade: "成績" };
 
@@ -269,21 +284,27 @@ function traceSummary(t) {
   const end = t.to_manual ? "仍有錯誤，交給承辦人逐列修正" : t.corrected ? "自我修正成功" : "交給承辦人確認";
   const replayed = t.replay ? ` <span class="replay">重播：${esc(t.replay.model)}・${esc(when(t.replay.generated_at))}產生`
     + `（${esc(t.replay.reason)}）</span>` : "";
+  const src = t.source_check ? `<li class="${t.source_check.ok ? "" : "bad"}">${!t.source_check.available ? "PDF 抽不出文字，無法自動核對原文"
+    : t.source_check.warnings ? `PDF 原文核對：${t.source_check.warnings} 項與原文不符` : "PDF 原文核對：全部相符"}</li>` : "";
   return `<div class="trace"><b>AI 做了什麼</b>${replayed}
     <ol>${t.steps.map((s) => `<li class="${s.ok ? "" : "bad"}">${esc((TRACE_STEPS[s.step] || (() => s.step))(s))}</li>`).join("")}
-    <li class="${t.to_manual ? "bad" : ""}">${end}</li></ol>
+    ${src}<li class="${t.to_manual ? "bad" : ""}">${end}</li></ol>
     <span class="hint">共 ${t.wait_seconds} 秒・提示 ${esc(t.prompt_version)}</span></div>`;
 }
 
 function renderDraft(fresh = false) {
   const d = DRAFT;
   $("#dash-draft").hidden = false;
+  $("#dash-sid-label").textContent = d.student_id;
   $("#dash-meta").textContent = `模型 ${d.model}${d.cross_check ? `／${d.cross_check.check_model}` : ""}・${when(d.generated_at)}・`
     + `提示 ${d.prompt_version}・版型 ${d.format}` + (d.fallback_from ? `・已改用備援（${d.fallback_from}）` : "")
     + (d.replay ? `・重播（${d.replay.reason}），非即時呼叫` : "");
   if (fresh) $("#dash-cohort").value = d.cohort ?? "";
   $("#dash-declared").textContent = `文件標示應修 ${d.declared_required ?? "—"}、實得 ${d.declared_earned ?? "—"} 學分`
     + (d.exists ? `；${d.student_id} 已有紀錄，確認後取代` : "");
+  const sampling = JOBS?.release?.active?.sampled?.includes(d.student_id);
+  $("#dash-sample-note").innerHTML = sampling ? `<div class="issue WARNING">🎲 這份是批次放行的<b>隨機抽查</b>：請逐列對照原文。
+    有任何修改，本批取消、其餘全部改為逐份核對。</div>` : "";
   const rowIssues = (i) => d.issues.filter((x) => x.row === i);
   $("#dash-trace").innerHTML = traceSummary(d.trace);
   $("#dash-cross").innerHTML = crossCheckSummary(d.cross_check);
@@ -317,26 +338,27 @@ function renderDraft(fresh = false) {
 }
 
 $("#dash-cohort").addEventListener("input", invalidateDraftConfirmation);
+$("#dash-close").addEventListener("click", () => { DRAFT = null; $("#dash-draft").hidden = true; msg("#dash-msg", ""); });
 
 $("#dash-extract").addEventListener("click", async () => {
   const file = $("#dash-file").files[0], sid = $("#dash-sid").value.trim();
-  if (!file || !sid) return msg("#dash-msg", "請選擇 PDF 並填寫學號。", "err");
+  if (!file || !sid) return msg("#dash-single-msg", "請選擇 PDF 並填寫學號。", "err");
   DRAFT = null;
-  draftFromBatch = false;
   $("#dash-draft").hidden = true;
   invalidateDraftConfirmation();
   const started = Date.now();
-  const waiting = () => msg("#dash-msg", `解析中，已等待 ${Math.round((Date.now() - started) / 1000)} 秒…`);
+  const waiting = () => msg("#dash-single-msg", `解析中，已等待 ${Math.round((Date.now() - started) / 1000)} 秒…`);
   waiting();
   const timer = setInterval(waiting, 1000);
   $("#dash-extract").disabled = $("#dash-file").disabled = $("#dash-sid").disabled = true;
   try {
     DRAFT = await postJSON("/api/dashboard/extract", { student_id: sid, data: await pdfBase64(file) });
-    const errors = DRAFT.issues.filter((i) => i.level === "error").length, warnings = DRAFT.issues.length - errors;
-    msg("#dash-msg", `擷取 ${DRAFT.rows.length} 列・錯誤 ${errors}・警示 ${warnings}`);
+    msg("#dash-single-msg", "");
+    go("monitor");
     renderDraft(true);
+    $("#dash-draft").scrollIntoView({ behavior: "smooth" });
   } catch (e) {
-    msg("#dash-msg", `<b>${esc(e.message)}</b>`, "err");
+    msg("#dash-single-msg", `<b>${esc(e.message)}</b>`, "err");
   } finally {
     clearInterval(timer);
     $("#dash-extract").disabled = $("#dash-file").disabled = $("#dash-sid").disabled = false;
@@ -360,14 +382,9 @@ $("#dash-confirm").addEventListener("click", async () => {
       reviewer: officer(), cohort: $("#dash-cohort").value.trim(), acknowledge_warnings: true });
     DRAFT = null;
     $("#dash-draft").hidden = true;
-    msg("#dash-msg", "");
-    await loadData();
-    await loadStudent(s.id);
-    if (draftFromBatch) {  // 批次：留在本頁繼續核對下一份
-      await refreshJobs();
-      msg("#jobs-msg", `${esc(s.id)} 已確認送入審查。`, "ok");
-      $("#jobs-table").scrollIntoView({ behavior: "smooth" });
-    } else show("student");
+    await Promise.all([loadData(), refreshJobs(), loadMetrics()]);
+    msg("#jobs-msg", `${esc(s.id)} 已確認送入審查。`, "ok");
+    $("#release-panel").hidden || $("#release-panel").scrollIntoView({ behavior: "smooth" });
   } catch (e) {
     $("#dash-checked").checked = false;
     msg("#dash-confirm-msg", errorList(e), "err");
@@ -376,43 +393,138 @@ $("#dash-confirm").addEventListener("click", async () => {
   }
 });
 
-// ---------- 批次解析：背景排隊，解析完逐份核對確認 ----------
-const JOB_LABELS = { queued: "排隊中", running: "解析中", done: "待確認", failed: "失敗", stopped: "已停止", confirmed: "已確認" };
-const JOB_ORDER = { failed: 0, stopped: 1, done: 2, running: 3, queued: 4, confirmed: 5 };
-let jobsTimer = null, aiPaused = false;
+// ---------- 監控台：分流、AI 處理流程、批次放行 ----------
+const JOB_BUTTON = { fix: "修正", review: "核對", sampling: "抽查核對" };
+let jobsTimer = null;
+
+function cp(kind, text) {
+  return `<span class="cp ${kind}"><i></i>${esc(text)}</span>`;
+}
+function checkpoints(j) {
+  if (j.state === "queued") return [cp("", "排隊中"), "", "", ""];
+  if (j.state === "running") return [cp("", "解析中…"), "", "", ""];
+  if (j.state === "failed" || j.state === "stopped") return [cp("bad", j.error || "失敗"), "", "", ""];
+  const extract = cp("ok", `${j.rows} 列${j.replay ? "・重播" : ""}`);
+  const cross = !j.cross_checked ? cp("warn", "未交叉驗證") : j.flagged_rows ? cp("warn", `不一致 ${j.flagged_rows} 列`) : cp("ok", "兩模型一致");
+  const s = j.source_check;
+  const source = !s ? cp("", "—") : !s.available ? cp("warn", "無法核對") : s.warnings ? cp("warn", `${s.warnings} 項不符`) : cp("ok", "相符");
+  const rule = j.errors ? cp("bad", `錯誤 ${j.errors}`) : j.corrected ? cp("warn", "AI 重讀後通過") : cp("ok", "通過");
+  return [extract, cross, source, rule];
+}
+
+const WORK_DASH = [["failed", "失敗", "need"], ["fix", "需修正", "need"], ["review", "需核對", "check"],
+  ["sampling", "抽查中", "check"], ["release", "建議放行", "ai"], ["pending", "處理中", "ai"], ["confirmed", "已確認", "ok"]];
+const WORK_INBOX = [["manual", "轉人工", "need"], ["failed", "AI 失敗", "need"], ["drafted", "待核准", "check"],
+  ["new", "新進", "ai"], ["replied", "已回覆", "ok"]];
+
+function renderWork() {
+  const b = JOBS?.buckets || {};
+  $("#work-dash").innerHTML = WORK_DASH.map(([k, label, cls]) => {
+    const n = (b[k] || 0) + (k === "sampling" ? b.held || 0 : 0);
+    return `<button class="cell ${cls} ${n ? "" : "zero"} ${jobFilter === k ? "selected" : ""}" data-bucket="${k}">
+      <div class="n">${n}</div><div class="l">${label}${k === "sampling" && b.held ? `（等待 ${b.held}）` : ""}</div></button>`;
+  }).join("");
+  document.querySelectorAll("#work-dash .cell").forEach((el) => el.addEventListener("click", () => {
+    jobFilter = jobFilter === el.dataset.bucket ? null : el.dataset.bucket;
+    renderJobs(JOBS);
+  }));
+  const c = INBOX?.counts || {};
+  $("#work-inbox").innerHTML = WORK_INBOX.map(([k, label, cls]) => {
+    const n = (c[k] || 0) + (k === "new" ? c.processing || 0 : 0);
+    return `<button class="cell ${cls} ${n ? "" : "zero"}" data-state="${k}"><div class="n">${n}</div><div class="l">${label}</div></button>`;
+  }).join("");
+  document.querySelectorAll("#work-inbox .cell").forEach((el) => el.addEventListener("click", () => {
+    inboxFilter = el.dataset.state;
+    renderInbox();
+    go("inbox");
+  }));
+}
 
 function renderJobs(st) {
+  JOBS = st;
   const c = st.counts, pending = c.queued + c.running;
-  aiPaused = st.paused;
+  renderAiSwitch(st.paused);
   $("#jobs-workers").textContent = `（同時 ${st.workers} 份）`;
-  $("#jobs-stop").textContent = st.paused ? "恢復 AI" : "停止全部";
-  $("#jobs-stop").classList.toggle("primary", st.paused);
   $("#jobs-add").disabled = st.paused;
   $("#jobs-retry-all").hidden = st.paused || !(c.failed + c.stopped);
-  $("#jobs-progress").textContent = st.jobs.length
-    ? `已確認 ${c.confirmed}・待確認 ${c.done}・處理中 ${pending}・失敗 ${c.failed + c.stopped}`
-      + (st.paused ? "・AI 已停用" : "") : (st.paused ? "AI 已停用" : "");
-  const jobs = [...st.jobs].sort((a, b) => JOB_ORDER[a.state] - JOB_ORDER[b.state]
-    || b.errors - a.errors || b.warnings - a.warnings || a.student_id.localeCompare(b.student_id));
-  $("#jobs-table").hidden = !jobs.length;
+  $("#jobs-progress").textContent = st.jobs.length ? `共 ${st.jobs.length} 份・處理中 ${pending}` : "";
+  const order = Object.keys(st.bucket_labels);
+  const jobs = st.jobs.filter((j) => !jobFilter || j.bucket === jobFilter || (jobFilter === "sampling" && j.bucket === "held"))
+    .sort((a, b) => order.indexOf(a.bucket) - order.indexOf(b.bucket) || a.student_id.localeCompare(b.student_id));
+  $("#jobs-card").hidden = !st.jobs.length;
+  $("#jobs-filter-label").textContent = jobFilter ? `只顯示：${st.bucket_labels[jobFilter]}` : "";
+  $("#jobs-filter-clear").hidden = !jobFilter;
   $("#jobs-rows").innerHTML = jobs.map((j) => {
-    const check = j.state === "done" || j.state === "confirmed"
-      ? `錯誤 ${j.errors}・警示 ${j.warnings}` + (!j.cross_checked ? "・未交叉驗證" : j.flagged_rows ? `・需核對 ${j.flagged_rows} 列` : "・兩模型一致")
-        + (j.corrected ? `・<span class="tag">已自我修正</span>` : "")
-      : j.error ? `<span class="hint">${esc(j.error)}</span>` : "";
-    const button = j.state === "done" ? `<button class="primary" data-open="${esc(j.student_id)}">核對</button>`
-      : (j.state === "failed" || j.state === "stopped") && !st.paused
-        ? `<button class="ghost" data-retry="${esc(j.student_id)}">重試</button>` : "";
-    return `<tr><td><b>${esc(j.student_id)}</b></td>
-      <td><span class="flag">${JOB_LABELS[j.state]}</span></td>
-      <td>${j.state === "done" || j.state === "confirmed" ? j.rows : ""}</td>
-      <td>${check}</td><td class="hide-sm">${j.seconds == null ? "" : `${j.seconds} 秒`}</td><td>${button}</td></tr>`;
-  }).join("");
+    const [extract, cross, source, rule] = checkpoints(j);
+    const label = JOB_BUTTON[j.bucket];
+    const button = label ? `<button class="primary" data-open="${esc(j.student_id)}">${label}</button>`
+      : j.state === "done" ? `<button class="ghost" data-open="${esc(j.student_id)}">查看</button>`
+        : j.state === "confirmed" ? `<button class="ghost" data-student="${esc(j.student_id)}">審查結果</button>`
+          : (j.state === "failed" || j.state === "stopped") && !st.paused ? `<button class="ghost" data-retry="${esc(j.student_id)}">重試</button>` : "";
+    return `<tr><td><b>${esc(j.student_id)}</b></td><td><span class="bucket ${j.bucket}">${esc(st.bucket_labels[j.bucket])}</span></td>
+      <td>${extract}</td><td>${cross}</td><td>${source}</td><td>${rule}</td>
+      <td class="hide-sm">${j.seconds == null ? "" : `${j.seconds}`}</td><td>${button}</td></tr>`;
+  }).join("") || `<tr><td colspan="8" class="empty">這一類沒有文件</td></tr>`;
   document.querySelectorAll("#jobs-rows [data-open]").forEach((b) => b.addEventListener("click", () => openJob(b.dataset.open)));
+  document.querySelectorAll("#jobs-rows [data-student]").forEach((b) => b.addEventListener("click", () => {
+    loadStudent(b.dataset.student); go("student");
+  }));
   document.querySelectorAll("#jobs-rows [data-retry]").forEach((b) => b.addEventListener("click", () =>
     jobsAction("retry", { student_id: b.dataset.retry })));
+  renderRelease(st);
+  renderWork();
+  renderEmpty();
   clearTimeout(jobsTimer);
-  if (pending) jobsTimer = setTimeout(refreshJobs, 2000);
+  if (pending) jobsTimer = setTimeout(async () => {
+    await refreshJobs();
+    if (!(JOBS.counts.queued + JOBS.counts.running)) await Promise.all([loadData(), loadMetrics()]);
+  }, 2000);
+}
+$("#jobs-filter-clear").addEventListener("click", () => { jobFilter = null; renderJobs(JOBS); });
+
+function renderRelease(st) {
+  const r = st.release, n = st.buckets.release || 0, a = r.active, el = $("#release-panel");
+  const k = Math.min(n, Math.max(1, Math.ceil(n * r.sample_rate)));
+  const last = r.last ? `<p class="hint" style="margin: 10px 0 0">上一批：${{ released: `抽查 ${r.last.sampled} 份無修改，放行 ${r.last.released} 份`
+    + (r.last.failed.length ? `；${r.last.failed.length} 份重新檢查未通過，改為需修正` : ""),
+  cancelled_by_sample: `抽查發現修改，${r.last.candidates} 份改為逐份核對`,
+  cancelled_by_monitor: "監控者取消" }[r.last.outcome]}（${when(r.last.at)}）</p>` : "";
+  let body = "";
+  if (!r.enabled) {
+    body = `<h2>批次放行已停用</h2><p>${esc(r.note)}。這一批請逐份核對；確認問題排除後再重新開啟。</p>
+      <button class="ghost" data-release="reopen">重新開啟批次放行</button>`;
+  } else if (a) {
+    const done = a.sampled.filter((s) => a.results[s]);
+    body = `<h2>批次放行：${a.status === "ready" ? "抽查完成" : "隨機抽查中"}</h2>
+      <p>${a.candidates} 份建議放行，伺服器隨機抽出 ${a.sampled.length} 份（${done.length} / ${a.sampled.length} 已核對）。
+        抽查有任何修改，本批取消、其餘全部改為逐份核對。</p>
+      <ol>${a.sampled.map((s) => `<li><b>${esc(s)}</b> ${a.results[s] ? "✔ 已核對，無修改"
+        : `<button class="primary" data-open="${esc(s)}">核對</button>`}</li>`).join("")}</ol>
+      <div class="row">${a.status === "ready" ? `<button class="primary" data-release="finish">放行其餘 ${a.held.length} 份</button>` : ""}
+        <button class="ghost" data-release="cancel">取消本批</button></div>`;
+  } else if (n) {
+    body = `<h2>${n} 份建議放行</h2>
+      <p>兩個模型一致、原文核對相符、規則檢查與學分合計都沒有問題，也沒有經過 AI 重讀。
+        按下後伺服器隨機抽出 ${k} 份讓你逐列核對，其餘 ${n - k} 份等抽查結果。</p>
+      <button class="primary" data-release="start">批次確認（先抽查 ${k} 份）</button>`;
+  }
+  el.hidden = !body && !last;
+  el.classList.toggle("off", !r.enabled);
+  el.innerHTML = body + last + '<div id="release-msg"></div>';
+  el.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => openJob(b.dataset.open)));
+  el.querySelectorAll("[data-release]").forEach((b) => b.addEventListener("click", () => releaseAction(b.dataset.release)));
+}
+
+async function releaseAction(action) {
+  if (!needOfficer("#release-msg")) return;
+  try {
+    const st = await postJSON(action === "start" ? "/api/dashboard/release" : `/api/dashboard/release/${action}`,
+      { reviewer: officer() });
+    renderJobs(st);
+    if (action === "finish") await Promise.all([loadData(), loadMetrics()]);
+  } catch (e) {
+    msg("#release-msg", esc(e.message), "err");
+  }
 }
 
 async function refreshJobs() {
@@ -438,8 +550,7 @@ async function openJob(sid) {
   } catch (e) {
     return msg("#jobs-msg", esc(e.message), "err");
   }
-  draftFromBatch = true;
-  msg("#dash-msg", `核對 ${esc(sid)}：擷取 ${DRAFT.rows.length} 列`);
+  msg("#dash-msg", "");
   renderDraft(true);
   $("#dash-draft").scrollIntoView({ behavior: "smooth" });
 }
@@ -469,9 +580,225 @@ $("#jobs-add").addEventListener("click", async () => {
   await refreshJobs();
 });
 
-$("#jobs-stop").addEventListener("click", () =>
-  jobsAction(aiPaused ? "resume" : "stop"));
 $("#jobs-retry-all").addEventListener("click", () => jobsAction("retry"));
+
+// ---------- AI 總開關（解析、擬稿、草擬規則一起停） ----------
+let aiPaused = false;
+function renderAiSwitch(paused) {
+  aiPaused = paused;
+  $("#ai-toggle").classList.toggle("off", paused);
+  $("#ai-label").textContent = paused ? "AI 已停用（按此恢復）" : "AI 運作中";
+}
+$("#ai-toggle").addEventListener("click", () => jobsAction(aiPaused ? "resume" : "stop"));
+
+// ---------- 指標 ----------
+function pct(r, minN) {
+  if (!r || !r.n) return '<span class="hint">—</span>';
+  return r.n < minN ? `${r.k} / ${r.n}` : `${Math.round((r.k / r.n) * 100)}%<span class="hint">（${r.k} / ${r.n}）</span>`;
+}
+async function loadMetrics() {
+  let m;
+  try { m = await api("/api/metrics"); } catch (e) { return msg("#metrics-note", esc(e.message), "err"); }
+  const p = (r) => pct(r, m.min_n);
+  const both = (rows, key) => `<table><thead><tr><th>${key === "dashboard" ? "儀表板解析" : "學生來信"}</th><th>本批次</th><th>累計</th></tr></thead><tbody>`
+    + rows.map(([label, f]) => `<tr><td>${label}</td><td>${f(m.batch[key])}</td><td>${f(m.total[key])}</td></tr>`).join("")
+    + "</tbody></table>";
+  const dash = [
+    ["AI 解析次數", (d) => d.runs],
+    ["完成率", (d) => p(d.completed)],
+    ["轉人工率（仍有錯誤）", (d) => p(d.to_manual)],
+    ["模型失敗", (d) => p(d.model_failed)],
+    ["AI 重讀後修好", (d) => p(d.self_corrected)],
+    ["等待秒數（中位）", (d) => d.wait_median ?? "—"],
+    ["確認時有修改的份", (d) => p(d.docs_edited)],
+    ["人工修改落在標示列", (d) => p(d.edits_in_flagged_rows)],
+    ["抽查有修改", (d) => p(d.sampled_docs_edited)],
+    ["批次放行份數", (d) => d.released_by_batch],
+  ];
+  const inbox = [
+    ["AI 擬稿次數", (d) => d.runs],
+    ["擬稿完成（有依據）", (d) => p(d.drafted)],
+    ["轉人工", (d) => p(d.to_manual)],
+    ["依據檢查後反思", (d) => p(d.reflected)],
+    ["未修改即核准", (d) => p(d.approved_unedited)],
+    ["修改後核准", (d) => p(d.approved_edited)],
+    ["否決", (d) => p(d.rejected)],
+    ["採用覆核建議", (d) => d.proposals_applied],
+  ];
+  const b = m.benchmark;
+  const bench = b ? `<table><thead><tr><th colspan="2">虛構基準集量測（${esc(b.date)}）</th></tr></thead><tbody>
+      <tr><td>案例／執行次數</td><td>${b.cases} 份／${b.runs} 次</td></tr>
+      <tr><td>主模型欄位正確率</td><td>${p(b.field_accuracy)}</td></tr>
+      <tr><td>整份全對</td><td>${p(b.fully_correct_docs)}</td></tr>
+      <tr><td>交叉比對抓到的錯誤列</td><td>${p(b.catch_rate)}</td></tr>
+      <tr><td>兩模型一致但仍錯的列</td><td>${p(b.agreed_error_rate)}</td></tr>
+      <tr><td>需人工優先看的列</td><td>${p(b.review_share)}</td></tr>
+    </tbody></table><p class="hint">${esc(b.disclaimer)}</p>`
+    : `<table><thead><tr><th>虛構基準集量測</th></tr></thead><tbody><tr><td class="hint">尚未量測：python -m academic_twin.benchmark --runs 3</td></tr></tbody></table>`;
+  $("#metrics").innerHTML = `<div>${both(dash, "dashboard")}</div><div>${both(inbox, "inbox")}</div><div>${bench}</div>`;
+  $("#metrics-note").textContent = `${m.note}；樣本少於 ${m.min_n} 時只顯示件數。`;
+}
+$("#metrics-refresh").addEventListener("click", loadMetrics);
+
+// ---------- 收件匣 ----------
+let INBOX = null, inboxFilter = "", inboxSel = null, inboxTimer = null;
+const TOOL_LABELS = { get_progress: "查進度", get_flags: "查提示與待辦", find_record: "查修課紀錄", get_requirement: "查畢業要求" };
+const GROUNDING = { passed: "依據檢查通過", reflected_passed: "依據檢查未過，AI 反思 1 次後通過", failed: "依據檢查未通過（無法確認）",
+  skipped: "此類型不由 AI 回覆" };
+
+async function refreshInbox() {
+  try {
+    INBOX = await api("/api/inbox");
+  } catch (e) {
+    return msg("#inbox-msg", esc(e.message), "err");
+  }
+  renderInbox();
+  renderWork();
+  clearTimeout(inboxTimer);
+  if (INBOX.counts.processing) inboxTimer = setTimeout(async () => {
+    await refreshInbox();
+    if (!INBOX.counts.processing) loadMetrics();
+  }, 2000);
+}
+
+function renderInbox() {
+  if (!INBOX) return;
+  const c = INBOX.counts;
+  $("#nav-inbox-count").textContent = c.drafted + c.manual ? `(${c.drafted + c.manual})` : "";
+  $("#inbox-filter").innerHTML = `<option value="">全部（${INBOX.messages.length}）</option>`
+    + Object.entries(INBOX.states).map(([k, v]) => `<option value="${k}" ${k === inboxFilter ? "selected" : ""}>${v}（${c[k]}）</option>`).join("");
+  const safe = INBOX.messages.filter((m) => m.batch_ok);
+  $("#inbox-approve-many").hidden = !safe.length;
+  $("#inbox-approve-many").textContent = `批次核准 ${safe.length} 封`;
+  $("#inbox-approve-many").title = "只限依據檢查通過、沒有覆核建議的擬稿";
+  const list = INBOX.messages.filter((m) => !inboxFilter || m.state === inboxFilter
+    || (inboxFilter === "new" && m.state === "processing"));
+  $("#inbox-list").innerHTML = list.map((m) => `<div class="mail ${m.id === inboxSel ? "sel" : ""}" data-id="${m.id}">
+      <div class="top"><span class="mstate ${m.state}">${esc(INBOX.states[m.state])}</span>
+        <span class="subj">${esc(m.subject)}</span></div>
+      <div class="hint">${esc(m.student_id)}・${when(m.received_at)}${m.type ? `・${esc(INBOX.types[m.type])}` : ""}
+        ${m.grounded === false ? "・<b style='color:var(--fail)'>無法確認</b>" : ""}${m.proposals ? `・覆核建議 ${m.proposals}` : ""}
+        ${m.stale ? "・<b>需重新擬稿</b>" : ""}${m.error ? `・${esc(m.error)}` : ""}</div></div>`).join("")
+    || '<p class="empty">沒有信件。按「匯入示範信件」載入虛構範例。</p>';
+  document.querySelectorAll("#inbox-list .mail").forEach((el) => el.addEventListener("click", () => openMail(el.dataset.id)));
+  if (inboxSel && !INBOX.messages.some((m) => m.id === inboxSel)) {
+    inboxSel = null;
+    $("#inbox-detail").innerHTML = '<p class="hint">選一封信查看 AI 擬稿。</p>';
+  }
+}
+$("#inbox-filter").addEventListener("change", (e) => { inboxFilter = e.target.value; renderInbox(); });
+
+async function openMail(id) {
+  inboxSel = id;
+  renderInbox();
+  let m;
+  try { m = await api(`/api/inbox/${encodeURIComponent(id)}`); } catch (e) { return msg("#inbox-msg", esc(e.message), "err"); }
+  const t = m.trace;
+  const open = m.state === "drafted" || m.state === "manual";
+  const trace = t ? `<div class="trace"><b>AI 做了什麼</b>${t.replay ? ` <span class="replay">重播：${esc(t.replay.model)}・${esc(when(t.replay.generated_at))}產生</span>` : ""}
+      <ol>${t.tools.map((x) => `<li>${esc(TOOL_LABELS[x] || x)}</li>`).join("")}
+        ${t.invalid_tools ? `<li class="bad">要求白名單外的工具 ${t.invalid_tools} 次，已拒絕</li>` : ""}
+        <li class="${t.grounding === "failed" ? "bad" : ""}">${esc(GROUNDING[t.grounding] || t.grounding)}</li>
+        ${t.proposals_dropped ? `<li class="bad">丟棄不合法的覆核建議 ${t.proposals_dropped} 項</li>` : ""}</ol>
+      <span class="hint">${t.rounds} 輪・${t.wait_seconds} 秒・${esc(t.model || "")}</span></div>` : "";
+  const proposals = m.proposals.map((p, i) => `<div class="issue MANUAL_REVIEW">🔍 AI 覆核建議：<b>${esc(p.code)}</b>（${esc(p.term)}）
+      → ${esc(META.review_actions[p.action] || p.action)}${p.category ? `「${esc(p.category)}」` : ""}
+      <div class="hint">理由：${esc(p.reason || "—")}</div>
+      ${p.applied ? `<div class="hint">${p.applied.accepted ? "已採用" : "已拒絕"}・${esc(p.applied.by)}・${when(p.applied.at)}</div>`
+        : `<div class="row" style="margin-top:6px"><button class="primary" data-prop="${i}" data-accept="1">採用（寫入人工覆核並重審）</button>
+           <button class="ghost" data-prop="${i}" data-accept="0">不採用</button></div>`}</div>`).join("");
+  $("#inbox-detail").innerHTML = `<div class="stack-gap">
+    <div class="row"><span class="mstate ${m.state}">${esc(INBOX.states[m.state])}</span><b>${esc(m.subject)}</b>
+      <span class="spacer"></span><span class="hint">${esc(m.student_id)}・${when(m.received_at)}</span></div>
+    <div class="letter">${esc(m.body)}</div>
+    ${m.type ? `<div>問題類型：<b>${esc(INBOX.types[m.type])}</b></div>` : ""}
+    ${m.notes.map((n) => `<div class="issue WARNING">⚠ ${esc(n)}</div>`).join("")}
+    ${m.stale ? '<div class="issue WARNING">⚠ 審查結果已因採用覆核建議而改變，建議重新擬稿。</div>' : ""}
+    ${m.error ? `<div class="issue FAIL">✘ ${esc(m.error)}</div>` : ""}
+    ${trace}
+    ${proposals}
+    ${m.state === "new" || m.state === "processing" ? '<p class="hint">尚未擬稿。</p>' : `<div>
+      <label for="mail-reply"><b>${m.state === "replied" ? "已送出的回覆" : "回覆草稿"}</b>${m.grounded === false ? " <span style='color:var(--fail)'>（無法確認，請逐句核對或改寫）</span>" : ""}</label>
+      <textarea id="mail-reply" class="reply ${m.grounded === false ? "unsure" : ""}" ${open ? "" : "readonly"}>${esc(m.reply)}</textarea></div>`}
+    <div class="row">
+      ${open ? `<button class="primary" data-act="approve">核准送出</button>
+        <select id="mail-reason" aria-label="否決原因"><option value="">否決原因…</option>
+          ${Object.entries(INBOX.reject_reasons).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
+        <button class="ghost" data-act="reject">否決</button>
+        ${m.state === "drafted" ? '<button class="ghost" data-act="self">轉給自己處理</button>' : ""}` : ""}
+      ${["drafted", "manual", "failed", "new"].includes(m.state) ? '<button class="ghost" data-act="redraft">重新擬稿</button>' : ""}
+      ${m.state === "replied" ? '<button class="ghost" data-act="copy">複製回覆</button>' : ""}
+    </div>
+    <div id="mail-msg"></div>
+    ${m.history.length ? `<details class="fold"><summary>處理紀錄（${m.history.length}）</summary>${m.history.map((h) =>
+      `<div class="hint">${when(h.at)}・${esc(h.by)}・${esc({ approve: "核准送出", reject: "否決", self: "轉給自己", apply_proposal: "採用覆核建議",
+        decline_proposal: "不採用覆核建議" }[h.action] || h.action)}${h.edited_chars ? `（修改 ${h.edited_chars} 字）` : ""}</div>`).join("")}</details>` : ""}
+  </div>`;
+  $("#inbox-detail").querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => mailAction(m, b.dataset.act)));
+  $("#inbox-detail").querySelectorAll("[data-prop]").forEach((b) => b.addEventListener("click", () =>
+    applyProposal(m, Number(b.dataset.prop), b.dataset.accept === "1")));
+}
+
+async function mailAction(m, act) {
+  if (act === "copy") {
+    try { await navigator.clipboard.writeText($("#mail-reply").value); msg("#mail-msg", "已複製。", "ok"); }
+    catch { $("#mail-reply").select(); msg("#mail-msg", "請按 Ctrl+C 複製。"); }
+    return;
+  }
+  if (act === "redraft") {
+    try { INBOX = await postJSON("/api/inbox/process", { id: m.id }); } catch (e) { return msg("#mail-msg", esc(e.message), "err"); }
+    await refreshInbox();
+    return openMail(m.id);
+  }
+  if (!needOfficer("#mail-msg")) return;
+  const body = { action: act, reviewer: officer() };
+  if (act === "approve") body.reply = $("#mail-reply").value;
+  if (act === "reject") body.reason = $("#mail-reason").value;
+  try {
+    await postJSON(`/api/inbox/${encodeURIComponent(m.id)}/decide`, body);
+  } catch (e) {
+    return msg("#mail-msg", esc(e.message), "err");
+  }
+  await Promise.all([refreshInbox(), loadMetrics()]);
+  await openMail(m.id);
+}
+
+async function applyProposal(m, index, accept) {
+  if (!needOfficer("#mail-msg")) return;
+  try {
+    await postJSON(`/api/inbox/${encodeURIComponent(m.id)}/proposals/${index}`, { reviewer: officer(), accept });
+  } catch (e) {
+    return msg("#mail-msg", esc(e.message), "err");
+  }
+  await Promise.all([loadData(), refreshInbox(), loadMetrics()]);
+  await openMail(m.id);
+}
+
+$("#inbox-demo").addEventListener("click", async () => {
+  try { INBOX = await postJSON("/api/inbox/demo", {}); msg("#inbox-msg", "已匯入虛構示範信件。", "ok"); }
+  catch (e) { return msg("#inbox-msg", esc(e.message), "err"); }
+  inboxSel = null;
+  await refreshInbox();
+});
+$("#inbox-process").addEventListener("click", async () => {
+  try { await postJSON("/api/inbox/process", {}); msg("#inbox-msg", "AI 擬稿中，完成後自動更新。"); }
+  catch (e) { return msg("#inbox-msg", esc(e.message), "err"); }
+  await refreshInbox();
+});
+$("#inbox-approve-many").addEventListener("click", async () => {
+  if (!needOfficer("#inbox-msg")) return;
+  const ids = INBOX.messages.filter((m) => m.batch_ok).map((m) => m.id);
+  try { await postJSON("/api/inbox/approve-many", { ids, reviewer: officer() }); msg("#inbox-msg", `已核准 ${ids.length} 封。`, "ok"); }
+  catch (e) { return msg("#inbox-msg", esc(e.message), "err"); }
+  await Promise.all([refreshInbox(), loadMetrics()]);
+});
+$("#inbox-import").addEventListener("click", async () => {
+  let messages;
+  try { messages = JSON.parse($("#inbox-json").value); } catch { return msg("#inbox-import-msg", "JSON 格式錯誤。", "err"); }
+  try { await postJSON("/api/inbox/import", { messages }); msg("#inbox-import-msg", `已匯入 ${messages.length} 封。`, "ok"); }
+  catch (e) { return msg("#inbox-import-msg", esc(e.message), "err"); }
+  await refreshInbox();
+});
 
 // ---------- AI 草擬規則（確認僅存檔，啟用另行操作） ----------
 let RULE_DRAFT = null, ruleEdited = false, ruleSourceUrl = null;
@@ -639,7 +966,10 @@ async function changeRuleVersion(action, body) {
 (async function init() {
   await loadMeta();
   renderRules();
+  await Promise.all([refreshJobs(), refreshInbox()]);
+  // 收件匣預先打開第一封待處理的信（待核准或轉人工）
+  const first = INBOX?.messages.find((m) => m.state === "drafted" || m.state === "manual");
+  if (first) openMail(first.id);
   await loadData();
-  await loadRuleVersions();
-  await refreshJobs();
+  await Promise.all([loadRuleVersions(), loadMetrics()]);
 })();

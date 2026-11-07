@@ -1,0 +1,568 @@
+<meta charset="utf-8">
+<title>系辦端系統設計書</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 版面：公文式單欄閱讀＋寬螢幕左側目錄；朱印紅當唯一強調色，四種角色色只用在圖例與標籤 */
+:root {
+  --paper: #F5F6F8; --panel: #FFFFFF; --ink: #1C2430; --muted: #586373; --line: #D8DDE4;
+  --seal: #A8322A; --seal-soft: #F6E3E0;
+  --ai: #8A5A12; --ai-soft: #FBEFD6;
+  --human: #24508C; --human-soft: #E2EBF7;
+  --engine: #2A6B45; --engine-soft: #DFF0E5;
+  --stop: #A23030; --stop-soft: #F7E0E0;
+  --serif: "Noto Serif TC", "Songti TC", serif;
+  --sans: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --paper: #12161C; --panel: #1A2029; --ink: #E5E9EF; --muted: #9BA6B5; --line: #2D3542;
+  --seal: #E2705F; --seal-soft: #3A2220;
+  --ai: #E7B25A; --ai-soft: #3A2E17; --human: #8DB4EA; --human-soft: #1D2B40;
+  --engine: #7DCB9B; --engine-soft: #17301F; --stop: #EE8A8A; --stop-soft: #3A1E1E; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --paper: #12161C; --panel: #1A2029; --ink: #E5E9EF; --muted: #9BA6B5; --line: #2D3542;
+  --seal: #E2705F; --seal-soft: #3A2220;
+  --ai: #E7B25A; --ai-soft: #3A2E17; --human: #8DB4EA; --human-soft: #1D2B40;
+  --engine: #7DCB9B; --engine-soft: #17301F; --stop: #EE8A8A; --stop-soft: #3A1E1E; color-scheme: dark; }
+
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.8; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 40px 80px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: 1fr; gap: 40px; }
+@media (min-width: 1040px) { .wrap { grid-template-columns: 220px minmax(0, 1fr); } }
+nav.toc { font-size: 14px; }
+@media (min-width: 1040px) { nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; } }
+nav.toc ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+nav.toc a { color: var(--muted); text-decoration: none; display: block; padding: 2px 0 2px 10px; border-left: 2px solid var(--line); }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--seal); border-left-color: var(--seal); }
+nav.toc .label { font-size: 12px; letter-spacing: .12em; color: var(--muted); margin-bottom: 8px; }
+main { min-width: 0; }
+header.doc { border-bottom: 2px solid var(--ink); padding-bottom: 20px; margin-bottom: 32px; }
+.eyebrow { font-size: 13px; letter-spacing: .14em; color: var(--muted); }
+h1 { font-family: var(--serif); font-weight: 800; font-size: clamp(30px, 5vw, 44px); line-height: 1.25; margin: 6px 0 12px; text-wrap: balance; }
+h2 { font-family: var(--serif); font-weight: 800; font-size: 26px; line-height: 1.35; margin: 64px 0 8px; text-wrap: balance; scroll-margin-top: 24px; }
+h3 { font-size: 18px; font-weight: 700; margin: 32px 0 8px; }
+p, li { max-width: 72ch; }
+.lead { font-size: 18px; color: var(--ink); }
+.muted { color: var(--muted); }
+code { font-family: var(--mono); font-size: .88em; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.stamp { display: inline-block; border: 2px solid var(--seal); color: var(--seal); font-family: var(--serif); font-weight: 800;
+  padding: 2px 10px; border-radius: 4px; transform: rotate(-3deg); letter-spacing: .1em; font-size: 15px; }
+.fig-no { font-family: var(--mono); color: var(--seal); font-size: 14px; letter-spacing: .06em; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 16px 0; font-size: 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid; display: inline-block; }
+.sw.ai { background: var(--ai-soft); border-color: var(--ai); } .sw.human { background: var(--human-soft); border-color: var(--human); }
+.sw.engine { background: var(--engine-soft); border-color: var(--engine); } .sw.stop { background: var(--stop-soft); border-color: var(--stop); }
+
+.gates { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 20px 0; }
+.gate { background: var(--panel); border: 1px solid var(--line); border-top: 4px solid; border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.gate.ai { border-top-color: var(--ai); } .gate.engine { border-top-color: var(--engine); } .gate.human { border-top-color: var(--human); }
+.gate b { display: block; font-size: 17px; margin-bottom: 4px; }
+.gate p { margin: 0; font-size: 15px; }
+
+.figure { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin: 18px 0; }
+.figure .cap { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-bottom: 10px; }
+.figure .cap b { font-size: 16px; }
+.scroll { overflow-x: auto; }
+pre.mermaid { background: transparent; margin: 0; font-family: var(--sans); text-align: center; min-width: 0; }
+
+.plain { background: var(--human-soft); border-radius: 8px; padding: 14px 18px; margin: 16px 0; }
+.plain::before { content: "白話說"; display: block; font-size: 12px; letter-spacing: .14em; color: var(--human); font-weight: 700; }
+.why { border-left: 3px solid var(--seal); padding: 4px 0 4px 16px; margin: 14px 0; }
+.why b { color: var(--seal); }
+
+.tbl { overflow-x: auto; margin: 14px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.6; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 13px; letter-spacing: .06em; color: var(--muted); font-weight: 700; background: var(--paper); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.k { white-space: nowrap; font-weight: 700; }
+.pill { display: inline-block; font-family: var(--mono); font-size: 13px; font-weight: 500; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.pass { background: var(--engine-soft); color: var(--engine); } .pill.warn { background: var(--ai-soft); color: var(--ai); }
+.pill.fail { background: var(--stop-soft); color: var(--stop); } .pill.mr { background: var(--human-soft); color: var(--human); }
+.pill.err { background: var(--stop-soft); color: var(--stop); } .pill.wn { background: var(--ai-soft); color: var(--ai); }
+.where { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.story ol { padding-left: 1.4em; display: grid; gap: 10px; }
+.story li::marker { color: var(--seal); font-weight: 700; }
+.figref { color: var(--seal); text-decoration: none; font-weight: 700; white-space: nowrap; }
+.figref:hover { text-decoration: underline; }
+a:focus-visible { outline: 2px solid var(--seal); outline-offset: 2px; }
+.limits li { margin-bottom: 6px; }
+footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="目錄">
+  <div class="label">目錄</div>
+  <ol>
+    <li><a href="#overview">0　一頁看懂</a></li>
+    <li><a href="#story">1　白話故事：從開工到交報表</a></li>
+    <li><a href="#tasks">2　操作對照表</a></li>
+    <li><a href="#f1">圖一　資料匯入與名單比對</a></li>
+    <li><a href="#f2">圖二　AI 解析儀表板</a></li>
+    <li><a href="#f3">圖三　畢業判定與提示</a></li>
+    <li><a href="#f4">圖四　人工覆核</a></li>
+    <li><a href="#f5">圖五　規則草擬到啟用</a></li>
+    <li><a href="#f6">圖六　評審模式</a></li>
+    <li><a href="#trace">3　留下了哪些紀錄</a></li>
+    <li><a href="#limits">4　目前的限制</a></li>
+    <li><a href="#glossary">5　名詞對照</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="doc">
+  <div class="eyebrow">ACADEMIC TWIN　·　A 組　·　系辦端</div>
+  <h1>系辦端系統設計書</h1>
+  <p class="lead">這份文件用六張流程圖說明系辦端每個功能：做什麼、在哪一步會被擋下、為什麼要這樣設計。最後對照「承辦人要做的事」和「該按哪個功能」。</p>
+  <p class="muted" style="margin:0">依程式現況整理：<code>office_api.py</code>、<code>rule_engine.py</code>、<code>dashboard.py</code>、<code>cross_check.py</code>、<code>rule_draft.py</code>、<code>rule_versions.py</code>、<code>replay.py</code>、<code>web/office.html</code>。2026-11-07。</p>
+</header>
+
+<!-- ============ 0 ============ -->
+<section id="overview">
+<h2>0　一頁看懂</h2>
+<p>系辦端要回答一個問題：<b>「這批應屆生，誰能畢業、誰不能、為什麼、還要辦什麼？」</b></p>
+<p>參與的角色有三個，各自只做自己的事：</p>
+<div class="gates">
+  <div class="gate ai"><b>AI（Gemini）</b><p>讀 PDF、擬草稿。輸出一律標成「待確認」，本身不會改變任何判定。</p></div>
+  <div class="gate engine"><b>規則引擎</b><p>算學分、逐條比對規則、決定 PASS／FAIL。不經過 AI，同樣的資料每次算出同樣的結果。</p></div>
+  <div class="gate human"><b>承辦人</b><p>確認 AI 的東西能不能用、處理引擎判斷不了的紀錄、決定新規則要不要啟用。</p></div>
+</div>
+<div class="why"><b>為什麼要這樣分？</b>AI 會讀錯、會編造。如果讓 AI 直接判定，判錯了查不出原因，也沒有人負責。現在 AI 只負責「提案」，判定交給可重現的程式，最後一關由有名字的承辦人把關。這樣每個結果都能追溯：用哪一版規則、誰確認的、依據哪條規章。</div>
+
+<div class="legend" aria-label="圖例">
+  <span><i class="sw ai"></i>AI 做的</span><span><i class="sw engine"></i>程式／規則引擎做的</span>
+  <span><i class="sw human"></i>承辦人做的</span><span><i class="sw stop"></i>被擋下或列為異常</span>
+</div>
+
+<div class="figure">
+  <div class="cap"><span class="fig-no">總覽</span><b>系辦端全景：資料從哪裡進來，最後到哪裡去</b></div>
+  <div class="scroll"><pre class="mermaid">
+flowchart LR
+  classDef ai fill:#FBEFD6,stroke:#8A5A12,color:#1C2430
+  classDef human fill:#E2EBF7,stroke:#24508C,color:#1C2430
+  classDef engine fill:#DFF0E5,stroke:#2A6B45,color:#1C2430
+  classDef stop fill:#F7E0E0,stroke:#A23030,color:#1C2430
+
+  R["應屆名單 CSV"]:::human --> M{"名單比對"}:::engine
+  C["修課紀錄 CSV"]:::human --> M
+  P["儀表板 PDF<br/>學號.pdf"]:::human --> AI1["AI 解析<br/>圖二"]:::ai
+  AI1 --> H1["承辦人核對確認"]:::human --> C2["該生修課紀錄"]:::engine --> M
+  M -->|"可審查"| E["規則引擎審查<br/>圖三"]:::engine
+  M -->|"有問題"| X["名單異常<br/>不審查"]:::stop
+  K["該年度規則庫"]:::engine --> E
+  E --> T["② 畢審總表"]:::engine --> CSV["匯出 CSV"]:::engine
+  T --> D["③ 學生明細"]:::engine
+  D --> V["人工覆核<br/>圖四"]:::human -->|"立即重審"| E
+  S["應修科目表 PDF"]:::human --> AI2["AI 草擬規則<br/>圖五"]:::ai --> H2["確認 → 啟用"]:::human --> K
+  X --> CSV
+  </pre></div>
+</div>
+</section>
+
+<!-- ============ 1 ============ -->
+<section id="story" class="story">
+<h2>1　白話故事：從開工到交報表</h2>
+<p>把六張圖串起來，就是承辦人一次畢業審查的完整過程：</p>
+<ol>
+  <li><b>先報上名字。</b>右上角「承辦人」填姓名。之後的確認、覆核、啟用規則都會記下這個名字，沒填就不能送出。</li>
+  <li><b>把名單和成績匯進來。</b>在「① 資料匯入」上傳應屆名單和修課紀錄 CSV。只要有一列格式錯，整份退回並告訴你第幾行錯，絕不會只收一半。系統接著拿名單和紀錄互相比對：名單上每一位學生，最後一定會出現在「審查結果」或「名單異常」其中一邊，不會有人默默漏掉。<a class="figref" href="#f1">→ 圖一</a></li>
+  <li><b>手上只有儀表板 PDF？交給 AI 讀。</b>把一批「學號.pdf」丟進佇列，AI 在背景一次讀 3 份。每份都由兩個模型各讀一次互相比對，程式也會自己去 PDF 原文核對 AI 讀到的內容。讀錯的地方會退回去叫 AI 重讀一次，還有錯就交給你。你按「核對」逐列對照原文修正，勾選「已對照原文」後才會寫進修課紀錄。<a class="figref" href="#f2">→ 圖二</a></li>
+  <li><b>看總表。</b>「② 畢審總表」列出每位學生的判定：PASS、WARNING、FAIL、MANUAL_REVIEW。判定完全由規則引擎依規則算出。另外有「提示」欄，標出校務系統可能誤判的地方（超修、可重複修習、待辦抵修），並告訴你要找哪個單位辦。<a class="figref" href="#f3">→ 圖三</a></li>
+  <li><b>處理系統看不懂的紀錄。</b>點進「③ 學生明細」。引擎判斷不了的紀錄（類別不明、本系課號但規則庫沒列）由你決定怎麼採計。存檔後引擎立刻重審。引擎判斷得了的紀錄，你也不能改。<a class="figref" href="#f4">→ 圖四</a></li>
+  <li><b>規定改了？讓 AI 先擬草稿。</b>「④ 規則」上傳應修科目表，AI 草擬規則。你核對後確認存檔，但這時<b>還沒生效</b>。要先看「啟用前影響預覽」知道會讓哪些情況的判定改變，勾選了解後按啟用才生效，之後也隨時能還原。<a class="figref" href="#f5">→ 圖五</a></li>
+  <li><b>交報表。</b>回總表按「匯出 CSV」，每一列都附規則版本和審查時間。需要給學生或主管看單一學生時，用「列印明細」。</li>
+  <li><b>比賽現場沒網路或沒金鑰？</b>改用評審模式啟動，AI 部分改播預先錄好的虛構文件結果，畫面會標示這是重播。<a class="figref" href="#f6">→ 圖六</a></li>
+</ol>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="tasks">
+<h2>2　操作對照表：我要做 X，該按哪裡</h2>
+<p class="muted">依工作順序排列。「系統會」欄說明按下去之後背後發生什麼。</p>
+<div class="tbl"><table>
+<thead><tr><th>我要…</th><th>去哪裡</th><th>怎麼操作</th><th>系統會…</th><th>圖</th></tr></thead>
+<tbody>
+<tr><td class="k">表明身分</td><td>頁首右上「承辦人」</td><td>輸入姓名</td><td>之後確認、覆核、啟用、還原都記下這個名字；空白時這些動作會被拒絕</td><td>—</td></tr>
+<tr><td class="k">匯入名單與成績</td><td>① 資料匯入</td><td>選應屆名單、修課紀錄 CSV（可只換一份）→「上傳並審查」</td><td>逐列檢查格式，有錯整份退回並列行號；通過就和名單比對並立即審查</td><td><a class="figref" href="#f1">一</a></td></tr>
+<tr><td class="k">開始比賽 Demo</td><td>① 資料匯入</td><td>「載入示範批次」</td><td>名單換成虛構 DEMO-D03～D08，修課紀錄清空，同時清掉上一輪的解析佇列</td><td><a class="figref" href="#f1">一</a></td></tr>
+<tr><td class="k">回到示例資料</td><td>① 資料匯入</td><td>「還原示例」</td><td>回到示例學生 S001～S005</td><td>—</td></tr>
+<tr><td class="k">把儀表板變成紀錄</td><td>① AI 解析儀表板</td><td>多選「學號.pdf」→「加入佇列」</td><td>學號不在名單就不解析；在名單上的排入背景，同時解析 3 份</td><td><a class="figref" href="#f2">二</a></td></tr>
+<tr><td class="k">核對 AI 讀的結果</td><td>① 佇列表格</td><td>狀態為「完成」的那列按「核對」</td><td>打開「待確認紀錄」表，每列附頁碼與原文，問題列標紅（錯誤）或標黃（警示）</td><td><a class="figref" href="#f2">二</a></td></tr>
+<tr><td class="k">修正 AI 讀錯的地方</td><td>待確認紀錄表</td><td>直接改欄位、刪列、「新增一列」、改入學學年度</td><td>確認時會重新檢查一次</td><td><a class="figref" href="#f2">二</a></td></tr>
+<tr><td class="k">把紀錄送入審查</td><td>待確認紀錄表</td><td>勾選「已對照原文並確認所有警示」→「確認送入審查」</td><td>有錯誤就擋下；通過就寫入該生紀錄並立即審查，記下你改了幾列幾欄</td><td><a class="figref" href="#f2">二</a></td></tr>
+<tr><td class="k">解析名單外或單獨一份</td><td>① 單份解析（摺疊區）</td><td>選 PDF、填學號 →「解析」</td><td>走同一套解析與確認流程</td><td><a class="figref" href="#f2">二</a></td></tr>
+<tr><td class="k">重跑失敗的</td><td>① 佇列表格</td><td>該列「重試」，或「全部重試」</td><td>失敗或已停止的重新排隊</td><td><a class="figref" href="#f2">二</a></td></tr>
+<tr><td class="k">緊急停掉 AI</td><td>① 佇列區</td><td>「停止全部」</td><td>系辦端所有 AI 呼叫暫停（批次、單份、規則草擬），要按「恢復」才繼續</td><td><a class="figref" href="#f2">二</a></td></tr>
+<tr><td class="k">看全系結果</td><td>② 畢審總表</td><td>點統計卡篩選判定</td><td>只顯示該判定的學生</td><td><a class="figref" href="#f3">三</a></td></tr>
+<tr><td class="k">找可能被校務系統誤判的人</td><td>② 畢審總表</td><td>提示下拉：有疑似誤判／超修學分／可重複修習／待辦抵修／有需辦理事項</td><td>只顯示有該提示的學生</td><td><a class="figref" href="#f3">三</a></td></tr>
+<tr><td class="k">看誰沒被審到</td><td>② 名單異常卡</td><td>往下捲</td><td>列出每位未審查的學生和原因</td><td><a class="figref" href="#f1">一</a></td></tr>
+<tr><td class="k">交報表</td><td>② 畢審總表</td><td>「匯出 CSV」</td><td>審查結果加名單異常，每列附規則版本和審查時間</td><td>—</td></tr>
+<tr><td class="k">看單一學生</td><td>③ 學生明細</td><td>下拉選學生</td><td>顯示學分採計、逐條畢業條件（附規章出處）、修課紀錄</td><td><a class="figref" href="#f3">三</a></td></tr>
+<tr><td class="k">處理看不懂的紀錄</td><td>③「需要注意」</td><td>選採計方式（歸入類別／本系選修／外系認列／不採計），可填備註 → 存檔</td><td>追加一筆覆核紀錄，引擎立即重審</td><td><a class="figref" href="#f4">四</a></td></tr>
+<tr><td class="k">收回錯的覆核</td><td>③ 覆核歷程</td><td>「撤銷」</td><td>追加一筆撤銷紀錄，舊紀錄保留</td><td><a class="figref" href="#f4">四</a></td></tr>
+<tr><td class="k">給學生或主管看</td><td>③ 學生明細</td><td>「列印明細」</td><td>可列印的頁面：判定、出處、覆核、規則版本、審查時間</td><td>—</td></tr>
+<tr><td class="k">看學生那邊看到什麼</td><td>③ 學生明細</td><td>「學生端畫面」</td><td>開啟同一位學生的學生端頁面，兩邊用同一份審查結果</td><td>—</td></tr>
+<tr><td class="k">從新章則擬規則</td><td>④ AI 草擬規則</td><td>上傳 114 應修科目表 PDF →「草擬」→ 核對差異 → 勾選 →「確認存檔」</td><td>存成已確認草稿，<b>不會生效</b></td><td><a class="figref" href="#f5">五</a></td></tr>
+<tr><td class="k">讓新規則生效</td><td>④ 規則版本與啟用</td><td>看影響預覽 → 勾選「了解啟用後…」→「啟用」</td><td>該年度學生立即改用新版本審查</td><td><a class="figref" href="#f5">五</a></td></tr>
+<tr><td class="k">退回舊規則</td><td>④ 規則版本與啟用</td><td>「還原」</td><td>回到正式規則庫，留下還原紀錄</td><td><a class="figref" href="#f5">五</a></td></tr>
+<tr><td class="k">查判定依據哪條規章</td><td>④ 規則來源與待確認假設</td><td>展開</td><td>列出規章來源，以及還需要系辦確認的解讀</td><td>—</td></tr>
+<tr><td class="k">評審沒有金鑰也要能 Demo</td><td>啟動指令</td><td><code>ACADEMIC_TWIN_REPLAY=only python web.py</code></td><td>AI 部分只播預錄結果，頁面頂端顯示「評審模式」</td><td><a class="figref" href="#f6">六</a></td></tr>
+</tbody></table></div>
+</section>
+
+<!-- ============ 圖一 ============ -->
+<section id="f1">
+<h2>圖一　資料匯入與名單比對</h2>
+<div class="plain">修課紀錄要先「每一列都合格」才收。收下之後，拿名單和紀錄互相對照：兩邊都有、而且有該年度規則的學生才審查；其他人全部列進「名單異常」，並寫明原因。</div>
+<div class="figure">
+  <div class="cap"><span class="fig-no">圖一</span><b>上傳 → 檢查 → 比對 → 分流</b></div>
+  <div class="scroll"><pre class="mermaid">
+flowchart TD
+  classDef human fill:#E2EBF7,stroke:#24508C,color:#1C2430
+  classDef engine fill:#DFF0E5,stroke:#2A6B45,color:#1C2430
+  classDef stop fill:#F7E0E0,stroke:#A23030,color:#1C2430
+
+  U["承辦人上傳名單／修課紀錄 CSV"]:::human --> V{"每一列都合格？<br/>欄位齊全、學分是整數、成績 0–100、<br/>學期像 114-1、同生同課同學期沒重複"}:::engine
+  V -->|"任一列不合格"| R["整份退回，列出行號<br/>現有資料完全不變"]:::stop
+  V -->|"全部合格"| M["名單 × 紀錄 逐人比對"]:::engine
+  M --> Q1{"學號空白？"}:::engine
+  Q1 -->|"是"| A1["異常：名單第 N 行學號空白"]:::stop
+  Q1 -->|"否"| Q2{"名單重複列出？"}:::engine
+  Q2 -->|"是"| A2["異常：名單重複"]:::stop
+  Q2 -->|"否"| Q3{"在名單上？"}:::engine
+  Q3 -->|"否，只有紀錄"| A3["異常：有紀錄但不在名單"]:::stop
+  Q3 -->|"是"| Q4{"有修課紀錄？"}:::engine
+  Q4 -->|"沒有"| A4["異常：在名單上但沒有紀錄"]:::stop
+  Q4 -->|"有"| Q5{"入學年度有規則庫？"}:::engine
+  Q5 -->|"沒有"| A5["異常：該年度沒有規則庫<br/>不套用其他年度"]:::stop
+  Q5 -->|"有"| OK["送進規則引擎審查 → 圖三"]:::engine
+  D["上傳的儀表板學號不在名單"]:::human --> A6["異常：未解析"]:::stop
+  </pre></div>
+</div>
+<h3>判斷準則</h3>
+<div class="tbl"><table>
+<thead><tr><th>檢查</th><th>規則</th><th>結果</th></tr></thead>
+<tbody>
+<tr><td class="k">修課紀錄必要欄位</td><td><code>student_id, code, name, credits, grade, term</code>；可另加 <code>category</code></td><td>缺欄或空白 → 整份退回</td></tr>
+<tr><td class="k">學期格式</td><td>學年-學期，例如 <code>114-1</code>（1 上學期、2 下學期）</td><td>不符 → 整份退回</td></tr>
+<tr><td class="k">重複匯入</td><td>同一學生、同一課號、同一學期出現兩次</td><td>整份退回並列行號</td></tr>
+<tr><td class="k">名單選填欄</td><td><code>cohort</code> 入學年度（決定套哪一年規則）；<code>english_passed</code> 英檢是否通過</td><td>沒填英檢 → 英檢條件列為待確認</td></tr>
+<tr><td class="k">名單異常</td><td>共 6 種：學號空白、名單重複、不在名單、沒有紀錄、年度無規則庫、儀表板學號不在名單</td><td>不審查，列在總表下方，也會一起匯出（status 為 <code>ROSTER_…</code>）</td></tr>
+</tbody></table></div>
+<div class="why"><b>為什麼一列錯就整份退回？</b>只收一半的話，某位學生可能少了幾門課，系統卻照樣判他 FAIL，而且沒有人會發現少了資料。整份退回並指出行號，修正成本很低，風險卻小很多。</div>
+<div class="why"><b>為什麼年度沒有規則庫就不審，而不是先用 114 年審？</b>不同入學年度的畢業規定不同。套錯年度算出來的 PASS／FAIL 看起來很正常，其實是錯的，比「沒審」更危險。</div>
+<div class="why"><b>為什麼要比對名單？</b>保證名單上每一位學生最後都有下落：不是在審查結果裡，就是在異常清單裡。承辦人不用擔心漏審。</div>
+</section>
+
+<!-- ============ 圖二 ============ -->
+<section id="f2">
+<h2>圖二　AI 解析儀表板</h2>
+<div class="plain">AI 幫忙把儀表板 PDF 抄成表格。但 AI 會抄錯，所以安排了四道檢查：兩個 AI 互相比對、程式去 PDF 原文核對、規則檢查（錯了就退回去叫 AI 重抄一次）、最後由承辦人逐列對照原文。承辦人勾選確認後，紀錄才會進入審查。</div>
+<div class="figure">
+  <div class="cap"><span class="fig-no">圖二</span><b>一份儀表板從上傳到進入審查</b></div>
+  <div class="scroll"><pre class="mermaid">
+flowchart TD
+  classDef ai fill:#FBEFD6,stroke:#8A5A12,color:#1C2430
+  classDef human fill:#E2EBF7,stroke:#24508C,color:#1C2430
+  classDef engine fill:#DFF0E5,stroke:#2A6B45,color:#1C2430
+  classDef stop fill:#F7E0E0,stroke:#A23030,color:#1C2430
+
+  P["承辦人選多份 學號.pdf → 加入佇列"]:::human --> Q{"檔名是 學號.pdf<br/>且學號在名單上？"}:::engine
+  Q -->|"否"| Q1["不解析，列入名單異常"]:::stop
+  Q -->|"是"| R["背景排隊，同時處理 3 份"]:::engine
+  R --> S{"AI 被「停止全部」停用？"}:::engine
+  S -->|"是"| S1["狀態：已停止<br/>恢復後可重試"]:::stop
+  S -->|"否"| T["① 兩個模型同時讀同一份 PDF<br/>主模型＋檢查模型"]:::ai
+  T --> T1{"主模型讀成功？"}:::engine
+  T1 -->|"失敗、逾時"| F["狀態：失敗，轉人工<br/>可按重試"]:::stop
+  T1 -->|"成功"| U["② 程式自己抽 PDF 逐頁文字<br/>這份文字不送給 AI"]:::engine
+  U --> V["③ 規則檢查<br/>格式、重複、頁碼、原文、學分合計"]:::engine
+  V --> W{"有錯誤？"}:::engine
+  W -->|"沒有"| X
+  W -->|"有"| Y["把錯誤理由回饋給主模型<br/>只重讀 1 次"]:::ai
+  Y --> Z{"錯誤變少，而且<br/>原本正確的列一列都沒少？"}:::engine
+  Z -->|"是"| Z1["採用第二次"]:::engine
+  Z -->|"否"| Z2["保留第一次"]:::engine
+  Z1 --> X
+  Z2 --> X
+  X["逐列比對兩個模型的差異<br/>產生待確認草稿＋執行軌跡"]:::engine
+  X --> H["④ 承辦人按「核對」<br/>對照原文修改、刪列、補列"]:::human
+  H --> I["勾選「已對照原文」→ 確認送入審查"]:::human
+  I --> J{"伺服器重新檢查<br/>還有錯誤？或警示沒勾選？"}:::engine
+  J -->|"是"| J1["擋下並列出問題"]:::stop
+  J1 --> H
+  J -->|"否"| K["寫入該生修課紀錄 → 立即審查<br/>記錄改了幾列幾欄"]:::engine
+  </pre></div>
+</div>
+
+<h3>判斷準則：錯誤和警示</h3>
+<p><span class="pill err">錯誤</span> 一定要修正才能確認。<span class="pill wn">警示</span> 要對照原文後勾選確認。</p>
+<div class="tbl"><table>
+<thead><tr><th>等級</th><th>情況</th><th>為什麼這樣分級</th></tr></thead>
+<tbody>
+<tr><td><span class="pill err">錯誤</span></td><td>AI 回報文件無法辨識；一列都沒讀到</td><td>不能當成「沒修課」，否則學生會被誤判不能畢業</td></tr>
+<tr><td><span class="pill err">錯誤</span></td><td>科目代碼、名稱、學期空白；學期不是 <code>114-1</code> 格式；學分不是非負整數；成績不在 0–100</td><td>資料本身不合法，引擎沒辦法算</td></tr>
+<tr><td><span class="pill err">錯誤</span></td><td>規則代碼不在版型對照表</td><td>不知道這門課該歸哪一類，會算錯類別學分</td></tr>
+<tr><td><span class="pill err">錯誤</span></td><td>缺來源頁碼或原文</td><td>沒有出處，承辦人無從對照</td></tr>
+<tr><td><span class="pill err">錯誤</span></td><td>同一課號、同一學期出現兩列</td><td>學分會被重複計算</td></tr>
+<tr><td><span class="pill err">錯誤</span></td><td>入學年度沒有規則庫</td><td>同圖一，不套用其他年度。這項<b>不回饋給 AI</b>，避免 AI 為了配合系統而改寫年度</td></tr>
+<tr><td><span class="pill wn">警示</span></td><td>學分和規則庫裡同一門課的學分不同</td><td>可能 AI 讀錯，也可能課程學分真的改過，要人判斷</td></tr>
+<tr><td><span class="pill wn">警示</span></td><td>文件寫的「實得學分」≠ 讀到的及格紀錄合計（分區或總計）</td><td>代表可能漏列或多列</td></tr>
+<tr><td><span class="pill wn">警示</span></td><td>PDF 原文找不到這列的值，或頁碼對不上；PDF 抽不出文字</td><td>AI 讀到的內容可能不是原文寫的</td></tr>
+<tr><td><span class="pill wn">警示</span></td><td>兩個模型讀到的規則代碼、課名、學分、成績不同；某列只有其中一個模型讀到</td><td>不一致的地方最可能有錯，請優先核對</td></tr>
+<tr><td><span class="pill wn">警示</span></td><td>未交叉驗證（檢查模型失敗，或兩個模型設成同一個）</td><td>少了一道檢查，所以要逐列對照</td></tr>
+</tbody></table></div>
+
+<h3>每個設計的原因</h3>
+<div class="why"><b>為什麼用兩個模型？</b>兩個模型讀到不一樣的地方，最可能有錯，可以讓承辦人先看那幾列。但<b>兩個模型一致不代表正確</b>，它們可能犯同樣的錯，所以全部的列仍要人確認。檢查模型預設 <code>gemini-2.5-flash</code>（2.5-pro 額度不足），可用 <code>GEMINI_CHECK_MODEL</code> 更換。檢查模型失敗時流程不中斷，只標示「未交叉驗證」。</div>
+<div class="why"><b>為什麼程式要自己抽 PDF 文字，而且不給 AI？</b>這是獨立於 AI 的第二個來源，用來檢查 AI 寫的「原文」和「頁碼」是不是真的存在於文件裡，能抓到 AI 編造的內容。</div>
+<div class="why"><b>為什麼只重讀 1 次？</b>這叫「有界自我修正」。重讀次數有上限，時間和費用才可預期，也不會陷入無限迴圈。重讀一次還修不好，交給人處理比較快。</div>
+<div class="why"><b>為什麼重讀的結果少了正確的列就不採用？</b>如果允許刪列，AI 只要把有問題的列刪掉，錯誤數就變少了。但少掉的課就是學生少算的學分。所以新結果必須同時符合兩個條件才採用：錯誤變少，而且原本正確的列都還在。</div>
+<div class="why"><b>為什麼確認時伺服器還要再檢查一次？</b>承辦人修改時也可能改錯，而且伺服器不能只相信網頁傳來的東西。</div>
+<div class="why"><b>為什麼要記錄「改了幾列幾欄」？</b>這是實證數據，用來衡量 AI 讀得準不準、交叉驗證標出的列是不是真的需要改。紀錄只有數字，不記學號和課程內容。存在 <code>data/eval/dashboard_runs.jsonl</code>。</div>
+<div class="why"><b>為什麼「停止全部」同時停掉所有 AI？</b>發現 AI 異常時要一鍵止血。已經送出的請求收不回來，回來的結果照常保留成草稿，不會直接進入審查。</div>
+</section>
+
+<!-- ============ 圖三 ============ -->
+<section id="f3">
+<h2>圖三　畢業判定與提示</h2>
+<div class="plain">規則引擎拿一位學生的修課紀錄，對照他入學年度的規則逐條檢查，得出四種判定之一。判定之外，另外加上「提示」，提醒承辦人：這裡學校的校務系統可能算錯了，需要找誰辦什麼。</div>
+<div class="figure">
+  <div class="cap"><span class="fig-no">圖三</span><b>四種判定的決定順序（由上往下，先符合的就是答案）</b></div>
+  <div class="scroll"><pre class="mermaid">
+flowchart TD
+  classDef human fill:#E2EBF7,stroke:#24508C,color:#1C2430
+  classDef engine fill:#DFF0E5,stroke:#2A6B45,color:#1C2430
+  classDef stop fill:#F7E0E0,stroke:#A23030,color:#1C2430
+  classDef warn fill:#FBEFD6,stroke:#8A5A12,color:#1C2430
+
+  A["學生修課紀錄＋該年度規則庫<br/>＋已有的人工覆核"]:::engine --> B["逐筆分類：及格、不及格、重修、<br/>類別、外系、類別不明…"]:::engine
+  B --> C{"有類別不明的紀錄？"}:::engine
+  C -->|"有"| MR1["MANUAL_REVIEW<br/>先請人判斷"]:::human
+  C -->|"沒有"| D{"逐條規則比對<br/>有明確缺漏？"}:::engine
+  D -->|"有"| FAIL["FAIL<br/>原因欄列出缺什麼"]:::stop
+  D -->|"沒有"| E{"有條件要等外部資料？<br/>例如英檢狀態未知"}:::engine
+  E -->|"有"| MR2["MANUAL_REVIEW<br/>補資料"]:::human
+  E -->|"沒有"| F{"有本系課號<br/>但規則庫沒列？"}:::engine
+  F -->|"有"| W["WARNING<br/>暫以本系選修計"]:::warn
+  F -->|"沒有"| P["PASS"]:::engine
+  A --> G["另外偵測提示 flags<br/>不改變判定"]:::engine
+  G --> G1["超修 overflow"]:::warn
+  G --> G2["可重複修習 repeatable"]:::warn
+  G --> G3["待辦抵修 substitution_pending"]:::warn
+  G1 --> AC["需辦理事項 actions<br/>寫明找哪個單位"]:::human
+  G2 --> AC
+  G3 --> AC
+  </pre></div>
+</div>
+
+<h3>四種判定</h3>
+<div class="tbl"><table>
+<thead><tr><th>判定</th><th>什麼情況</th><th>承辦人要做什麼</th></tr></thead>
+<tbody>
+<tr><td><span class="pill mr">MANUAL_REVIEW</span></td><td>有類別不明的紀錄；或其他條件都符合，只差外部資料（英檢狀態未知）</td><td>到 ③ 覆核，或補英檢資料</td></tr>
+<tr><td><span class="pill fail">FAIL</span></td><td>有明確缺漏，例如必修沒過、學分不足</td><td>看原因欄；必要時通知學生</td></tr>
+<tr><td><span class="pill warn">WARNING</span></td><td>都符合，但有本系課號不在規則庫，暫時以本系選修計</td><td>到 ③ 確認那門課的採計方式</td></tr>
+<tr><td><span class="pill pass">PASS</span></td><td>全部符合</td><td>可以匯出</td></tr>
+</tbody></table></div>
+<div class="why"><b>為什麼「類別不明」排在「有缺漏」前面？</b>那門類別不明的課，經人判斷後可能剛好補上缺的學分。如果先判 FAIL，就可能冤枉學生。口訣：<b>看不懂的先給人看，看得懂的才判定。</b></div>
+<div class="why"><b>為什麼「等英檢」排在「有缺漏」後面？</b>英檢通過也補不了必修沒過這類缺漏。既然已經確定不能畢業，就直接判 FAIL，不用卡在待確認。</div>
+
+<h3>三種提示（flags）與需辦理事項</h3>
+<div class="tbl"><table>
+<thead><tr><th>提示</th><th>什麼情況</th><th>系統怎麼說</th><th>需辦理事項</th></tr></thead>
+<tbody>
+<tr><td class="k">超修<br/><code>overflow</code></td><td>某類別（國文、外文、通識、體育…）修超過要求</td><td>多出的學分可納入外系學分池，但受外系總上限與人工確認限制</td><td>確認超修學分的人工認列</td></tr>
+<tr><td class="k">可重複修習<br/><code>repeatable</code></td><td>規則允許重複修習的課，學生修了第二次以上</td><td>第二次起已依規則採計，需確認校務系統有沒有認列</td><td>確認重複修習認列</td></tr>
+<tr><td class="k">待辦抵修<br/><code>substitution_pending</code></td><td>必修課已停開，學生已通過替代課</td><td>還沒辦抵修，所以原要求仍列缺課</td><td>辦理抵修（寫明承辦單位）</td></tr>
+<tr><td class="k">（無提示類型）</td><td>不允許重修的課卻又通過一次</td><td>不會默默略過</td><td>確認重複通過是否採計</td></tr>
+</tbody></table></div>
+<div class="why"><b>為什麼提示不直接改判定？</b>判定只依規則。提示是提醒「校務系統的結果可能和規章不一致」，要人去辦手續。學生端看到的是同一份提示，兩邊說法一致。</div>
+<p class="muted">總表欄位：學號、判定、總學分、規則符合（滿足幾條／共幾條）、原因、提示。匯出 CSV 另有超修明細、提示類型與內容、需辦理事項、規則版本、審查時間。</p>
+</section>
+
+<!-- ============ 圖四 ============ -->
+<section id="f4">
+<h2>圖四　人工覆核</h2>
+<div class="plain">只有引擎真的判斷不了的紀錄，才交給人決定。人做的決定會連同名字、時間、當時的規則版本一起記下，而且只能追加、不能塗改。規則版本換了，系統會提醒你回頭再看一次。</div>
+<div class="figure">
+  <div class="cap"><span class="fig-no">圖四</span><b>一筆覆核從選擇到重審</b></div>
+  <div class="scroll"><pre class="mermaid">
+flowchart TD
+  classDef human fill:#E2EBF7,stroke:#24508C,color:#1C2430
+  classDef engine fill:#DFF0E5,stroke:#2A6B45,color:#1C2430
+  classDef stop fill:#F7E0E0,stroke:#A23030,color:#1C2430
+
+  A["③ 學生明細「需要注意」"]:::human --> B{"這筆是引擎判斷不了的？<br/>類別不明，或本系課號但規則庫沒列"}:::engine
+  B -->|"否"| X["拒絕：規則庫能判定的<br/>紀錄不能人工改判"]:::stop
+  B -->|"是"| C["選採計方式：歸入類別／本系選修／<br/>外系認列／不採計，可填備註"]:::human
+  C --> D{"填了覆核人？"}:::engine
+  D -->|"否"| D1["不能存"]:::stop
+  D -->|"是"| E{"選「歸入類別」時<br/>類別在規則庫裡？"}:::engine
+  E -->|"否"| E1["拒絕"]:::stop
+  E -->|"是或不需要"| F["追加一筆紀錄：誰、何時、<br/>規則版本、採計方式、備註"]:::engine
+  F --> G["引擎立即重審 → 判定更新"]:::engine
+  G --> H{"之後規則版本變了？"}:::engine
+  H -->|"是"| I["標示「建議再確認」"]:::human
+  F -.-> R["撤銷：再追加一筆撤銷紀錄<br/>同一門課以最新一筆為準"]:::human
+  </pre></div>
+</div>
+<div class="why"><b>為什麼引擎判得了的紀錄不能改？</b>如果人可以任意蓋過規則，同一份資料換一個承辦人就可能得到不同結果，判定就不可重現，也無法向學生解釋。真的認為規則錯了，應該去改規則（圖五），讓所有人一起適用。</div>
+<div class="why"><b>為什麼只增不改？</b>稽核時要能看到完整經過：誰在什麼時候做了什麼決定、後來又撤銷。紀錄存在 <code>data/reviews/decisions.json</code>。</div>
+<div class="why"><b>為什麼要記規則版本？</b>當時的決定是依舊規則做的，規則改了之後未必還適用，所以系統會標示提醒再確認。</div>
+</section>
+
+<!-- ============ 圖五 ============ -->
+<section id="f5">
+<h2>圖五　規則：草擬、確認、預覽、啟用、還原</h2>
+<div class="plain">規則從 PDF 變成真正生效，要過三關：AI 擬草稿 → 承辦人核對存檔 → 看過影響預覽後明確按下啟用。任何時候都能還原。系統不會覆寫正式規則檔，要成為正式規則，還要另外發 PR 審查。</div>
+<div class="figure">
+  <div class="cap"><span class="fig-no">圖五</span><b>一份規則草稿的一生</b></div>
+  <div class="scroll"><pre class="mermaid">
+flowchart TD
+  classDef ai fill:#FBEFD6,stroke:#8A5A12,color:#1C2430
+  classDef human fill:#E2EBF7,stroke:#24508C,color:#1C2430
+  classDef engine fill:#DFF0E5,stroke:#2A6B45,color:#1C2430
+  classDef stop fill:#F7E0E0,stroke:#A23030,color:#1C2430
+
+  A["④ 上傳 114 應修科目表 PDF →「草擬」"]:::human --> B{"AI 被停用？是 114 年度的 PDF？"}:::engine
+  B -->|"不符合"| B1["拒絕"]:::stop
+  B -->|"符合"| C["AI 草擬 3 條：R2 院訂必修、R4 國文、<br/>R10 最低畢業學分；每條附頁碼、引文、<br/>適用範圍、例外"]:::ai
+  C --> D["驗證器：結構是否合法、<br/>引文是否真的在原文裡"]:::engine
+  D --> E["承辦人看「與現有規則的差異」<br/>必要時直接改 JSON"]:::human
+  E --> F{"內容改過？"}:::engine
+  F -->|"是"| D
+  F -->|"否"| G{"沒有錯誤＋勾選已核對<br/>＋填了確認人？"}:::engine
+  G -->|"否"| G1["不存"]:::stop
+  G -->|"是"| H["確認存檔：原稿與確認版都保留、<br/>不可覆寫 —— 仍未生效"]:::human
+  H --> I["啟用前影響預覽：用虛構學生，<br/>新舊規則各審一次，找出判定改變的<br/>最小代表案例（特別是門檻邊界）"]:::engine
+  I --> J{"勾選「了解啟用後…」＋填啟用人＋<br/>正式規則庫在確認後沒被改過？"}:::engine
+  J -->|"否"| J1["不能啟用"]:::stop
+  J -->|"是"| K["啟用：該年度學生立即改用新版本審查<br/>寫入啟用紀錄（只增不改）"]:::human
+  K --> L["既有覆核標示「建議再確認」"]:::engine
+  K -.-> M["還原：回到正式規則庫，也寫入紀錄"]:::human
+  K -.-> N["要成為正式規則：另發 PR 修改<br/>curriculum_im_114.json 並經審查"]:::human
+  </pre></div>
+</div>
+<div class="why"><b>為什麼「確認存檔」不等於「啟用」？</b>確認存檔只代表「AI 讀的內容和原文一致」。啟用則代表「從現在起所有該年度學生都照這個審」，影響大得多，所以要另外一步、另外勾選。</div>
+<div class="why"><b>影響預覽在做什麼？</b>規則改一個數字，可能讓一批學生從 PASS 變成 FAIL。系統自己造一批虛構學生，特別是剛好達到門檻、差 1 學分這種邊界情況，用新舊規則各審一次，列出判定會改變的類型和最小例子。承辦人不用自己想例子，就能知道啟用的後果。</div>
+<div class="why"><b>為什麼正式規則庫被改過就不能啟用？</b>草稿是拿當時的規則比對差異的。基準改了，原本看過的差異就不準了，必須重新草擬或重新檢查。</div>
+<div class="why"><b>為什麼不直接覆寫正式規則檔？</b>新版本另存在 <code>data/rule_versions/</code>，所以隨時能還原。正式規則檔的變更要走 PR 審查，保留「規則改動要經多人看過」這道關卡。</div>
+<p class="muted">目前只支援 114 年度應修科目表的 3 條規則，不是完整規則庫。</p>
+</section>
+
+<!-- ============ 圖六 ============ -->
+<section id="f6">
+<h2>圖六　評審模式（預錄重播）</h2>
+<div class="plain">比賽評審可能沒有 Gemini 金鑰，決賽現場網路也可能不穩。所以事先把虛構示範文件的 AI 結果錄下來，需要時重播。重播只對得上錄過的那幾份檔案，評審上傳別的檔案只會失敗，系統不會編造結果。</div>
+<div class="figure">
+  <div class="cap"><span class="fig-no">圖六</span><b>需要呼叫 AI 時，用哪個結果</b></div>
+  <div class="scroll"><pre class="mermaid">
+flowchart TD
+  classDef ai fill:#FBEFD6,stroke:#8A5A12,color:#1C2430
+  classDef engine fill:#DFF0E5,stroke:#2A6B45,color:#1C2430
+  classDef stop fill:#F7E0E0,stroke:#A23030,color:#1C2430
+
+  A["系辦端要呼叫 AI"]:::engine --> B{"ACADEMIC_TWIN_REPLAY"}:::engine
+  B -->|"off"| C["只呼叫真實模型"]:::ai
+  B -->|"fallback（預設）"| D["先呼叫真實模型"]:::ai
+  D --> E{"成功？"}:::engine
+  E -->|"是"| OK["使用真實結果"]:::ai
+  E -->|"否：沒金鑰、過載、逾時"| G
+  B -->|"only（評審模式）"| G{"同一份檔案＋同一版提示＋<br/>同一模型，錄過嗎？"}:::engine
+  G -->|"有"| H["重播錄製結果<br/>標示原本的模型與產生時間"]:::engine
+  G -->|"沒有"| I["失敗，不編造結果"]:::stop
+  </pre></div>
+</div>
+<div class="tbl"><table>
+<thead><tr><th>項目</th><th>說明</th></tr></thead>
+<tbody>
+<tr><td class="k">啟動評審模式</td><td><code>ACADEMIC_TWIN_REPLAY=only python web.py</code>；頁面頂端出現「評審模式」橫幅</td></tr>
+<tr><td class="k">錄製</td><td><code>ACADEMIC_TWIN_RECORD=1</code>；只對 <code>data/samples/</code> 的虛構文件錄製，存在 <code>data/replay/</code></td></tr>
+<tr><td class="k">不會錄的</td><td>主模型失敗後改用備援模型產生的結果</td></tr>
+<tr><td class="k">什麼時候失效</td><td>改了提示（PROMPT）或模型名稱，錄製就對不上，必須重新錄</td></tr>
+<tr><td class="k">已知狀況</td><td>DEMO-D07 每次讓主模型逾時，因此錄成備援結果，畫面顯示「無法交叉驗證」</td></tr>
+</tbody></table></div>
+<div class="why"><b>為什麼用雜湊對號入座？</b>這樣能保證重播的一定是「這份檔案、這版提示」真正跑出來的結果，不會把 A 的答案拿去給 B。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="trace">
+<h2>3　留下了哪些紀錄</h2>
+<p>系辦端每個重要動作都留紀錄，所以任何一個判定都能回答：依據哪一版規則？誰確認的？AI 讀完後人改了多少？</p>
+<div class="tbl"><table>
+<thead><tr><th>動作</th><th>記在哪</th><th>記什麼</th></tr></thead>
+<tbody>
+<tr><td class="k">人工覆核／撤銷</td><td class="where">data/reviews/decisions.json</td><td>學生、課號、學期、採計方式、覆核人、時間、規則版本、備註；只增不改</td></tr>
+<tr><td class="k">AI 解析執行軌跡</td><td class="where">data/eval/dashboard_runs.jsonl</td><td>每一步成功與否、模型、提示版本、是否自我修正、是否轉人工、等待秒數；不記學號與課程內容</td></tr>
+<tr><td class="k">儀表板確認</td><td class="where">data/eval/dashboard_runs.jsonl</td><td>改了幾列幾欄、增刪幾列、修改落在交叉驗證標示列的比例</td></tr>
+<tr><td class="k">規則草稿</td><td class="where">data/eval/rule_drafts/、rule_draft_runs.jsonl</td><td>原稿、確認版、確認人、時間、當時正式規則庫的雜湊</td></tr>
+<tr><td class="k">規則啟用／還原</td><td class="where">data/rule_versions/activations.jsonl</td><td>年度、草稿、啟用人／還原人、時間；只增不改</td></tr>
+<tr><td class="k">匯出 CSV</td><td class="where">下載檔</td><td>每列附規則版本（學年度＋規則庫雜湊）與審查時間</td></tr>
+<tr><td class="k">列印明細</td><td class="where">網頁</td><td>判定、逐條出處、學分採計、覆核紀錄、規則版本、審查時間</td></tr>
+</tbody></table></div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="limits">
+<h2>4　目前的限制</h2>
+<ul class="limits">
+  <li>批次解析的佇列和待確認草稿只存在記憶體，<b>伺服器重開就會消失</b>，需要重新上傳。</li>
+  <li>有界自我修正在真實模型上還沒實際觸發過，目前只有測試驗證。</li>
+  <li>10-28 討論的「一鍵確認＋10% 抽查」還沒做，目前每份都要逐份核對。</li>
+  <li>AI 草擬規則只支援 114 年度的 R2、R4、R10 三條。</li>
+  <li>正式規則庫只有 114 年度；其他年度的學生會列入名單異常。</li>
+  <li>所有示範與測試都用虛構資料，不能當成實際行政成效的證據。</li>
+  <li>系辦端只能上傳去識別化或虛構文件，因為內容會送到 Gemini。</li>
+</ul>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="glossary">
+<h2>5　名詞對照</h2>
+<div class="tbl"><table>
+<thead><tr><th>名詞</th><th>意思</th></tr></thead>
+<tbody>
+<tr><td class="k">規則引擎</td><td><code>rule_engine.py</code>，算學分、比對規則、決定判定的程式。不用 AI。</td></tr>
+<tr><td class="k">規則庫</td><td>某入學年度的畢業規定，例如 <code>data/curriculum_im_114.json</code>：課程、要求、類別、出處。</td></tr>
+<tr><td class="k">規則版本</td><td>學年度＋規則庫內容的雜湊。內容改一個字，版本就不同。</td></tr>
+<tr><td class="k">儀表板</td><td>學校系統匯出的學生修業 PDF，AI 解析的對象。</td></tr>
+<tr><td class="k">草稿</td><td>AI 產生、還沒經承辦人確認的東西。不會影響審查。</td></tr>
+<tr><td class="k">交叉驗證</td><td>兩個模型讀同一份文件後逐列比對，用來排出優先核對的列。</td></tr>
+<tr><td class="k">有界自我修正</td><td>把檢查出的錯誤告訴 AI 重讀，最多 1 次。</td></tr>
+<tr><td class="k">執行軌跡</td><td>AI 每一步做了什麼、哪裡被擋、哪裡交給人的紀錄。</td></tr>
+<tr><td class="k">提示（flags）</td><td>校務系統可能誤判的地方：超修、可重複修習、待辦抵修。</td></tr>
+<tr><td class="k">需辦理事項（actions）</td><td>由提示推出的待辦事項，寫明找哪個單位。</td></tr>
+<tr><td class="k">覆核</td><td>承辦人對引擎判斷不了的紀錄做的採計決定。</td></tr>
+<tr><td class="k">影響預覽</td><td>啟用新規則前，用虛構學生比較新舊規則判定差在哪。</td></tr>
+<tr><td class="k">評審模式</td><td>只重播預錄 AI 結果、不呼叫模型的展示模式。</td></tr>
+</tbody></table></div>
+<p><span class="stamp">三關原則</span>　AI 提案 → 引擎判定 → 承辦人確認。系辦端每個功能都照這個順序走。</p>
+</section>
+
+<footer>Academic Twin・A 組系辦端。檔案位置：<code>docs/OFFICE_SYSTEM_DESIGN.html</code>。內容依 2026-11-07 程式現況整理；功能變動時請一併更新。</footer>
+</main>
+</div>
+
+<script>
+// 本機直接開啟檔案時沒有內建 Mermaid 繪製，改從 CDN 載入；在 claude.ai 上已繪製則略過
+setTimeout(function () {
+  var pending = document.querySelectorAll("pre.mermaid:not([data-processed])");
+  if (!pending.length || document.querySelector("pre.mermaid svg") || window.mermaid) return;
+  var s = document.createElement("script");
+  s.src = "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js";
+  s.onload = function () {
+    var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    window.mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default", flowchart: { useMaxWidth: false } });
+    window.mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  document.head.appendChild(s);
+}, 1500);
+</script>

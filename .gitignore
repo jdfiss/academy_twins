@@ -7,3 +7,4 @@ data/reviews/
 .env
 data/eval/
 data/rule_versions/
+data/office_state/

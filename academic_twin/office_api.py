@@ -1,4 +1,4 @@
-"""系辦端 API：批次審查、名單異常、匯出、人工覆核、審查明細。（A 組）"""
+"""系辦端 API：批次審查、名單異常、匯出、人工覆核、審查明細、監控者模式與工作狀態存檔。（A 組）"""
 from __future__ import annotations
 
 import csv
@@ -10,9 +10,12 @@ from dataclasses import asdict, replace
 from datetime import datetime
 from pathlib import Path
 
-from . import (cross_check, dashboard, dashboard_batch, llm, pdf_text, replay, report, rule_diff, rule_draft,
-               rule_versions)
-from .records import REQUIRED, RecordsError, parse_records
+from . import (cross_check, dashboard, dashboard_batch, llm, office_state, pdf_text, replay, report, rule_diff,
+               rule_draft, rule_versions)
+from .inbox import InboxMixin
+from .metrics import compute as compute_metrics
+from .monitor import MonitorMixin
+from .records import RecordsError, parse_records
 from .roster import parse_roster
 from .rule_engine import CATEGORY, category_overflow, classify, reasons
 
@@ -20,8 +23,72 @@ _BATCH_LOCK = threading.Lock()
 DEMO_ROSTER = Path(__file__).parent.parent / "data" / "students" / "demo_batch_roster.csv"
 
 
-class OfficeMixin:
+class OfficeMixin(MonitorMixin, InboxMixin):
     """需搭配 api.CoreService 使用（self.ruleset()、self.students、self._report…）。"""
+
+    _state_dir: Path | None = None  # 設定後（restore_office_state）每次狀態改變就存檔；測試預設不存檔
+
+    # ---------- 工作狀態存檔（伺服器重開後接續） ----------
+    def load_data(self, records: tuple[str, str] | None = None, roster: tuple[str, str] | None = None) -> None:
+        super().load_data(records, roster)
+        self._save_state()
+
+    def batch_uid(self) -> str:
+        """目前這一批的代號（換示範批次時更新）；執行軌跡據以區分「本批次」與累計指標。"""
+        return self.__dict__.setdefault("_batch_uid", uuid.uuid4().hex[:12])
+
+    def restore_office_state(self, directory: Path = office_state.STATE_DIR) -> str:
+        """啟用存檔並接續上次的狀態；回傳略過的原因（空字串表示正常）。失敗時以目前資料啟動。"""
+        self._state_dir = None  # 接續期間不存檔
+        state, reason = office_state.load(directory)
+        if state:
+            try:
+                self._restore(state)
+            except Exception as e:  # 規則庫或格式改變導致接不上：保留檔案供檢查，以目前資料啟動
+                (directory / "state.json").replace(directory / "state.bad.json")
+                reason = f"系辦端存檔無法接續，已改名為 state.bad.json：{e}"
+        self._state_dir = directory
+        self._save_state()
+        return reason
+
+    def _restore(self, state: dict) -> None:
+        data = state["data"]
+        if data["students"]:
+            self.load_data((data["records_name"], data["records_csv"]), (data["roster_name"], data["roster_csv"]))
+        else:
+            self.students, self.records_name = {}, data["records_name"]
+            self.load_data(roster=(data["roster_name"], data["roster_csv"]))
+        self.__dict__["_batch_uid"] = state["batch_uid"]
+        self.__dict__["_dashboard_drafts"] = {
+            draft_id: (d["sid"], office_state.extraction_from_dict(d["ext"]),
+                       d["other"] if isinstance(d["other"], str) else office_state.extraction_from_dict(d["other"]))
+            for draft_id, d in state["drafts"].items()}
+        self._batch().restore(state["batch"])
+        self.__dict__["_monitor_state"] = state["monitor"]
+        self._inbox_restore(state.get("inbox"))
+
+    def _save_state(self) -> None:
+        if not self._state_dir:
+            return
+        with _BATCH_LOCK:
+            batch = self.__dict__.get("_dashboard_batch")
+        drafts = list(self.__dict__.get("_dashboard_drafts", {}).items())
+        office_state.save({
+            "data": {"records_name": self.records_name, "students": len(self.students),
+                     "records_csv": office_state.records_csv(self.students),
+                     "roster_name": self.roster_name, "roster_csv": office_state.roster_csv(self._roster_parsed)},
+            "batch_uid": self.batch_uid(),
+            "batch": batch.to_state() if batch else {"jobs": [], "unmatched": [], "paused": False},
+            "drafts": {draft_id: {"sid": sid, "ext": office_state.extraction_to_dict(ext),
+                                  "other": other if isinstance(other, str) else office_state.extraction_to_dict(other)}
+                       for draft_id, (sid, ext, other) in drafts},
+            "monitor": self._monitor(),
+            **self._inbox_state(),
+        }, self._state_dir)
+
+    def office_metrics(self) -> dict:
+        """監控台指標：本批次與累計（只有彙總數字）。"""
+        return compute_metrics(self.batch_uid())
 
     def data_source(self) -> dict:
         return {
@@ -39,13 +106,17 @@ class OfficeMixin:
         text = DEMO_ROSTER.read_text(encoding="utf-8-sig")
         parse_roster(text, DEMO_ROSTER.name)  # 先檢查，失敗時現有資料完全不變
         self.students, self.records_name = {}, "示範批次（待解析儀表板）"
-        self.load_data(roster=(DEMO_ROSTER.name, text))
         with _BATCH_LOCK:
             old = self.__dict__.pop("_dashboard_batch", None)
             self._dashboard_drafts = {}
+            self._batch_uid = uuid.uuid4().hex[:12]
+            self._monitor_reset()
+            self.inbox_reset()  # 示範信件的寄件人是新批次的學生
             if old:  # 承辦人停用 AI 的狀態保留，不因換批次而恢復
                 old.close()
-                self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract, paused=old.paused)
+                self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract, paused=old.paused,
+                                                                       on_change=self._save_state)
+        self.load_data(roster=(DEMO_ROSTER.name, text))  # 最後才存檔，存到的是新批次
         return self.data_source()
 
     # ---------- 畢審 ----------
@@ -78,8 +149,12 @@ class OfficeMixin:
     def roster_anomalies(self) -> list[dict]:
         """名單比對異常；與 batch() 合起來涵蓋名單上每位學生。"""
         r = self.roster
+        parsed = {j["student_id"] for j in self._batch().status()["jobs"] if j["state"] == dashboard_batch.DONE}
         return (
-            [{"id": sid, "kind": "no_records", "message": "在應屆名單上，但沒有任何修課紀錄，未審查"} for sid in r.no_records]
+            [{"id": sid, "kind": "dashboard_pending", "message": "儀表板已解析，待確認後才審查"}
+             for sid in r.no_records if sid in parsed]
+            + [{"id": sid, "kind": "no_records", "message": "在應屆名單上，但沒有任何修課紀錄，未審查"}
+               for sid in r.no_records if sid not in parsed]
             + [{"id": sid, "kind": "not_on_roster", "message": "有修課紀錄，但不在應屆名單，未審查"} for sid in r.not_on_roster]
             + [{"id": sid, "kind": "other_cohort",
                 "message": f"名單入學年度為 {c}，系統沒有該學年度規則庫"
@@ -146,6 +221,7 @@ class OfficeMixin:
         self._require_ai()
         began = time.monotonic()
         trace = {"type": "extract_trace", "at": datetime.now().isoformat(timespec="seconds"),
+                 "batch_id": self.batch_uid(),
                  "prompt_version": dashboard.PROMPT_VERSION, "format": dashboard.FORMAT, "model": None,
                  "steps": [], "corrected": False, "to_manual": False}
 
@@ -169,6 +245,9 @@ class OfficeMixin:
                                "model": other.model if not isinstance(other, str) else cross_check.check_model()})
         ext.pages = pdf_text.extract_pages(pdf)  # 不送給 AI；check 據以核對每列原文與頁碼
         ext = self._self_correct(pdf, ext, trace)
+        if ext.pages is not None:  # 只記警示數，畫面據以畫出「原文核對」這一關（不列入 steps，steps 只記 AI 呼叫與檢查）
+            src = dashboard.check_sources(ext.rows, ext.pages)
+            trace["source_check"] = {"ok": not src, "warnings": len(src), "available": ext.pages.ok}
         cmp = cross_check.recheck(ext.rows, other, ext.model)
         drafts = self.__dict__.setdefault("_dashboard_drafts", {})
         draft_id = uuid.uuid4().hex
@@ -178,6 +257,7 @@ class OfficeMixin:
         trace["to_manual"] = any(i.level == "error" for i in issues)
         trace["warnings"] = sum(i.level == "warning" for i in issues)
         finish("draft")
+        self._save_state()
         return {"draft_id": draft_id, "student_id": sid, "exists": sid in self.students,
                 **self._draft_view(ext, issues), "cross_check": _cross_check_view(cmp, len(ext.rows)),
                 "trace": trace}
@@ -226,8 +306,11 @@ class OfficeMixin:
         return [i for i in dashboard.check(replace(ext, pages=None), kb) if i.level == "error"]
 
     def dashboard_confirm(self, draft_id: str, rows: list[dict], reviewer: str, cohort: int | None = None,
-                          acknowledge_warnings: bool = False) -> dict:
-        """承辦人修正並確認後，重新檢查，再以該生的紀錄取代或新增，並記錄修正量（不含課程內容）。"""
+                          acknowledge_warnings: bool = False, mode: str | None = None) -> dict:
+        """承辦人修正並確認後，重新檢查，再以該生的紀錄取代或新增，並記錄修正量（不含課程內容）。
+
+        mode：single 逐份、sampled 批次放行的抽查份（自動判斷）、batch 抽查通過後放行的其餘份。
+        """
         drafts = self.__dict__.get("_dashboard_drafts", {})
         if draft_id not in drafts:
             raise KeyError("找不到這份解析草稿，可能已確認或伺服器已重開，請重新解析")
@@ -248,12 +331,14 @@ class OfficeMixin:
         records = parse_records(dashboard.to_records_csv(sid, edited.rows))[sid]
         self._replace_student(sid, records, cohort)
         del drafts[draft_id]
-        self._batch().mark_confirmed(draft_id)
+        counts = _edit_counts(ext.rows, edited.rows)
+        mode = mode or self._after_confirm(sid, counts)
+        self._batch().mark_confirmed(draft_id)  # 會觸發存檔
         initial = cross_check.recheck(ext.rows, other, ext.model)
         dashboard.log_run({
-            "type": "confirm", "model": ext.model, "prompt_version": ext.prompt_version, "format": ext.format,
+            "type": "confirm", "mode": mode, "batch_id": self.batch_uid(), "model": ext.model, "prompt_version": ext.prompt_version, "format": ext.format,
             "generated_at": ext.generated_at, "confirmed_at": datetime.now().isoformat(timespec="seconds"),
-            **_edit_counts(ext.rows, edited.rows), "warnings_acknowledged": acknowledge_warnings,
+            **counts, "warnings_acknowledged": acknowledge_warnings,
             "cross_check": {**initial.summary(len(ext.rows)), **_edits_by_flag(ext.rows, edited.rows, initial),
                             "flagged_after_edit": len(cmp.flagged_rows) + len(cmp.only_check)},
         })
@@ -263,7 +348,8 @@ class OfficeMixin:
     def _batch(self) -> dashboard_batch.DashboardBatch:
         with _BATCH_LOCK:  # 網頁伺服器多執行緒，避免同時建出兩個佇列
             if "_dashboard_batch" not in self.__dict__:
-                self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract)
+                self._dashboard_batch = dashboard_batch.DashboardBatch(self.dashboard_extract,
+                                                                       on_change=self._save_state)
             return self._dashboard_batch
 
     def _require_ai(self) -> None:
@@ -278,23 +364,23 @@ class OfficeMixin:
         return self._batch().add(filename, pdf, set(self._roster_parsed.ids))
 
     def dashboard_batch_status(self) -> dict:
-        return self._batch().status()
+        return self.monitor_view(self._batch().status())
 
     def dashboard_batch_draft(self, sid: str) -> dict:
         return self._batch().draft(sid)
 
     def dashboard_batch_retry(self, sid: str | None = None) -> dict:
         self._batch().retry(sid)
-        return self._batch().status()
+        return self.dashboard_batch_status()
 
     def dashboard_batch_stop(self) -> dict:
         """停止全部，兼作系辦端 AI 停用開關（批次、單份解析與規則草擬都暫停）。"""
         self._batch().stop()
-        return self._batch().status()
+        return self.dashboard_batch_status()
 
     def dashboard_batch_resume(self) -> dict:
         self._batch().resume()
-        return self._batch().status()
+        return self.dashboard_batch_status()
 
     def _dashboard_issues(self, ext: dashboard.Extraction, cohort: int | None) -> list[dashboard.Issue]:
         """依入學年度的規則庫檢查；沒有該年度規則庫時為錯誤，不能送入審查，也不套用其他年度。"""
@@ -315,24 +401,12 @@ class OfficeMixin:
 
     def _replace_student(self, sid: str, records: list, cohort: int | None) -> None:
         """以確認後的紀錄取代該生既有紀錄並加入名單；經由 load_data 重新檢查，失敗時資料不變。"""
-        out = io.StringIO()
-        writer = csv.DictWriter(out, fieldnames=REQUIRED + ["category"], lineterminator="\n")
-        writer.writeheader()
-        for other, recs in {**self.students, sid: records}.items():
-            for r in recs:
-                writer.writerow({"student_id": other, "code": r.code, "name": r.name, "credits": r.credits,
-                                 "grade": f"{r.grade:g}", "term": r.term, "category": r.category})
         roster = self._roster_parsed
         cohorts = {**roster.cohorts, **({sid: cohort} if cohort else {})}
         ids = roster.ids + ([] if sid in roster.ids else [sid])
-        rout = io.StringIO()
-        rw = csv.writer(rout, lineterminator="\n")
-        rw.writerow(["student_id", "english_passed", "cohort"])
-        for i in ids:
-            english = roster.english_passed.get(i)
-            rw.writerow([i, "" if english is None else ("Y" if english else "N"), cohorts.get(i, "")])
         source = f"{self.records_name}＋AI 解析 {sid}" if self.records_name else f"AI 解析 {sid}"
-        self.load_data((source, out.getvalue()), (self.roster_name or "應屆名單", rout.getvalue()))
+        self.load_data((source, office_state.records_csv({**self.students, sid: records})),
+                       (self.roster_name or "應屆名單", office_state.roster_csv(roster, ids, cohorts)))
 
     # ---------- AI 草擬規則（獨立存檔，確認也不啟用） ----------
     def rule_draft_extract(self, pdf: bytes, year: int = 114) -> dict:

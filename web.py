@@ -53,6 +53,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(service.roster_anomalies())
             if route == ["dashboard", "batch"]:
                 return self._json(service.dashboard_batch_status())
+            if route == ["metrics"]:
+                return self._json(service.office_metrics())
+            if route == ["inbox"]:
+                return self._json(service.inbox_list())
+            if len(route) == 2 and route[0] == "inbox":
+                return self._json(service.inbox_get(route[1]))
             if len(route) == 3 and route[:2] == ["dashboard", "batch"]:
                 return self._json(service.dashboard_batch_draft(route[2]))
             if route == ["export.csv"]:
@@ -103,6 +109,14 @@ class Handler(BaseHTTPRequestHandler):
         POST /api/rule-versions/activate  {"draft_id", "activated_by", "acknowledge"}：以已確認草稿啟用新規則版本
         POST /api/rule-versions/revert    {"year", "reverted_by"}：還原為正式規則庫
         POST /api/twin/<id>/ask  {"question"}：AI 把 What-if 問題轉成待確認的 simulate 參數（不模擬）
+        POST /api/dashboard/release 或 release/finish、release/cancel、release/reopen  {"reviewer"}：
+             批次確認建議放行的份（伺服器隨機抽查）／抽查通過後放行其餘／取消本批／重新開啟批次放行
+        POST /api/inbox/demo  清空收件匣並匯入虛構示範信件
+        POST /api/inbox/import  {"messages": [{"student_id", "subject"?, "body"}]}
+        POST /api/inbox/process  {"id"?}：AI 擬稿（背景）；不給 id 時處理全部新進與失敗的信
+        POST /api/inbox/<id>/decide  {"action": approve|reject|self, "reviewer", "reply"?, "reason"?}
+        POST /api/inbox/approve-many  {"ids", "reviewer"}：只限可批次核准的擬稿
+        POST /api/inbox/<id>/proposals/<序號>  {"reviewer", "accept"}：核准（走人工覆核）或拒絕 AI 覆核建議
         """
         route = urlparse(self.path).path.strip("/")
         length = int(self.headers.get("Content-Length") or 0)
@@ -153,6 +167,36 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(service.dashboard_batch_stop())
             elif route == "api/dashboard/batch/resume":
                 return self._json(service.dashboard_batch_resume())
+            elif route in ("api/dashboard/release", "api/dashboard/release/finish", "api/dashboard/release/cancel",
+                           "api/dashboard/release/reopen"):
+                action = {"api/dashboard/release": service.release_start,
+                          "api/dashboard/release/finish": service.release_finish,
+                          "api/dashboard/release/cancel": service.release_cancel,
+                          "api/dashboard/release/reopen": service.release_reopen}[route]
+                return self._json(action(str(body.get("reviewer") or "")))
+            elif route == "api/inbox/demo":
+                return self._json(service.inbox_load_demo())
+            elif route == "api/inbox/import":
+                return self._json(service.inbox_import(body.get("messages")))
+            elif route == "api/inbox/process":
+                mid = body.get("id")
+                return self._json(service.inbox_process(str(mid) if mid else None))
+            elif route == "api/inbox/approve-many":
+                ids = body.get("ids")
+                if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+                    return self._json({"error": "ids 需為信件編號陣列"}, 400)
+                return self._json(service.inbox_approve_many(ids, str(body.get("reviewer") or "")))
+            elif route.startswith("api/inbox/") and route.endswith("/decide"):
+                reply = body.get("reply")
+                return self._json(service.inbox_decide(
+                    unquote(route.split("/")[2]), str(body.get("action") or ""), str(body.get("reviewer") or ""),
+                    reply if isinstance(reply, str) else None, str(body.get("reason") or "")))
+            elif route.startswith("api/inbox/") and "/proposals/" in route:
+                parts = route.split("/")
+                if len(parts) != 5 or not parts[4].isdigit():
+                    return self._json({"error": "not found"}, 404)
+                return self._json(service.inbox_apply_proposal(
+                    unquote(parts[2]), int(parts[4]), str(body.get("reviewer") or ""), body.get("accept") is not False))
             elif route == "api/dashboard/confirm":
                 if not isinstance(body.get("rows"), list) or not all(isinstance(r, dict) for r in body["rows"]):
                     return self._json({"error": "rows 需為紀錄陣列"}, 400)
@@ -204,6 +248,8 @@ class Handler(BaseHTTPRequestHandler):
         except RecordsError as e:
             return self._json({"error": "資料格式錯誤，未套用", "errors": e.errors}, 400)
         except LLMError as e:
+            if route.startswith("api/inbox/"):
+                return self._json({"error": f"AI 擬稿暫時無法使用，信件保留在收件匣，可稍後再試或自行回覆：{e}"}, 502)
             if route.startswith("api/rule-drafts/"):
                 return self._json({"error": f"AI 草擬暫時無法使用，草稿未確認、已啟用規則不變：{e}"}, 502)
             return self._json({"error": f"AI 解析暫時無法使用，可改用上傳修課紀錄 CSV：{e}"}, 502)
@@ -250,6 +296,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     port = next((int(a) for a in sys.argv[1:] if a.isdigit()), 8000)
+    # 系辦端工作狀態存檔（data/office_state/，不進版控）：重開後接續名單、紀錄、解析佇列、抽查與收件匣
+    skipped = service.restore_office_state()
+    if skipped:
+        print(skipped, file=sys.stderr)
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://localhost:{port}"
     print(f"NCU Academic Twin 介面：{url}（Ctrl+C 結束）")

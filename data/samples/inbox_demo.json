@@ -1,0 +1,65 @@
+{
+  "note": "虛構示範信件：寄件人為虛構學生 DEMO-D03～D08，內容皆為編寫，非真實學生來信。涵蓋六種問題類型，用於監控台收件匣展示。",
+  "messages": [
+    {
+      "student_id": "DEMO-D03",
+      "subject": "想確認畢業進度",
+      "body": "老師好，我想知道我現在還差哪些條件才能畢業？謝謝！",
+      "expected_type": "progress"
+    },
+    {
+      "student_id": "DEMO-D03",
+      "subject": "轉學抵免的課",
+      "body": "我轉學前在他校修的程式語言（課號 XFER-01）已經辦好抵免，為什麼審查結果好像還沒算進去？",
+      "expected_type": "course"
+    },
+    {
+      "student_id": "DEMO-D06",
+      "subject": "系統說我不能畢業？",
+      "body": "我的學分已經超過 128 了，可是審查結果顯示不能畢業，是不是系統算錯了？",
+      "expected_type": "misjudge"
+    },
+    {
+      "student_id": "DEMO-D05",
+      "subject": "通識修太多",
+      "body": "我通識好像修得比規定多，多出來的學分可以算到其他地方嗎？",
+      "expected_type": "misjudge"
+    },
+    {
+      "student_id": "DEMO-D07",
+      "subject": "Python 修了兩次",
+      "body": "我 IM9001 Python 修過兩次，兩次都有過，第二次的學分會算嗎？",
+      "expected_type": "course"
+    },
+    {
+      "student_id": "DEMO-D04",
+      "subject": "我可以畢業了嗎",
+      "body": "請問依照目前的資料，我是不是已經符合畢業條件了？",
+      "expected_type": "progress"
+    },
+    {
+      "student_id": "DEMO-D05",
+      "subject": "超修學分要找誰",
+      "body": "如果通識超修的學分要申請認列，要找哪個單位辦？",
+      "expected_type": "procedure"
+    },
+    {
+      "student_id": "DEMO-D06",
+      "subject": "英檢其實有過",
+      "body": "我去年考過多益 800 分，英檢應該已經達標，但系統好像沒有登錄，可以幫我更正嗎？",
+      "expected_type": "correction"
+    },
+    {
+      "student_id": "DEMO-D03",
+      "subject": "專案申請",
+      "body": "我可以專案申請不修 IM4048 直接畢業嗎？因為我已經找到工作了。",
+      "expected_type": "other"
+    },
+    {
+      "student_id": "DEMO-D08",
+      "subject": "離校手續",
+      "body": "畢業離校手續要去哪個單位辦？需要準備什麼？",
+      "expected_type": "other"
+    }
+  ]
+}
