@@ -77,6 +77,29 @@
   <!-- 修課規劃與 What-if -->
   <section class="view" id="view-plan">
     <div class="grid">
+        <div class="card" id="current-card">
+          <h3>本學期修課 <span class="trial">試算</span> <span class="muted small" id="current-term"></span></h3>
+          <div class="muted small" style="margin-bottom:8px">本學期還沒有成績，請自己輸入這學期修的課（只存在這台電腦的瀏覽器，不會送出保存）。勾選的課假設會及格，一起算進下方規劃；打算停修或可能沒過的課取消勾選，規劃會把它重新排入之後的學期。正式審查結果不受影響。</div>
+          <div class="whatif">
+            <label style="flex:1 1 260px">本系課程（輸入課號或課名搜尋）
+              <input id="cur-search" list="cur-options" placeholder="例如：IM3031 或 電子商務"></label>
+            <datalist id="cur-options"></datalist>
+            <button class="primary" id="cur-add">加入</button>
+          </div>
+          <details style="margin:4px 0 8px">
+            <summary class="small">其他課程（通識、外系、體育等）</summary>
+            <div class="whatif">
+              <label>課號 <input id="cur-o-code" style="width:90px" placeholder="CC0215"></label>
+              <label>課名 <input id="cur-o-name" style="width:140px"></label>
+              <label>學分 <input id="cur-o-credits" type="number" min="0" max="12" value="2" style="width:64px"></label>
+              <label>類別 <select id="cur-o-category"><option value="">（外系／不確定）</option></select></label>
+              <button class="ghost" id="cur-o-add">加入</button>
+            </div>
+          </details>
+          <div id="current-msg"></div>
+          <div id="current-courses"></div>
+          <div class="small" id="current-total" style="margin-top:8px"></div>
+        </div>
         <div class="card">
           <h3>到畢業的修課路徑</h3>
           <div class="muted small" style="margin-bottom:8px">每學期上限 <span id="cap"></span> 學分；先排先修鏈最長的課。順序依「建議先修」，非正式擋修；開課學期依建議修課學期推估，不是實際開課資料。</div>
