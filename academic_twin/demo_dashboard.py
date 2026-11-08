@@ -6,11 +6,15 @@
 
     python -m academic_twin.demo_dashboard          # 產生 data/samples/ 下的 PDF 與答案
     python -m academic_twin.demo_dashboard --bench  # 產生 data/samples/bench/ 的虛構基準集（固定種子）
+    python -m academic_twin.demo_dashboard --demo-batch  # 產生 data/samples/demo_batch/ 的示範批次與名單
 
 基準集（--bench）在同一個虛構版型上變化出 24 份案例，涵蓋容易讓 AI 出錯的情境
 （長紀錄跨頁、重修、不及格、成績 59／60 邊界、少見學分、長課名與全形括號、同段落多列、
 抵免段落、非 114 入學年度），每份附標準答案 CSV 與情境標籤 JSON，
 供 academic_twin/benchmark.py 量測。仍是本專案自行產生的版面，量測結果不代表真實儀表板。
+
+示範批次（--demo-batch）專為比賽影片設計，與基準集分開：主角 DEMO-D03 串起系辦端與學生端，
+另 5 位各示範一種情況，再加 1 份學號不在名單上的檔案。檔名為「學號.pdf」，可直接拖進系辦頁批次解析。
 """
 from __future__ import annotations
 
@@ -110,6 +114,84 @@ def answer_csv(rows: list[dict]) -> str:
     writer.writeheader()
     writer.writerows({k: r[k] for k in REQUIRED + ["category"]} for r in rows)
     return buf.getvalue()
+
+
+# ---------- 示範批次（--demo-batch） ----------
+DEMO_BATCH_OUT = OUT / "demo_batch"
+DEMO_BATCH_ROSTER = ROOT / "data" / "students" / "demo_batch_roster.csv"
+DEMO_BATCH_ANSWERS = ROOT / "data" / "students" / "demo_batch_answers.csv"
+
+
+def _row(code: str, name: str, credits: int, grade: int, term: str, category: str = "") -> dict:
+    return {"code": code, "name": name, "credits": str(credits), "grade": str(grade), "term": term,
+            "category": category}
+
+
+# 每位示範學生：沿用示例學生 S001 的課程（114 入學、130 學分通過），只保留 until 以前的學期，
+# 去掉 drop 的課，再加上 extra。english 為名單上的英文門檻；roster 為 False 的不放進名單。
+# expect 是設計時預期的審查結果（承辦人覆核後），與 data/students/demo_batch_answers.csv 一致。
+DEMO_BATCH = {
+    "DEMO-D03": {  # 主角：大四上預審。真正缺修（大四上才開的必修、通識與學分）＋疑似誤判（國文超修）＋抵免待覆核
+        "until": "116-2", "drop": ["IM3031", "GE-3"],
+        "extra": [_row("CH-3", "國文：應用文寫作", 2, 85, "115-1", "國文"),
+                  _row("XFER-01", "轉學抵免：程式語言（他校）", 3, 80, "114-1", "抵免")],
+        "english": "Y", "expect": ("未通過", "R1;R6;R11;R10", "overflow"),
+        "note": "主角；抵免列覆核為本系選修後仍缺 IM4001、IM4048（只在上學期開）、通識與學分；國文超修 2 學分可移入外系"},
+    "DEMO-D04": {"english": "Y", "expect": ("通過", "", ""), "note": "一般通過，沒有任何提示"},
+    "DEMO-D05": {"extra": [_row("GE-5", "通識：當代藝術", 3, 88, "117-2", "通識")],
+                 "english": "Y", "expect": ("通過", "", "overflow"), "note": "通過，通識超修 3 學分"},
+    "DEMO-D06": {"english": "N", "expect": ("未通過", "R12", ""), "note": "學分都夠，英文門檻未通過（真正缺修）"},
+    "DEMO-D07": {"extra": [_row("IM9001", "Python（示意課號）", 3, 90, "117-2")],
+                 "english": "Y", "expect": ("通過", "", ""),
+                 "note": "同一門選修通過兩次，第二次待覆核；覆核為不採計後通過"},
+    "DEMO-D08": {"drop": ["IM2037"], "extra": [_row("IM2037", "演算法", 3, 48, "116-2"),
+                                               _row("IM2037", "演算法", 3, 75, "117-2")],
+                 "english": "Y", "expect": ("通過", "", ""), "note": "必修不及格後重修通過（同課號兩列）"},
+    "DEMO-D09": {"english": "Y", "roster": False, "expect": None, "note": "學號不在應屆名單，系辦頁不解析"},
+}
+
+
+def demo_batch_records(demo_id: str) -> list[dict]:
+    """示範學生的修課紀錄；一般課程的成績以學號為種子給 61–98 分，同學號結果固定。"""
+    spec = DEMO_BATCH[demo_id]
+    rng = random.Random(f"demo-batch-{demo_id}")
+    rows = []
+    for r in csv.DictReader(SOURCE.read_text(encoding="utf-8-sig").splitlines()):
+        if r["student_id"] != "S001" or r["term"] > spec.get("until", "999-9") or r["code"] in spec.get("drop", []):
+            continue
+        rows.append({**r, "grade": str(rng.randint(61, 98)) if r["credits"] != "0" else r["grade"]})
+    rows += [dict(r) for r in spec.get("extra", [])]
+    return sorted(({**r, "student_id": demo_id} for r in rows), key=lambda r: (r["term"], r["code"]))
+
+
+def demo_batch_roster() -> str:
+    lines = ["student_id,english_passed,cohort"]
+    lines += [f"{sid},{spec['english']},114" for sid, spec in DEMO_BATCH.items() if spec.get("roster", True)]
+    return "\n".join(lines) + "\n"
+
+
+def demo_batch_answers() -> str:
+    """設計時預期的判定（evaluate.py 答案格式）；虛構、未經承辦人確認。"""
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow(["student_id", "status", "unmet", "flags", "split", "source", "confirmed", "note"])
+    for sid, spec in DEMO_BATCH.items():
+        if spec["expect"]:
+            writer.writerow([sid, *spec["expect"], "開發", "虛構", "N", spec["note"]])
+    return buf.getvalue()
+
+
+def write_demo_batch(out: Path = DEMO_BATCH_OUT) -> None:
+    out.mkdir(parents=True, exist_ok=True)
+    for sid in DEMO_BATCH:
+        rows = demo_batch_records(sid)
+        to_pdf(render_html(sid, rows), out / f"{sid}.pdf")
+        (out / f"{sid}_answer.csv").write_text(answer_csv(rows), encoding="utf-8")
+        print(f"{sid}：{len(rows)} 列 → {out.relative_to(ROOT).as_posix()}/{sid}.pdf")
+    DEMO_BATCH_ROSTER.write_text(demo_batch_roster(), encoding="utf-8")
+    DEMO_BATCH_ANSWERS.write_text(demo_batch_answers(), encoding="utf-8")
+    print(f"名單 → {DEMO_BATCH_ROSTER.relative_to(ROOT).as_posix()}；預期判定 → "
+          f"{DEMO_BATCH_ANSWERS.relative_to(ROOT).as_posix()}")
 
 
 # ---------- 虛構基準集（--bench） ----------
@@ -298,11 +380,15 @@ def write_bench(out: Path = BENCH_OUT, count: int = BENCH_COUNT, seed: int = BEN
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="產生虛構畢審儀表板 PDF 與標準答案")
     parser.add_argument("--bench", action="store_true", help="改為產生 data/samples/bench/ 的虛構基準集")
+    parser.add_argument("--demo-batch", action="store_true", help="改為產生 data/samples/demo_batch/ 的示範批次")
     parser.add_argument("--count", type=int, default=BENCH_COUNT, help="基準案例數（--bench）")
     parser.add_argument("--seed", type=int, default=BENCH_SEED, help="亂數種子，同種子輸出相同（--bench）")
     args = parser.parse_args(argv)
     if args.bench:
         write_bench(BENCH_OUT, args.count, args.seed)
+        return
+    if args.demo_batch:
+        write_demo_batch()
         return
     OUT.mkdir(parents=True, exist_ok=True)
     for demo_id in DEMOS:

@@ -1,0 +1,70 @@
+{
+ "model": "gemini-3.5-flash",
+ "generated_at": "2026-11-06T21:48:38",
+ "recorded_at": "2026-11-06T21:48:38",
+ "fallback_from": "",
+ "data": {
+  "requirements": [
+   {
+    "id": "R2",
+    "kind": "all_of",
+    "title": "院訂必修清單",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "院訂必修欄位"
+    },
+    "applicability": "114學年度資管系入學新生",
+    "applicable_year": 114,
+    "exceptions": "來源未載明、需人工確認",
+    "review_notes": "須修畢院訂必修科目：會計學(MT1031/MT1032)、企業概論(MT1021)、統計學(MT2041/MT2042)、經濟學(MT1011/MT1012)。",
+    "source_page": 1,
+    "source_quote": "會計學 MT1031 / MT1032\n企業概論 MT1021\n統計學 MT2041 / MT2042\n經濟學 MT1011 / MT1012",
+    "courses": [
+     "MT1031",
+     "MT1032",
+     "MT1021",
+     "MT2041",
+     "MT2042",
+     "MT1011",
+     "MT1012"
+    ]
+   },
+   {
+    "id": "R4",
+    "kind": "category_credits",
+    "title": "共同必修：國文",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "共同必修欄位-國文"
+    },
+    "applicability": "114學年度資管系入學新生",
+    "applicable_year": 114,
+    "exceptions": "來源未載明、需人工確認",
+    "review_notes": "共同必修國文需修畢5學分。",
+    "source_page": 1,
+    "source_quote": "國文 5",
+    "categories": [
+     "國文"
+    ],
+    "min_credits": 5
+   },
+   {
+    "id": "R10",
+    "kind": "total_credits",
+    "title": "備註二-1：最低畢業學分",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "備註-二-1"
+    },
+    "applicability": "114學年度資管系入學新生",
+    "applicable_year": 114,
+    "exceptions": "來源未載明、需人工確認",
+    "review_notes": "最低畢業學分為 128 學分，包含必修科目計 100 學分。",
+    "source_page": 1,
+    "source_quote": "必修科目計 100學分，最低畢業學分：128 學分。",
+    "min_credits": 128
+   }
+  ],
+  "unreadable": ""
+ }
+}

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from . import dashboard, llm
 
-DEFAULT_CHECK_MODEL = "gemini-2.5-pro"
+DEFAULT_CHECK_MODEL = "gemini-2.5-flash"  # 2.5-pro 額度不足（2026-11-06 實測 429），改用與主模型不同的 2.5-flash
 COMPARED = ["rule_code", "name", "credits", "grade"]  # 對齊用的科目代碼、學期不再比
 LABELS = {"rule_code": "規則代碼", "name": "科目名稱", "credits": "學分", "grade": "成績"}
 

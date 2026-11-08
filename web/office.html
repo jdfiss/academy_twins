@@ -35,6 +35,14 @@ body.office { font-size: 16px; }
 .office .confirm label { display: flex; align-items: center; gap: 8px; }
 .office details.fold { margin-top: 14px; }
 .office details.fold > summary { font-size: 15px; }
+.office details.card.fold { margin-top: 0; }
+.office details.card > summary + .row { margin-top: 14px; }
+/* 執行軌跡：AI 做了什麼、哪裡被擋下、哪裡交給人 */
+.office .trace { padding: 10px 14px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.office .trace ol { margin: 6px 0; padding-left: 22px; }
+.office .trace li.bad { color: var(--warn); }
+.office .judge { background: var(--warn-soft); border-color: var(--warn); }
+.office .replay { color: var(--warn); font-weight: 600; }
 .office blockquote { margin: 8px 0; padding: 8px 14px; border-left: 3px solid var(--line); white-space: pre-wrap; }
 /* 解析表格：代碼與數字欄窄，課名與原文寬 */
 .dash-table { min-width: 1100px; table-layout: fixed; }
@@ -61,27 +69,20 @@ body.office { font-size: 16px; }
     <label class="officer">承辦人 <input id="officer" placeholder="姓名"></label>
   </div>
   <nav>
-    <button data-view="batch" class="active">畢審總表</button>
-    <button data-view="student">學生明細</button>
-    <button data-view="ingest">AI 解析儀表板</button>
-    <button data-view="rules">規則</button>
+    <button data-view="ingest" class="active">① 資料匯入</button>
+    <button data-view="batch">② 畢審總表</button>
+    <button data-view="student">③ 學生明細</button>
+    <button data-view="rules">④ 規則</button>
   </nav>
 </header>
 <!-- 系辦端（A 組）。共用外框與樣式見 assets/common.*，變更需通知 B 組 -->
 <main>
+  <div class="card section judge" id="judge-banner" hidden>
+    <b>評審模式</b>：AI 結果為預先錄製的重播，不呼叫模型；只能解析 <code>data/samples/demo_batch/</code> 的虛構儀表板。
+    畫面上每份結果都標示原本的模型與產生時間。
+  </div>
   <!-- 畢審總表 -->
-  <section class="view active" id="view-batch">
-    <div class="card section">
-      <div class="row">
-        <label>修課紀錄 <input type="file" id="records-file" accept=".csv,text/csv"></label>
-        <label>應屆名單 <input type="file" id="roster-file" accept=".csv,text/csv"></label>
-        <button class="primary" id="upload-btn">上傳並審查</button>
-        <span class="spacer"></span>
-        <span class="hint" id="data-source"></span>
-        <button class="ghost" id="reset-btn">還原示例</button>
-      </div>
-      <div id="upload-msg"></div>
-    </div>
+  <section class="view" id="view-batch">
     <div class="grid stats" id="stats"></div>
     <div class="card">
       <div class="row" style="margin-bottom: 14px">
@@ -159,17 +160,51 @@ body.office { font-size: 16px; }
   </section>
 
   <!-- AI 解析儀表板：AI 擷取 → 承辦人對照原文修正與確認 → 才進入審查 -->
-  <section class="view" id="view-ingest">
+  <section class="view active" id="view-ingest">
     <div class="card section">
-      <h2>AI 解析儀表板</h2>
+      <h2>應屆名單與修課紀錄</h2>
+      <div class="row">
+        <label>應屆名單 <input type="file" id="roster-file" accept=".csv,text/csv"></label>
+        <label>修課紀錄 CSV <input type="file" id="records-file" accept=".csv,text/csv"></label>
+        <button class="primary" id="upload-btn">上傳並審查</button>
+        <span class="spacer"></span>
+        <span class="hint" id="data-source"></span>
+      </div>
+      <div class="row" style="margin-top: 12px">
+        <button class="ghost" id="demo-btn">載入示範批次（虛構 DEMO-D03–D08）</button>
+        <button class="ghost" id="reset-btn">還原示例</button>
+        <span class="hint">示範批次：名單 6 位、尚無修課紀錄，下方解析儀表板並確認後才進入審查。</span>
+      </div>
+      <div id="upload-msg"></div>
+    </div>
+    <div class="card section">
+      <h2>AI 解析儀表板<span class="tag">AI 擷取・待確認</span></h2>
+      <div class="row">
+        <input type="file" id="jobs-files" accept=".pdf,application/pdf" multiple aria-label="儀表板 PDF（可多選）">
+        <button class="primary" id="jobs-add">加入佇列</button>
+        <span class="spacer"></span>
+        <span class="hint" id="jobs-progress" aria-live="polite"></span>
+        <button class="ghost" id="jobs-retry-all" hidden>全部重試</button>
+        <button class="ghost" id="jobs-stop">停止全部</button>
+      </div>
+      <p class="hint" style="margin: 12px 0 0">檔名須為「學號.pdf」，學號要在應屆名單上，否則不解析並列入名單異常。
+        在背景解析<span id="jobs-workers"></span>，解析完逐份核對確認。只上傳去識別化或虛構文件，內容會送至 Gemini。</p>
+      <div id="jobs-msg" role="status" aria-live="polite"></div>
+      <table id="jobs-table" style="margin-top: 14px" hidden>
+        <thead><tr><th>學號</th><th>狀態</th><th>列數</th><th>檢查</th><th class="hide-sm">等待</th><th></th></tr></thead>
+        <tbody id="jobs-rows"></tbody>
+      </table>
+    </div>
+    <details class="card section fold">
+      <summary>單份解析（不在名單上的學生，或重新解析一份）</summary>
       <div class="row">
         <input type="file" id="dash-file" accept=".pdf,application/pdf" aria-label="儀表板 PDF">
         <input id="dash-sid" placeholder="學號（去識別化代號）" aria-label="學號">
         <button class="primary" id="dash-extract">解析</button>
       </div>
       <p class="hint" style="margin: 12px 0 0">只上傳去識別化或虛構文件，內容會送至 Gemini。</p>
-      <div id="dash-msg"></div>
-    </div>
+    </details>
+    <div id="dash-msg"></div>
     <div class="card" id="dash-draft" hidden>
       <div class="row" style="margin-bottom: 14px">
         <h2 style="margin: 0">待確認紀錄<span class="tag">AI 擷取・待確認</span></h2>
@@ -177,6 +212,7 @@ body.office { font-size: 16px; }
         <label>入學學年度 <input id="dash-cohort" style="width: 80px"></label>
       </div>
       <p class="hint" id="dash-declared" style="margin: 0 0 12px"></p>
+      <div id="dash-trace"></div>
       <div id="dash-cross"></div>
       <div id="dash-issues"></div>
       <div style="overflow-x: auto; margin-top: 8px">
