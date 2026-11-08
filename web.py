@@ -73,6 +73,7 @@ class Handler(BaseHTTPRequestHandler):
                     skip=query.get("skip", []),
                     away=query.get("away", []),
                     away_credits=int(query.get("away_credits", ["15"])[0]),
+                    current=query.get("current", [None])[0],
                 ))
             if len(route) == 2 and route[0] == "courses":
                 return self._json(service.course_impact(route[1]))
@@ -169,7 +170,8 @@ class Handler(BaseHTTPRequestHandler):
             elif route.startswith("api/twin/") and route.endswith("/ask"):
                 if not isinstance(body.get("question"), str):
                     return self._json({"error": "缺少欄位：question"}, 400)
-                return self._json(service.ask(unquote(route.split("/")[2]), body["question"]))
+                return self._json(service.ask(unquote(route.split("/")[2]), body["question"],
+                                              body.get("current")))
             elif route == "api/reset":
                 service.load_data(
                     (STUDENTS_PATH.name, STUDENTS_PATH.read_text(encoding="utf-8-sig")),
