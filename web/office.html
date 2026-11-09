@@ -3,14 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>系辦監控台・Academic Twin</title>
+<title>行政端・Academic Twin</title>
 <link rel="stylesheet" href="assets/common.css">
 <style>
 /* 系辦端專屬樣式（共用 common.css 不動）：簡約、留白、不用小字 */
 body.office { font-size: 16px; }
 .office .sub { font-size: 15px; } .office .req .cite { font-size: 14px; }
 .office .course code, .office .course .code { font-size: 13px; } .office .side-tag { font-size: 14px; }
-.office input[type=file] { border: 0; padding: 0; background: none; max-width: 260px; }
+/* 原生檔案欄位隱藏，改用 office.js 產生的「選擇 PDF／CSV」按鈕＋檔名 */
+.office input[type=file] { display: none; }
+.office .file-name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.office .file-name:empty { display: none; }
+/* 系、學年度與規則來源每頁都一樣，系辦端不重複顯示（學生端照舊） */
+.office #program { display: none; }
+.office details.trace > summary { cursor: pointer; }
 .office .small, .office .muted.small, .office th, .office .chip, .office .issue, .office details summary,
 .office .legend, .office .course, .office .review-form select, .office .review-form input, .office .review-form button,
 .office .upload label { font-size: 15px; }
@@ -26,7 +32,6 @@ body.office { font-size: 16px; }
 .office .tag { display: inline-block; padding: 2px 12px; border-radius: 999px; font-size: 14px; font-weight: 600;
   background: var(--warn-soft); color: var(--warn); vertical-align: middle; margin-left: 8px; }
 .office .stat { padding: 18px 20px; } .office .stat .n { font-size: 32px; }
-.office .flags { display: flex; flex-wrap: wrap; gap: 6px; }
 .office .flag { padding: 2px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-size: 14px; }
 .office .confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 18px;
   padding-top: 18px; border-top: 1px solid var(--line); }
@@ -146,9 +151,9 @@ nav .nav-tools { margin-left: auto; }
 <header>
   <div class="bar">
     <div class="brand"><a href="./">NCU <span>Academic Twin</span></a></div>
-    <span class="side-tag">系辦監控台</span>
+    <span class="side-tag">行政端</span>
     <div class="sub" id="program"></div>
-    <button class="ai-switch" id="ai-toggle" title="停止或恢復系辦端所有 AI 呼叫（解析、擬稿、草擬規則）">
+    <button class="ai-switch" id="ai-toggle" title="停止或恢復行政端所有 AI 呼叫（解析、擬稿、草擬規則）">
       <span class="dot"></span><span id="ai-label">AI 運作中</span></button>
   </div>
   <nav>
@@ -246,20 +251,11 @@ nav .nav-tools { margin-left: auto; }
       <div class="row" style="margin-bottom: 14px">
         <h2 style="margin: 0">畢業資格審查</h2>
         <span class="spacer"></span>
-        <select id="flag-filter" aria-label="提示篩選">
-          <option value="">全部提示</option>
-          <option value="any">有疑似誤判</option>
-          <option value="overflow">超修學分</option>
-          <option value="repeatable">可重複修習</option>
-          <option value="substitution_pending">待辦抵修</option>
-          <option value="actions">有需辦理事項</option>
-          <option value="none">沒有提示</option>
-        </select>
         <span class="hint" id="batch-filter-count" aria-live="polite"></span>
         <a class="ghost" href="/api/export.csv" download style="text-decoration: none">匯出 CSV</a>
       </div>
       <table>
-        <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th>原因</th><th>提示</th></tr></thead>
+        <thead><tr><th>學號</th><th>判定</th><th>總學分</th><th class="hide-sm">規則符合</th><th>原因</th></tr></thead>
         <tbody id="batch-rows"></tbody>
       </table>
     </div>
@@ -403,7 +399,7 @@ nav .nav-tools { margin-left: auto; }
       <h2>應屆名單與修課紀錄</h2>
       <div class="row">
         <label>應屆名單 <input type="file" id="roster-file" accept=".csv,text/csv"></label>
-        <label>修課紀錄 CSV <input type="file" id="records-file" accept=".csv,text/csv"></label>
+        <label>修課紀錄 <input type="file" id="records-file" accept=".csv,text/csv"></label>
         <button class="primary" id="upload-btn">上傳並審查</button>
         <span class="spacer"></span>
         <span class="hint" id="data-source"></span>
