@@ -18,10 +18,11 @@ async function loadStudent(id) {
   $("#student-next").textContent = `下一學期：${s.next_term}`;
   try { history.replaceState(null, "", `?${DEMO ? "demo&" : ""}id=${encodeURIComponent(s.id)}`); } catch {}
   renderBreakdown(s, target ?? 0);
-  renderSummary(s);
+  const summary = renderSummary(s);
   renderFlags(s);
   renderActions(s);
   renderIssues(s);
+  renderTiles(s, summary, target);
   // 待確認（英檢）不顯示系辦用語
   renderRequirements(s, (r) => flagNote(s, r), "");
   foldSatisfied();
@@ -118,6 +119,7 @@ function renderSummary(s) {
   $("#summary").innerHTML = (rows.length
     ? rows.map(([n, cls, label, text]) => `<div class="issue ${cls}"><b>${label}（${n}）</b><div class="small">${text}</div></div>`).join("")
     : `<div class="issue PASS"><b>✔ 目前的修課紀錄符合所有已建檔的畢業條件</b></div>`);
+  return { real, viaSubstitution, systemGap, unsure };
 }
 
 function renderIssues(s) {
@@ -125,9 +127,47 @@ function renderIssues(s) {
   iss.failed.forEach((r) => out.push(`<div class="issue FAIL">✘ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）${r.grade} 分不及格，尚未重修通過</div>`));
   iss.review.forEach((r) => out.push(`<div class="issue MANUAL_REVIEW">🔍 <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）採計方式待承辦人確認</div>`));
   iss.dept_unverified.forEach((r) => out.push(`<div class="issue WARNING">⚠ <b>${esc(r.code)} ${esc(r.name)}</b>（${r.term}）暫以本系選修 ${r.credits} 學分計，待承辦人確認</div>`));
-  $("#issues").innerHTML = out.join("");
-  $("#issues-card").style.display = out.length ? "" : "none";
+  $("#issues").innerHTML = out.join("") || `<div class="muted small">目前沒有需要注意的修課紀錄。</div>`;
 }
+
+// ---------- 上排摘要磚：只數審查結果裡的項目（件數），不計算學分、不改判定 ----------
+let TILE_PANE = "summary";
+function renderTiles(s, sum, target) {
+  const set = (key, cls, value, sub = "") => {
+    const tile = document.querySelector(`.tile[data-pane="${key}"]`);
+    tile.className = `tile ${cls}`;
+    tile.querySelector(".t-value").innerHTML = value;
+    const subEl = tile.querySelector(".t-sub");
+    if (subEl) subEl.textContent = sub;
+  };
+  const unit = (n, u) => `${n}<small>${u}</small>`;
+  // 目前狀態：真正缺修為主數字，其餘類別列在說明
+  const others = [
+    [sum.viaSubstitution.length, "抵修後可能符合"], [sum.systemGap.length, "系統可能顯示不同"], [sum.unsure, "待確認"],
+  ].filter(([n]) => n).map(([n, t]) => `${t} ${n}`).join("・");
+  if (sum.real.length) set("summary", "fail", `✘ ${unit(sum.real.length, " 條未達成")}`, others);
+  else if (others) set("summary", "warn", "⚑ 需確認", others);
+  else set("summary", "pass", "✔ 全部符合", "符合所有已建檔的畢業條件");
+  const flagTypes = [...new Set(s.flags.map((f) => flagLabel(f.type)))].join("、");
+  set("flags", s.flags.length ? "warn" : "none", unit(s.flags.length, " 項"), s.flags.length ? flagTypes : "沒有偵測到");
+  set("actions", s.actions.length ? "warn" : "none", unit(s.actions.length, " 件"),
+    s.actions.length ? s.actions.map((a) => a.title).join("、") : "沒有要辦理的事項");
+  const credits = $("#tile-credits");
+  credits.innerHTML = target == null ? unit(s.total_credits, " 學分") : `${s.total_credits}<small> / ${target} 學分</small>`;
+  credits.parentElement.className = `tile ${target != null && s.total_credits >= target ? "pass" : "info"}`;
+  const iss = s.issues, nIssues = iss.failed.length + iss.review.length + iss.dept_unverified.length;
+  const issueSub = [[iss.failed.length, "不及格"], [iss.review.length + iss.dept_unverified.length, "採計待確認"]]
+    .filter(([n]) => n).map(([n, t]) => `${t} ${n}`).join("・");
+  set("issues", nIssues ? (iss.failed.length ? "fail" : "review") : "none", unit(nIssues, " 筆"), issueSub || "沒有");
+  showPane(TILE_PANE);
+}
+
+function showPane(key) {
+  TILE_PANE = key;
+  document.querySelectorAll(".tile").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.pane === key)));
+  document.querySelectorAll(".tile-detail .pane").forEach((p) => { p.hidden = p.dataset.pane !== key; });
+}
+document.querySelectorAll(".tile").forEach((t) => t.addEventListener("click", () => showPane(t.dataset.pane)));
 
 $("#student-select").addEventListener("change", (e) => loadStudent(e.target.value));
 
