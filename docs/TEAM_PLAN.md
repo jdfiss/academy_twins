@@ -172,6 +172,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_benchmark.py` | A |
 | `tests/test_planner.py` | B |
 | `tests/test_enrollment.py` | B |
+| `tests/test_demo_student.py`（學生端 demo 腳本的預期數字） | B |
 | `tests/test_contract.py`（交接格式與兩端一致性） | B 維護、A 審查；第 0 步已建立基本版 |
 | `tests/fixtures/curriculum_sample.json` | A（B 需新增測試情境時發 PR） |
 
@@ -235,7 +236,7 @@ A 組 flags 虛構示範使用 `data/curriculum_demo_flags.json` 與 `data/stude
 | 1 | 兩端一致性測試 | 基本版已在 `tests/test_contract.py`；**flags 情境已補**（A 組虛構示範資料），年度載入情境待 A 組完成 | 同一份資料在兩端判定完全相同；納入每次測試 | 實證性 | A 組 flags、年度載入 |
 | 2 | 規劃器改用入學年度規則 | 規劃與 What-if 使用學生自己年度的規則庫 | 只限已確認的年度；缺年度規則時明示，不套其他年度 | 可行性 | A 組完成依年度載入 |
 | 2 | 學生端實證 | AI 問題轉參數的正確率；小型使用測試（如看完頁面能否正確說出自己缺什麼、該找誰辦） | 報告列樣本數、題組與限制；使用測試以虛構學生資料進行，不使用受測者真實成績 | 實證性 | 測試題組、受測同學 |
-| 2 | 比賽素材 | 學生端 demo 腳本、影片學生端段落、主導 A0 海報 | 11-06 前固定展示案例 | — | 展示案例 |
+| 2 | 比賽素材 | **學生端 demo 腳本已完成**（2026-11-09，[DEMO_STUDENT.md](DEMO_STUDENT.md)：主角 DEMO-D03，與系辦端同一位學生；影片數字由 `tests/test_demo_student.py` 鎖定）；影片學生端段落、主導 A0 海報 | 11-06 前固定展示案例 | — | 展示案例 |
 | 賽後 | 停開課反映、延畢預警、更多情境、多方案比較、輔系等加修試算 | 見 [學生端往後方向](STUDENT_REQUIREMENTS.md#現況與往後方向) | — | — | — |
 
 B 組需要特定情境的虛構學生時，比照 `data/students/` 規定發 PR 給 A 組；這些案例也納入 A 組的實證案例集。
