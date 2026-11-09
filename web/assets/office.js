@@ -1,5 +1,5 @@
 // 系辦端（A 組）：監控台（分流、批次放行與抽查、AI 處理流程、指標）、收件匣、學生明細與覆核、規則、工具
-let BATCH = [], statusFilter = null, flagFilter = "", JOBS = null, jobFilter = null;
+let BATCH = [], statusFilter = null, JOBS = null, jobFilter = null;
 const FLAG_LABELS = { overflow: "超修學分", repeatable: "可重複修習", substitution_pending: "待辦抵修" };
 const show = setupTabs("twin-office-view");
 // 網址可直接指定分頁（如 office.html#inbox），方便錄影與評審開啟；舊網址 #ingest、#batch 導向監控台
@@ -15,12 +15,32 @@ document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click
 const go = (view) => { show(view); history.replaceState(null, "", `#${view}`); };
 
 // ---------- 共用：監控者與訊息 ----------
-// 不再要求填姓名：紀錄上的操作者固定為「系辦」（後端仍要求非空，紀錄格式不變）
-const officer = () => "系辦";
+// 不再要求填姓名：紀錄上的操作者固定為「教務處」（後端仍要求非空，紀錄格式不變）
+const officer = () => "教務處";
 
 function msg(el, html, kind = "") {
   $(el).innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : "";
 }
+
+// 檔案欄位：瀏覽器內建的「沒有選擇檔案」沒有資訊量，改成一個「選擇 PDF／CSV」按鈕，選了才顯示檔名。
+// 原本的 <input type=file> 與 id 保留（隱藏），其餘程式照舊讀 .files
+function fileName(input) {
+  const span = input.nextElementSibling?.nextElementSibling;
+  if (!span?.classList.contains("file-name")) return;
+  const files = [...input.files];
+  span.textContent = files.length > 1 ? `${files.length} 個檔案` : files[0]?.name || "";
+}
+document.querySelectorAll("input[type=file]").forEach((input) => {
+  const btn = document.createElement("button"), span = document.createElement("span");
+  btn.type = "button";
+  btn.className = "ghost file-btn";
+  btn.textContent = /pdf/i.test(input.accept) ? "選擇 PDF" : "選擇 CSV";
+  btn.addEventListener("click", () => input.click());
+  span.className = "file-name hint";
+  input.after(btn, span);
+  input.addEventListener("change", () => fileName(input));
+  new MutationObserver(() => { btn.disabled = input.disabled; }).observe(input, { attributes: true, attributeFilter: ["disabled"] });
+});
 
 // 伺服器時間（ISO）顯示為本地「YYYY-MM-DD HH:MM」
 function when(iso) {
@@ -66,35 +86,25 @@ function renderBatch() {
   BATCH.forEach((s) => counts[s.status]++);
   $("#stats").innerHTML = Object.keys(counts).map((k) => `
     <div class="card stat ${statusFilter === k ? "selected" : ""}" data-status="${k}">
-      <div>${chip(k)}</div><div class="n">${counts[k]}</div>
+      <div><span class="chip ${k}">${STATUS[k].replace(/^\S+\s/, "")}</span></div><div class="n">${counts[k]}</div>
     </div>`).join("");
   document.querySelectorAll(".stat").forEach((el) => el.addEventListener("click", () => {
     statusFilter = statusFilter === el.dataset.status ? null : el.dataset.status;
     renderBatch();
   }));
-  const rows = BATCH.filter((s) => {
-    if (statusFilter && s.status !== statusFilter) return false;
-    const flags = s.flags || [];
-    if (flagFilter === "any") return flags.length > 0;
-    if (flagFilter === "actions") return s.action_count > 0;
-    if (flagFilter === "none") return !flags.length && !s.action_count;
-    return !flagFilter || flags.some((f) => f.type === flagFilter);
-  });
-  $("#batch-filter-count").textContent = `${rows.length} / ${BATCH.length} 位`;
+  const rows = BATCH.filter((s) => !statusFilter || s.status === statusFilter);
+  // 沒篩選時人數就是整張表，不重複顯示
+  $("#batch-filter-count").textContent = statusFilter ? `${rows.length} / ${BATCH.length} 位` : "";
   $("#batch-rows").innerHTML = rows.map((s) => {
     const pct = s.total_required ? Math.min(100, (s.total_credits / s.total_required) * 100) : 0;
-    const types = [...new Set((s.flags || []).map((f) => f.type))];
     return `<tr data-id="${esc(s.id)}">
       <td><b>${esc(s.id)}</b></td>
       <td>${chip(s.status)}</td>
       <td><div>${s.total_credits}</div><div class="meter ${pct >= 100 ? "ok" : ""}"><div style="width:${pct}%"></div></div></td>
       <td class="hide-sm">${s.satisfied} / ${s.requirements}</td>
       <td>${reasonList(s.reasons)}${s.reviewed ? `<div class="hint">已覆核 ${s.reviewed} 筆</div>` : ""}</td>
-      <td><div class="flags">${types.map((t) => `<span class="flag">${esc(FLAG_LABELS[t] || t)}</span>`).join("")}
-        ${s.action_count ? `<span class="flag">待辦 ${s.action_count}</span>` : ""}</div>
-        ${!types.length && !s.action_count ? '<span class="hint">—</span>' : ""}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="6" class="empty">沒有符合的學生</td></tr>`;
+  }).join("") || `<tr><td colspan="5" class="empty">沒有符合的學生</td></tr>`;
   document.querySelectorAll("#batch-rows tr[data-id]").forEach((tr) =>
     tr.addEventListener("click", () => { loadStudent(tr.dataset.id); go("student"); }));
 }
@@ -105,11 +115,6 @@ function reasonList(reasons) {
   const more = reasons.length - 3;
   return reasons.slice(0, 3).map(esc).join("<br>") + (more > 0 ? `<div class="hint">另 ${more} 項</div>` : "");
 }
-
-$("#flag-filter").addEventListener("change", (e) => {
-  flagFilter = e.target.value;
-  renderBatch();
-});
 
 function renderRoster(rows) {
   $("#roster-card").hidden = !rows.length;
@@ -222,8 +227,6 @@ async function loadData() {
   renderRoster(roster);
   fillStudentSelect();
   statusFilter = null;
-  flagFilter = "";
-  $("#flag-filter").value = "";
   renderBatch();
   renderEmpty();
   const first = BATCH.find((s) => s.status === "FAIL") || BATCH[0];
@@ -237,6 +240,7 @@ async function sendData(path, payload, el = "#upload-msg") {
     await loadData();
     msg(el, "已更新審查結果。", "ok");
     $("#records-file").value = $("#roster-file").value = "";
+    fileName($("#records-file")); fileName($("#roster-file"));
     return true;
   } catch (e) {
     msg(el, errorList(e) + "<div>目前資料維持不變。</div>", "err");
@@ -261,7 +265,7 @@ async function loadDemo(el) {
     $("#dash-draft").hidden = true;
     await Promise.all([refreshJobs(), refreshInbox(), loadMetrics()]);
     go("monitor");
-    $("#jobs-files").focus();
+    $("#jobs-files").nextElementSibling.focus();
   }
 }
 $("#demo-btn").addEventListener("click", () => loadDemo("#upload-msg"));
@@ -589,6 +593,7 @@ $("#jobs-add").addEventListener("click", async () => {
     }
   }
   $("#jobs-files").value = "";
+  fileName($("#jobs-files"));
   $("#jobs-add").disabled = false;
   const lines = [`已加入佇列 ${added.length} 份`];
   if (unmatched.length) lines.push(`學號不在應屆名單、未解析 ${unmatched.length} 份：${unmatched.map(esc).join("、")}（已列入名單異常）`);
@@ -721,12 +726,15 @@ async function openMail(id) {
   try { m = await api(`/api/inbox/${encodeURIComponent(id)}`); } catch (e) { return msg("#inbox-msg", esc(e.message), "err"); }
   const t = m.trace;
   const open = m.state === "drafted" || m.state === "manual";
-  const trace = t ? `<div class="trace"><b>AI 做了什麼</b>${t.replay ? ` <span class="replay">重播：${esc(t.replay.model)}・${esc(when(t.replay.generated_at))}產生</span>` : ""}
+  // 日常核准用不到細節：收成一行，點開才看；有被擋下的步驟時預設展開
+  const traceBad = t && (t.invalid_tools || t.grounding === "failed" || t.proposals_dropped);
+  const trace = t ? `<details class="trace" ${traceBad ? "open" : ""}><summary><b>AI 做了什麼</b>
+      <span class="hint">（${t.rounds} 輪・${Math.round(t.wait_seconds)} 秒）</span></summary>${t.replay ? ` <span class="replay">重播：${esc(t.replay.model)}・${esc(when(t.replay.generated_at))}產生</span>` : ""}
       <ol>${t.tools.map((x) => `<li>${esc(TOOL_LABELS[x] || x)}</li>`).join("")}
         ${t.invalid_tools ? `<li class="bad">要求白名單外的工具 ${t.invalid_tools} 次，已拒絕</li>` : ""}
         <li class="${t.grounding === "failed" ? "bad" : ""}">${esc(GROUNDING[t.grounding] || t.grounding)}</li>
         ${t.proposals_dropped ? `<li class="bad">丟棄不合法的覆核建議 ${t.proposals_dropped} 項</li>` : ""}</ol>
-      <span class="hint">${t.rounds} 輪・${t.wait_seconds} 秒・${esc(t.model || "")}</span></div>` : "";
+      <span class="hint">${t.rounds} 輪・${t.wait_seconds} 秒・${esc(t.model || "")}</span></details>` : "";
   const proposals = m.proposals.map((p, i) => `<div class="issue MANUAL_REVIEW">🔍 AI 覆核建議：<b>${esc(p.code)}</b>（${esc(p.term)}）
       → ${esc(META.review_actions[p.action] || p.action)}${p.category ? `「${esc(p.category)}」` : ""}
       <div class="hint">理由：${esc(p.reason || "—")}</div>

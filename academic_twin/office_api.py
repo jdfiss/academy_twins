@@ -46,7 +46,7 @@ class OfficeMixin(MonitorMixin, InboxMixin):
                 self._restore(state)
             except Exception as e:  # 規則庫或格式改變導致接不上：保留檔案供檢查，以目前資料啟動
                 (directory / "state.json").replace(directory / "state.bad.json")
-                reason = f"系辦端存檔無法接續，已改名為 state.bad.json：{e}"
+                reason = f"教務處端存檔無法接續，已改名為 state.bad.json：{e}"
         self._state_dir = directory
         self._save_state()
         return reason
@@ -360,7 +360,7 @@ class OfficeMixin(MonitorMixin, InboxMixin):
         with _BATCH_LOCK:
             batch = self.__dict__.get("_dashboard_batch")
         if batch is not None and batch.paused:
-            raise dashboard_batch.AIPaused("系辦端 AI 已由承辦人停用，請按「恢復 AI」後再試")
+            raise dashboard_batch.AIPaused("教務處端 AI 已由承辦人停用，請按「恢復 AI」後再試")
 
     def dashboard_batch_add(self, filename: str, pdf: bytes) -> dict:
         """檔名「<學號>.pdf」；學號須在應屆名單上才排入解析。"""

@@ -81,9 +81,9 @@ def load(directory: Path) -> tuple[dict | None, str]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        return None, f"系辦端存檔無法讀取，已略過：{e}"
+        return None, f"教務處端存檔無法讀取，已略過：{e}"
     if not isinstance(data, dict) or data.get("version") != VERSION:
-        return None, "系辦端存檔版本不符，已略過"
+        return None, "教務處端存檔版本不符，已略過"
     return data, ""
 
 

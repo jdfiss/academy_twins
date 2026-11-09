@@ -67,7 +67,7 @@ def print_student(kb, sid: str, report: AuditReport, reviews: ReviewStore) -> No
     for rec in t.review:
         print(f"  ? {rec.code} {rec.name}（{rec.term}，類別「{rec.category}」）需人工判斷如何採計")
     for rec in t.dept_unverified:
-        print(f"  ⚠ {rec.code} {rec.name}（{rec.term}）不在規則庫，暫以本系選修 {rec.credits} 學分計，請系辦確認")
+        print(f"  ⚠ {rec.code} {rec.name}（{rec.term}）不在規則庫，暫以本系選修 {rec.credits} 學分計，請教務處確認")
     for rec in t.failed:
         print(f"  ! {rec.code} {rec.name}（{rec.term}）不及格，尚未重修通過")
     for rec, _ in t.reviewed:
@@ -76,7 +76,7 @@ def print_student(kb, sid: str, report: AuditReport, reviews: ReviewStore) -> No
 
 
 def print_batch(kb, reports: dict[str, AuditReport], check: RosterCheck) -> None:
-    print(f"系辦批次畢審：{kb.program} {kb.cohort} 學年度，應屆名單 {check.roster_size} 位，審查 {len(reports)} 位\n")
+    print(f"教務處批次畢審：{kb.program} {kb.cohort} 學年度，應屆名單 {check.roster_size} 位，審查 {len(reports)} 位\n")
     for sid, report in reports.items():
         print(f"  {sid}  {STATUS_LABEL[report.status]:<18} {'；'.join(reasons(report)) or '全部符合'}")
     print_roster_anomalies(check, kb.cohort)
@@ -165,7 +165,7 @@ def main(argv: list[str]) -> None:
     if args.bottlenecks:
         return print_bottlenecks(kb, graph)
     if args.assumptions:
-        print("規則庫假設（待系辦確認）：")
+        print("規則庫假設（待教務處確認）：")
         for i, a in enumerate(kb.assumptions, 1):
             print(f"  {i}. {a}")
         return

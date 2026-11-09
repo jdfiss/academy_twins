@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>教務處端自動示範</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
+  #stage { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  #cursor { position: fixed; left: 0; top: 0; width: 26px; height: 26px; z-index: 10; pointer-events: none;
+    transform: translate(60vw, 40vh); transition: transform 600ms cubic-bezier(.25, .8, .3, 1); filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+  .ripple { position: fixed; z-index: 9; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; pointer-events: none;
+    border: 3px solid #2f6fdf; animation: ripple 480ms ease-out forwards; }
+  @keyframes ripple { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+  #caption { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 8; max-width: 80vw;
+    background: rgba(20, 24, 33, .86); color: #fff; font: 600 18px/1.5 "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    padding: 10px 20px; border-radius: 10px; opacity: 0; transition: opacity 300ms; pointer-events: none; }
+  #caption.on { opacity: 1; }
+  #panel { position: fixed; top: 12px; right: 12px; z-index: 11; background: #fff; border: 1px solid #ccd; border-radius: 10px;
+    padding: 12px 14px; font: 14px/1.6 "Microsoft JhengHei", sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,.15); width: 250px; }
+  #panel.hide { opacity: 0; pointer-events: none; transition: opacity 400ms; }
+  #panel button { font: inherit; padding: 6px 14px; border-radius: 8px; border: 0; background: #2f6fdf; color: #fff; cursor: pointer; }
+  #panel label { display: block; margin: 6px 0; }
+  #status { color: #666; font-size: 13px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<iframe id="stage" src="office.html#monitor" title="教務處端"></iframe>
+<svg id="cursor" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 2l7.5 19 2.6-7.4L20.5 11z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>
+<div id="caption"></div>
+<div id="panel">
+  <b>教務處端自動示範</b>（照 docs/DEMO_OFFICE.md）
+  <label>速度 <select id="speed"><option value="1.6">慢</option><option value="1" selected>正常</option><option value="0.6">快</option></select></label>
+  <label><input type="checkbox" id="captions" checked> 顯示字幕（錄影配旁白時關掉）</label>
+  <label><input type="checkbox" id="hidepanel" checked> 開始後隱藏這個面板</label>
+  <button id="go">開始</button>
+  <div id="status">需以評審模式啟動：ACADEMIC_TWIN_REPLAY=only python web.py</div>
+</div>
+<script src="autopilot-data.js"></script>
+<script>
+"use strict";
+const frame = document.getElementById("stage"), cursor = document.getElementById("cursor");
+const cap = document.getElementById("caption"), status = document.getElementById("status");
+let K = 1, CAPTIONS = true;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms * K));
+const D = () => frame.contentDocument, W = () => frame.contentWindow;
+const $ = (sel) => D().querySelector(sel);
+const visible = (el) => el && el.offsetParent !== null && !el.closest("[hidden]");
+
+async function waitFor(fn, what, timeout = 90000) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    const v = fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`等不到：${what}`);
+}
+function say(text) {
+  status.textContent = text;
+  if (!CAPTIONS) return;
+  cap.textContent = text;
+  cap.classList.toggle("on", !!text);
+}
+async function reveal(el) {
+  const r = el.getBoundingClientRect(), h = W().innerHeight;
+  if (r.top < 70 || r.bottom > h - 90) { el.scrollIntoView({ block: "center", behavior: "smooth" }); await sleep(650); }
+}
+async function point(el) {
+  await reveal(el);
+  const r = el.getBoundingClientRect();
+  const x = r.left + Math.min(r.width / 2, 60), y = r.top + r.height / 2;
+  cursor.style.transitionDuration = `${Math.round(600 * K)}ms`;
+  cursor.style.transform = `translate(${x - 3}px, ${y - 2}px)`;
+  await sleep(650);
+  return { x, y };
+}
+async function click(el, label) {
+  if (typeof el === "string") el = await waitFor(() => { const e = $(el); return visible(e) && !e.disabled && e; }, label || el);
+  const { x, y } = await point(el);
+  const dot = document.createElement("div");
+  dot.className = "ripple"; dot.style.left = `${x}px`; dot.style.top = `${y}px`;
+  document.body.appendChild(dot); setTimeout(() => dot.remove(), 600);
+  el.click();
+  await sleep(350);
+}
+function pdf(name) {
+  const bin = atob(window.AUTOPILOT_PDFS[name]), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new (W().File)([bytes], name, { type: "application/pdf" });
+}
+async function chooseFiles(sel, names) {
+  const input = await waitFor(() => $(sel), sel);
+  await point(input);
+  const dt = new (W().DataTransfer)();
+  names.forEach((n) => dt.items.add(pdf(n)));
+  input.files = dt.files;
+  input.dispatchEvent(new (W().Event)("change", { bubbles: true }));
+  await sleep(500);
+}
+const nav = (view) => click(`header nav button[data-view="${view}"]`, `分頁 ${view}`);
+const mail = (subject) => waitFor(() => [...D().querySelectorAll("#inbox-list .mail")]
+  .find((m) => m.querySelector(".subj")?.textContent.trim() === subject), `信件 ${subject}`);
+const mailState = (subject) => [...D().querySelectorAll("#inbox-list .mail")]
+  .find((m) => m.querySelector(".subj")?.textContent.trim() === subject)?.querySelector(".mstate")?.className || "";
+
+async function run() {
+  await waitFor(() => D().readyState === "complete" && $("#empty-demo"), "教務處端載入");
+
+  say("載入示範批次：6 位虛構應屆生");
+  await nav("monitor");
+  if (visible($("#empty-demo"))) await click("#empty-demo");
+  else { await nav("tools"); await click("#demo-btn"); await nav("monitor"); }
+  await waitFor(() => visible($("#empty-demo")) || !$("#jobs-rows tr"), "清空的監控台");
+  await sleep(800);
+
+  say("丟進 6 份儀表板，AI 在背景逐份處理");
+  await chooseFiles("#jobs-files", ["DEMO-D03.pdf", "DEMO-D04.pdf", "DEMO-D05.pdf", "DEMO-D06.pdf", "DEMO-D07.pdf", "DEMO-D08.pdf"]);
+  await click("#jobs-add");
+  await waitFor(() => $('#release-panel [data-release="start"]'), "分流完成");
+  say("每份過四個檢查點：擷取、交叉比對、原文核對、規則檢查");
+  await point($("#jobs-table")); await sleep(2200);
+  say("5 份建議放行，1 份要人核對");
+  await point($("#release-panel")); await sleep(1800);
+
+  say("批次確認前，伺服器隨機抽 1 份要人逐列核對");
+  await click('#release-panel [data-release="start"]');
+  await click('#release-panel [data-open]', "抽查那份");
+  await waitFor(() => visible($("#dash-draft")), "核對面板");
+  await point($("#dash-rows")); await sleep(1800);
+  say("沒有要改的地方：勾選已對照原文，確認送入審查");
+  await click("#dash-checked"); await click("#dash-confirm");
+  await waitFor(() => $('#release-panel [data-release="finish"]'), "抽查完成");
+  say("抽查沒問題，才放行其餘 4 份");
+  await click('#release-panel [data-release="finish"]');
+  await waitFor(() => $('#jobs-rows [data-open="DEMO-D07"]'), "剩下 D07");
+  await sleep(1000);
+
+  say("DEMO-D07：主模型改用備援後與第二模型相同，無法交叉驗證，請人對照原文");
+  await click('#jobs-rows [data-open="DEMO-D07"]');
+  await waitFor(() => visible($("#dash-draft")), "D07 核對面板");
+  await point($("#dash-issues")); await sleep(2600);
+  await click("#dash-checked"); await click("#dash-confirm");
+  await waitFor(() => !$('#jobs-rows [data-open="DEMO-D07"]'), "D07 確認");
+  await sleep(1000);
+
+  say("學生來信：AI 分類、只查寄件人自己的審查結果、擬稿");
+  await nav("inbox");
+  await click("#inbox-demo");
+  await waitFor(() => D().querySelectorAll("#inbox-list .mail").length >= 10, "示範信件");
+  await click("#inbox-process");
+  await waitFor(() => !D().querySelector("#inbox-list .mstate.new, #inbox-list .mstate.processing")
+    && D().querySelectorAll("#inbox-list .mstate.drafted").length >= 7, "擬稿完成");
+  say("10 封裡 7 封擬好稿，3 封屬於承辦人職權，轉人工");
+  await point($("#inbox-list")); await sleep(2200);
+
+  say("每個數字都要在查到的資料裡找得到；按下送出的是人");
+  await click(await mail("我可以畢業了嗎"));
+  await waitFor(() => $('#inbox-detail [data-act="approve"]'), "擬稿");
+  await point($("#inbox-detail .trace") || $("#mail-reply")); await sleep(2400);
+  await click('#inbox-detail [data-act="approve"]');
+  await waitFor(() => mailState("我可以畢業了嗎").includes("replied"), "已回覆");
+  await sleep(800);
+
+  say("AI 查到他校抵免待人工判斷，提出覆核建議；這種信不能批次核准");
+  await click(await mail("轉學抵免的課"));
+  await waitFor(() => $('#inbox-detail [data-prop="0"][data-accept="1"]'), "覆核建議");
+  await point($('#inbox-detail [data-prop="0"]')); await sleep(2400);
+  say("採用後審查結果馬上重算，回信重新擬稿");
+  await click('#inbox-detail [data-prop="0"][data-accept="1"]');
+  await waitFor(() => $('#inbox-detail [data-act="redraft"]') && $("#inbox-detail")?.textContent.includes("建議重新擬稿"), "需重新擬稿");
+  await sleep(1200);
+  await click('#inbox-detail [data-act="redraft"]');
+  // 重擬在背景跑；列表會自動更新，詳細頁不會，所以等列表回到「待核准」後再點開一次
+  await waitFor(() => mailState("轉學抵免的課").includes("drafted")
+    && !(D().querySelector("#inbox-list .mail.sel")?.textContent.includes("需重新擬稿")), "重擬完成");
+  await click(await mail("轉學抵免的課"));
+  await waitFor(() => $('#inbox-detail [data-act="approve"]') && !$("#inbox-detail").textContent.includes("建議重新擬稿"), "新擬稿");
+  await point($("#mail-reply")); await sleep(2200);
+
+  say("資料更正屬承辦人職權：AI 只分類，不擬內容");
+  await click(await mail("英檢其實有過"));
+  await sleep(2400);
+
+  say("AI 也能依應修科目表草擬規則，附原文出處與自動核對");
+  await nav("rules");
+  await chooseFiles("#rule-file", ["im_114_table.pdf"]);
+  await click("#rule-extract");
+  await waitFor(() => visible($("#rule-draft-panel")), "規則草稿");
+  await point($("#rule-issues")); await sleep(3000);
+  say("");
+  status.textContent = "示範完成。重跑：重新整理這頁再按開始。";
+  cursor.style.transform = "translate(96vw, 96vh)";
+}
+
+if (new URLSearchParams(location.search).has("autostart"))
+  frame.addEventListener("load", () => setTimeout(() => document.getElementById("go").click(), 800), { once: true });
+document.getElementById("go").addEventListener("click", async () => {
+  K = Number(document.getElementById("speed").value);
+  CAPTIONS = document.getElementById("captions").checked;
+  const panel = document.getElementById("panel");
+  if (document.getElementById("hidepanel").checked) panel.classList.add("hide");
+  document.getElementById("go").disabled = true;
+  try { await run(); }
+  catch (e) { panel.classList.remove("hide"); say(""); status.textContent = `停在：${e.message}`; console.error(e); }
+  finally { document.getElementById("go").disabled = false; if (status.textContent.startsWith("示範完成")) panel.classList.remove("hide"); }
+});
+</script>
+</body>
+</html>
