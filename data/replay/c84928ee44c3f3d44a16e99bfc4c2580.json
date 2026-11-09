@@ -1,19 +1,19 @@
 {
  "model": "gemini-3.5-flash",
- "generated_at": "2026-11-09T17:05:21",
- "recorded_at": "2026-11-09T17:05:21",
+ "generated_at": "2026-11-09T17:18:40",
+ "recorded_at": "2026-11-09T17:18:40",
  "fallback_from": "",
  "usage": {
   "promptTokenCount": 631,
   "candidatesTokenCount": 33,
-  "totalTokenCount": 1473,
+  "totalTokenCount": 1566,
   "promptTokensDetails": [
    {
     "modality": "TEXT",
     "tokenCount": 631
    }
   ],
-  "thoughtsTokenCount": 809,
+  "thoughtsTokenCount": 902,
   "serviceTier": "standard"
  },
  "data": {

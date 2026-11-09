@@ -145,6 +145,10 @@
 
   async function prepare() {
     await waitFor(() => typeof CURRENT !== "undefined" && CURRENT && BASE_PLAN, 30000);
+    // student.js 載入學生時把網址改成只剩 id；補回 tour，重新整理後仍是導覽模式
+    if (!new URLSearchParams(location.search).has("tour")) {
+      try { history.replaceState(null, "", `${location.search || "?"}&tour${MODE ? `=${MODE}` : ""}`); } catch {}
+    }
     const notes = [];
     if (CURRENT.id !== "DEMO-D03") notes.push(`目前學生是 ${CURRENT.id}，字幕依 DEMO-D03 撰寫，數字可能對不上。`);
     const want = expectedCourses();
@@ -218,7 +222,7 @@
     showPane("summary");
     await sleep(500);
     ring($$(".student-head"));
-    await say("系辦審完了", "學生自己也看得到同一份結果", "這位大四學生看到校務系統寫未通過", "第一個反應是", "我是不是畢不了業");
+    await say("教務處審完了", "學生自己也看得到同一份結果", "這位大四學生看到校務系統寫未通過", "第一個反應是", "我是不是畢不了業");
     unring();
 
     // 0:10–0:35 摘要磚：目前狀態 → 可能誤判 → 找承辦人
@@ -234,7 +238,7 @@
     // 0:35–0:45 畢業條件 R1 與規章依據
     const r1 = reqCard("系訂必修");
     if (r1) { await point(r1); r1.classList.add("tour-hover"); ring(r1); }
-    await say("每一條都列出缺什麼", "附上規章出處", "學分和判定全部來自系辦同一套審查引擎", "學生端不自己算");
+    await say("每一條都列出缺什麼", "附上規章出處", "學分和判定全部來自教務處同一套審查引擎", "學生端不自己算");
     r1?.classList.remove("tour-hover"); unring();
 
     // 0:45–1:10 本學期修課
@@ -301,7 +305,7 @@
     await say("結果由規劃器計算", "電子商務只在下學期開", "交換一學期", `畢業從 ${base} 延到 ${scen}`, `延後 ${delay}`);
     await say("學生在出國前就知道", "要先找系上討論怎麼調整");
     unring();
-    await say("學生端為試算", "正式結果以系辦審查為準");
+    await say("學生端為試算", "正式結果以教務處審查為準");
     caption.textContent = ""; pointer.style.opacity = 0;
     console.info(`學生端導覽結束：共 ${((performance.now() - t0) / 1000).toFixed(1)} 秒（含 AI 等待）`);
   }
