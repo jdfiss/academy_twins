@@ -104,6 +104,6 @@ def render(data: dict, program: str, cohort: int, rule_version: str, audited_at:
 <h2>修課紀錄（{len(data['records'])} 筆）</h2>
 <table><thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead><tbody>{records}</tbody></table>
 
-<p class="note">本明細由規則引擎依規則庫自動產生，規則庫仍有待系辦確認的假設；最終畢業資格以系辦審核為準。</p>
+<p class="note">本明細由規則引擎依規則庫自動產生，規則庫仍有待教務處確認的假設；最終畢業資格以教務處審核為準。</p>
 </main></body></html>
 """

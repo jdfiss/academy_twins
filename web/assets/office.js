@@ -15,8 +15,8 @@ document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click
 const go = (view) => { show(view); history.replaceState(null, "", `#${view}`); };
 
 // ---------- 共用：監控者與訊息 ----------
-// 不再要求填姓名：紀錄上的操作者固定為「系辦」（後端仍要求非空，紀錄格式不變）
-const officer = () => "系辦";
+// 不再要求填姓名：紀錄上的操作者固定為「教務處」（後端仍要求非空，紀錄格式不變）
+const officer = () => "教務處";
 
 function msg(el, html, kind = "") {
   $(el).innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : "";
