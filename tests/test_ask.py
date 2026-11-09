@@ -150,6 +150,47 @@ class AskTest(unittest.TestCase):
         self.assertNotIn("grade", fake.prompts[0])
 
 
+    def test_term_labels_this_and_next_term(self):
+        # 沒輸入本學期修課：規劃從本學期開始，本學期標「這學期」、之後一學期標「下學期」
+        labels = ask.term_labels("117-1", 114, this_term="117-1")
+        self.assertIn("這學期", labels["117-1"])
+        self.assertIn("下學期", labels["117-2"])
+        self.assertNotIn("下一學期", "".join(labels.values()))
+        # 有輸入：本學期不可選，第一個可選學期是下學期
+        labels = ask.term_labels("117-2", 114, this_term="117-1")
+        self.assertNotIn("117-1", labels)
+        self.assertIn("下學期", labels["117-2"])
+        self.assertNotIn("這學期", "".join(labels.values()))
+
+    def test_this_term_note_only_when_not_selectable(self):
+        fake = FakeLLM(reply(away_start="115-2", away_count=1), reply(away_start="115-2", away_count=1))
+        with mock.patch.object(ask.llm, "generate_json", fake):
+            ask.parse("下學期去交換", COURSES, PLANNED, ask.term_labels("115-2", 113, this_term="115-1"), "115-1")
+            ask.parse("下學期去交換", COURSES, PLANNED, ask.term_labels("115-1", 113, this_term="115-1"), "115-1")
+        self.assertIn("這學期（本學期，115-1）", fake.prompts[0])
+        self.assertNotIn("本學期修課", fake.prompts[1].split("學生的問題")[0])
+
+    def test_model_call_goes_through_replay_for_usage_and_budget(self):
+        calls = []
+
+        def fake(prompt, schema, *args, **kwargs):
+            calls.append(kwargs)
+            return reply(away_start="115-1", away_count=1)
+        with mock.patch.object(ask.replay, "generate_json", fake):
+            res = ask.parse("交換", COURSES, PLANNED, TERMS)
+        self.assertEqual(calls, [{"purpose": "ask"}])
+        self.assertNotIn("replay", res["trace"])
+
+    def test_replayed_reply_is_labelled_with_model_and_time(self):
+        played = reply(away_start="115-1", away_count=1)
+        played.replay = {"model": "gemini-x", "generated_at": "2026-11-09T10:00:00", "reason": "評審模式"}
+        with mock.patch.object(ask.replay, "generate_json", lambda *a, **k: played):
+            res = ask.parse("交換", COURSES, PLANNED, TERMS)
+        self.assertEqual(res["status"], "proposed")
+        self.assertEqual(res["trace"]["replay"], {"model": "gemini-x", "generated_at": "2026-11-09T10:00:00"})
+        self.assertTrue(res["trace"]["steps"][0]["replay"])
+        self.assertEqual(json.loads(self.log.read_text(encoding="utf-8"))["replay"]["model"], "gemini-x")
+
 class ServiceAskTest(unittest.TestCase):
     def test_proposal_uses_planned_courses_and_does_not_simulate(self):
         from academic_twin.api import AcademicTwinService
@@ -170,6 +211,21 @@ class ServiceAskTest(unittest.TestCase):
         sim = service.simulate("S002", skip=res["params"]["skip"])
         self.assertIsNotNone(sim["scenario"])
 
+
+    def test_service_marks_this_term_with_and_without_current_input(self):
+        from academic_twin.api import AcademicTwinService
+        service = AcademicTwinService()
+        this_term = service.twin("S002")["next_term"]  # 修課紀錄之後的第一個學期＝本學期
+        prompts = []
+        for current in (None, [{"code": "MT2042"}]):
+            fake = FakeLLM(reply(supported=False, reason="測試"))
+            with tempfile.TemporaryDirectory() as tmp,                     mock.patch.object(ask, "EVAL_LOG", Path(tmp) / "log.jsonl"),                     mock.patch.object(ask.llm, "generate_json", fake):
+                service.ask("S002", "下學期去交換", current)
+            prompts.append(fake.prompts[0])
+        self.assertIn(f'"{this_term}": "這學期（本學期）', prompts[0])
+        self.assertNotIn(f"本學期，{this_term}", prompts[0])
+        self.assertNotIn(f'"{this_term}":', prompts[1])
+        self.assertIn(f"這學期（本學期，{this_term}）", prompts[1])
 
 if __name__ == "__main__":
     unittest.main()

@@ -163,6 +163,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_cohort_rules.py` | A |
 | `tests/test_dashboard.py` | A |
 | `tests/test_demo_batch.py` | A |
+| `tests/test_demo_office.py`（系辦端 demo 腳本的預期數字，評審模式端到端） | A |
 | `tests/test_dashboard_batch.py` | A |
 | `tests/test_replay.py` | A |
 | `tests/test_rule_draft.py` | A |
@@ -434,6 +435,7 @@ flowchart TD
 - **短分支、常合併**：一個工作項目一條分支，做完就合併並刪除。分支存活以**一週內**為目標；超過一週還沒做完的，拆成更小的項目，先合併能用的部分。
 - **不使用長期的組別分支**（例如一直開著的 `team-a`）。兩組透過頻繁合併回 `main` 交換成果，不要等到最後才一次合併。
 - 分支命名：`<組別>/<簡短英文描述>`，組別用小寫 `a`、`b`；跨組或負責人的工作用 `shared/`。
+- **收斂期例外（2026-11-09 起至 11-11 交件，兩組對接人同意）**：最新整合版本一律在 `main`。系辦端（A 組）與共用檔案的改動直接進 `main`（測試全過後由負責人 push），不再開 `a/`、`shared/` 分支；學生端（B 組）照舊走 `b/` 分支並開 PR，由 A 組對接人審查後合併。改到另一組的檔案時，仍須事先告知對方。
 
 | 範例 | 用途 |
 |---|---|
@@ -526,7 +528,7 @@ TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
 
 ### 測試
 
-- PR 合併前全部測試須通過（目前 373 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
+- PR 合併前全部測試須通過（目前 393 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
 - 新功能要附測試，放在自己組的測試檔；新增測試檔時在 PR 說明寫明歸屬。
 - **不得為了讓測試通過而刪除或放寬對方組的測試**。對方的測試若與新需求衝突，先找對方組討論，由對方修改。
 - `tests/test_contract.py` 的兩端一致性測試失敗，一律視為阻擋合併：同一份資料在兩端必須得到相同判定。
@@ -558,7 +560,7 @@ TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
 
 組員使用 Claude Code、Codex 等 AI agent 時，agent 必須遵守本文件。repo 根目錄的 `AGENTS.md`（Codex 等工具讀取）與 `CLAUDE.md`（Claude Code 讀取）會要求 agent 開工前先讀本文件。組員要確保：
 
-- agent 知道自己屬於哪一組：分支名稱的 `a/`、`b/` 前綴即組別。不在組別分支上時，agent 應先問人。
+- agent 知道自己屬於哪一組：分支名稱的 `a/`、`b/` 前綴即組別。不在組別分支上時，agent 應先問人。收斂期（見〈分支〉）在 `main` 上工作即為系辦端（A 組）與共用改動。
 - agent 只改本組檔案；需要改對方檔案、共用檔案或交接格式時，停下來告知組員，依本節流程處理。
 - agent 不直接 push 到 `main`、不 force push、不刪改對方組的測試。
 - agent 不讀取、也不產生真實學生資料。

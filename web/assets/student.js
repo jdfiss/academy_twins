@@ -364,7 +364,9 @@ $("#ask-input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !$
 function renderAsk(res) {
   const t = res.trace;
   const steps = t.steps.filter((s) => s.step === "check").length;
-  const trace = `<div class="muted small">執行軌跡：模型 ${esc(t.model ?? "—")}・提示 ${esc(t.prompt_version)}・檢核 ${steps} 次${t.corrected ? "（自我修正 1 次後通過）" : ""}${t.to_manual ? "・轉手動" : ""}・${t.wait_seconds} 秒</div>`;
+  // 重播（評審模式或 AI 服務失敗時改用錄製結果）一律標示原本的模型與產生時間
+  const played = t.replay ? `<b>重播</b>：模型 ${esc(t.replay.model)}、產生時間 ${esc(t.replay.generated_at)}・` : "";
+  const trace = `<div class="muted small">執行軌跡：${played}模型 ${esc(t.model ?? "—")}・提示 ${esc(t.prompt_version)}・檢核 ${steps} 次${t.corrected ? "（自我修正 1 次後通過）" : ""}${t.to_manual ? "・轉手動" : ""}・${t.wait_seconds} 秒</div>`;
   if (res.status === "proposed") {
     return `<div class="issue WARNING">
         <div><b>AI 理解的模擬條件</b>（${esc(res.label)}）：</div>
@@ -406,17 +408,19 @@ async function runSim(skip, away, awayCredits) {
     const stat = (label, value, color = "inherit") =>
       `<div class="card" style="padding:10px 14px;flex:1 1 140px"><div class="muted small">${label}</div>
         <div style="font-size:22px;font-weight:700;color:${color}">${value}</div></div>`;
-    const moved = sc.impact.slice(0, -1);
+    // 交換全在預估畢業之後：impact 只有一行說明，不顯示延畢數字
+    const after = sc.away_after_graduation;
+    const moved = after ? [] : sc.impact.slice(0, -1);
     $("#sim-result").innerHTML = `
       <div class="small muted">條件：${sc.conditions.map(esc).join("；")}</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin:12px 0">
         ${stat("原本最早畢業", esc(sim.base.graduation ?? "已符合"))}
-        ${stat("模擬後最早畢業", sc.feasible ? esc(sc.graduation ?? "已符合") : "排不完", delayed ? "var(--fail)" : "var(--pass)")}
-        ${stat("延畢", !sc.feasible ? "—" : sc.delay_terms > 0 ? `${sc.delay_terms} 學期` : "不會延畢", delayed ? "var(--fail)" : "var(--pass)")}
+        ${stat("模擬後最早畢業", after ? "—" : sc.feasible ? esc(sc.graduation ?? "已符合") : "排不完", after ? "inherit" : delayed ? "var(--fail)" : "var(--pass)")}
+        ${stat("延畢", after || !sc.feasible ? "—" : sc.delay_terms > 0 ? `${sc.delay_terms} 學期` : "不會延畢", after ? "inherit" : delayed ? "var(--fail)" : "var(--pass)")}
         ${stat("被往後推的課", `${moved.length} 門`, moved.length ? "var(--warn)" : "inherit")}
       </div>
       <div class="verdict ${delayed ? "delay" : "same"}">
-        ${!sc.feasible ? esc(sc.impact.at(-1)) : delayed ? `會延畢 ${sc.delay_terms} 學期：${sim.base.graduation} → ${sc.graduation}` : `不影響畢業：仍可在 ${sc.graduation} 畢業`}
+        ${after || !sc.feasible ? esc(sc.impact.at(-1)) : delayed ? `會延畢 ${sc.delay_terms} 學期：${sim.base.graduation} → ${sc.graduation}` : `不影響畢業：仍可在 ${sc.graduation} 畢業`}
         ${moved.length ? `<ul class="impact">${moved.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
       </div>
       <div class="timeline">${renderPlan(sc, movedCodes, away)}</div>`;
