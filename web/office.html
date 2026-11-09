@@ -110,6 +110,9 @@ nav .nav-tools { margin-left: auto; }
 .office textarea.reply.unsure { border-color: var(--fail); }
 .evidence { font-size: 14px; color: var(--muted); }
 .office .stack-gap { display: grid; gap: 14px; }
+/* 收起的次要卡片：標題列跟 h2 同大小 */
+.office details.fold-card > summary { font-size: 18px; font-weight: 600; cursor: pointer; }
+.office details.fold-card > summary .hint { font-weight: 400; margin-left: 8px; }
 </style>
 </head>
 <body class="office">
@@ -158,8 +161,10 @@ nav .nav-tools { margin-left: auto; }
         <span class="hint" id="jobs-progress" aria-live="polite"></span>
         <button class="ghost" id="jobs-retry-all" hidden>全部重試</button>
       </div>
-      <p class="hint" style="margin: 12px 0 0">檔名須為「學號.pdf」，學號要在應屆名單上。每份經過四道檢查：兩個模型交叉比對、
+      <details class="fold"><summary>上傳說明</summary>
+        <p class="hint" style="margin: 8px 0 0">檔名須為「學號.pdf」，學號要在應屆名單上。每份經過四道檢查：兩個模型交叉比對、
         PDF 原文核對、規則檢查（有錯時讓 AI 重讀 1 次），再依結果分流<span id="jobs-workers"></span>。只上傳去識別化或虛構文件，內容會送至 Gemini。</p>
+      </details>
       <div id="jobs-msg" role="status" aria-live="polite"></div>
     </div>
 
@@ -231,23 +236,24 @@ nav .nav-tools { margin-left: auto; }
         <tbody id="batch-rows"></tbody>
       </table>
     </div>
-    <div class="card section" id="roster-card" hidden>
-      <h2>名單異常（未納入審查）</h2>
-      <table>
+    <!-- 次要資訊預設收起，監控台只留「要處理的事」與審查表 -->
+    <details class="card section fold-card" id="roster-card" hidden>
+      <summary>名單異常（未納入審查）<span class="hint" id="roster-count"></span></summary>
+      <table style="margin-top: 12px">
         <thead><tr><th>學號</th><th>問題</th></tr></thead>
         <tbody id="roster-rows"></tbody>
       </table>
-    </div>
+    </details>
 
-    <div class="card section">
-      <div class="row" style="margin-bottom: 10px">
-        <h2 style="margin: 0">AI 表現與人工介入</h2>
+    <details class="card section fold-card">
+      <summary>AI 表現與人工介入</summary>
+      <div class="row" style="margin: 12px 0">
+        <p class="hint" style="margin: 0" id="metrics-note"></p>
         <span class="spacer"></span>
         <button class="ghost" id="metrics-refresh">更新</button>
       </div>
-      <p class="hint" style="margin: 0 0 12px" id="metrics-note"></p>
       <div class="metrics" id="metrics"></div>
-    </div>
+    </details>
   </section>
 
   <!-- ② 收件匣：AI 擬稿，監控者核准、修改或否決 -->
@@ -257,12 +263,13 @@ nav .nav-tools { margin-left: auto; }
         <h2 style="margin: 0">學生來信<span class="tag">AI 擬稿・待核准</span></h2>
         <span class="spacer"></span>
         <select id="inbox-filter" aria-label="信件狀態篩選"></select>
-        <button class="ghost" id="inbox-demo">匯入示範信件</button>
         <button class="primary" id="inbox-process">AI 擬稿</button>
         <button class="ghost" id="inbox-approve-many" hidden></button>
       </div>
-      <p class="hint" style="margin: 12px 0 0">AI 只查寄件學生本人的審查結果；回覆中的數字、課號與承辦單位都要能在審查結果中找到，否則標示「無法確認」交給你。
-        資料更正、規章解讀與例外申請一律轉人工。核准送出只把回覆標為已回覆（可複製），不會寄信。</p>
+      <details class="fold"><summary>AI 擬稿的規則</summary>
+        <p class="hint" style="margin: 8px 0 0">AI 只查寄件學生本人的審查結果；回覆中的數字、課號與承辦單位都要能在審查結果中找到，否則標示「無法確認」交給你。
+        資料更正、規章解讀與例外申請一律轉人工。核准送出只把回覆標為已回覆（可複製），不會寄信。示範信件在「工具」分頁匯入。</p>
+      </details>
       <div id="inbox-msg" role="status" aria-live="polite"></div>
     </div>
     <div class="inbox">
@@ -379,10 +386,14 @@ nav .nav-tools { margin-left: auto; }
       </div>
       <div class="row" style="margin-top: 12px">
         <button class="ghost" id="demo-btn">載入示範批次（虛構 DEMO-D03–D08）</button>
+        <button class="ghost" id="inbox-demo">匯入示範信件</button>
         <button class="ghost" id="reset-btn">還原示例</button>
         <a class="ghost" href="/api/export.csv" download style="text-decoration: none">匯出 CSV</a>
       </div>
-      <p class="hint" style="margin: 12px 0 0">示範批次：名單 6 位、尚無修課紀錄，到監控台解析儀表板並確認後才進入審查；同時清空收件匣。</p>
+      <details class="fold"><summary>示範資料說明</summary>
+        <p class="hint" style="margin: 8px 0 0">示範批次：名單 6 位、尚無修課紀錄，到監控台解析儀表板並確認後才進入審查；同時清空收件匣。
+        匯入示範信件：放入一組虛構學生來信，到收件匣讓 AI 擬稿。</p>
+      </details>
       <div id="upload-msg"></div>
     </div>
     <details class="card section fold">

@@ -96,6 +96,7 @@ $("#flag-filter").addEventListener("change", (e) => {
 
 function renderRoster(rows) {
   $("#roster-card").hidden = !rows.length;
+  $("#roster-count").textContent = rows.length ? `${rows.length} 筆` : "";
   $("#roster-rows").innerHTML = rows.map((a) =>
     `<tr><td><b>${a.id ? esc(a.id) : "—"}</b></td><td>${esc(a.message)}</td></tr>`).join("");
 }
@@ -768,8 +769,9 @@ async function applyProposal(m, index, accept) {
 }
 
 $("#inbox-demo").addEventListener("click", async () => {
-  try { INBOX = await postJSON("/api/inbox/demo", {}); msg("#inbox-msg", "已匯入虛構示範信件。", "ok"); }
-  catch (e) { return msg("#inbox-msg", esc(e.message), "err"); }
+  // 按鈕在「工具」分頁，訊息顯示在同一張卡片
+  try { INBOX = await postJSON("/api/inbox/demo", {}); msg("#upload-msg", "已匯入虛構示範信件，到「收件匣」查看。", "ok"); }
+  catch (e) { return msg("#upload-msg", esc(e.message), "err"); }
   inboxSel = null;
   await refreshInbox();
 });
