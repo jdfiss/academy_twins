@@ -50,7 +50,8 @@ async function loadStudent(id) {
   renderFlags(s);
   renderActions(s);
   renderIssues(s);
-  renderRequirements(s, (r) => explain(r) + flagNote(s, r));
+  // 待確認（英檢）由 explain() 以白話說明，不顯示系辦用語
+  renderRequirements(s, (r) => explain(r) + flagNote(s, r), "");
   renderRecords(s);
   await loadPlan(s.id);
 }

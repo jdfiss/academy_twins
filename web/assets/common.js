@@ -49,7 +49,9 @@ function renderBreakdown(s, target = 128) {
 }
 
 // extra(r)：各端在每條要求下加的內容（例如學生端的白話說明）
-function renderRequirements(s, extra = () => "") {
+// pendingNote：待確認要求下的提示；預設為系辦用語，學生端傳空字串（白話說明已涵蓋）
+const OFFICE_PENDING_NOTE = "修課紀錄無法判斷，請確認是否已通過英檢（應屆名單 english_passed 欄）";
+function renderRequirements(s, extra = () => "", pendingNote = OFFICE_PENDING_NOTE) {
   const ok = s.requirements.filter((r) => r.satisfied).length;
   $("#req-summary").textContent = `${ok} / ${s.requirements.length} 符合`;
   $("#requirements").innerHTML = s.requirements
@@ -59,7 +61,7 @@ function renderRequirements(s, extra = () => "") {
       const unit = r.kind.includes("credits") ? "學分" : "門";
       let detail = "";
       if (r.pending) {
-        detail = `<div class="small" style="margin-top:6px">修課紀錄無法判斷，請確認是否已通過英檢（應屆名單 english_passed 欄）</div>`;
+        detail = pendingNote ? `<div class="small" style="margin-top:6px">${esc(pendingNote)}</div>` : "";
       } else if (!r.satisfied) {
         detail = r.missing.length
           ? `<div class="small" style="margin-top:6px">缺：</div><div class="courses">${r.missing.map((c) => courseTag(c)).join("")}</div>`
