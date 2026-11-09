@@ -17,6 +17,48 @@ body.student { font-size: 16px; }
 .student .card { padding: 22px 24px; border-radius: 12px; }
 .student h2 { font-size: 20px; margin-bottom: 16px; }
 .student h3 { font-size: 17px; }
+/* 我的進度：五塊等高摘要磚（同一列自動等高，說明最多兩行），點選後下方顯示細節 */
+.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+@media (max-width: 1000px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tile { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 6px;
+  background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.tile:hover { border-color: var(--accent); }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.tile .t-label { font-size: 14px; color: var(--muted); font-weight: 600; }
+.tile .t-value { font-size: 26px; font-weight: 700; line-height: 1.15; }
+.tile .t-value small { font-size: 15px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+.tile .t-sub { font-size: 14px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tile .stack { margin: 6px 0 0; height: 10px; }
+/* 依狀態上色：紅＝還沒達到、黃＝可能誤判／待辦理、紫＝待確認、綠＝沒有問題、灰＝沒有項目 */
+.tile.fail { border-top-color: var(--fail); } .tile.fail .t-value { color: var(--fail); }
+.tile.warn { border-top-color: var(--warn); } .tile.warn .t-value { color: var(--warn); }
+.tile.review { border-top-color: var(--review); } .tile.review .t-value { color: var(--review); }
+.tile.pass { border-top-color: var(--pass); } .tile.pass .t-value { color: var(--pass); }
+.tile.info { border-top-color: var(--accent); }
+.tile.none .t-value { color: var(--muted); }
+.tile-detail { margin-bottom: 20px; }
+.tile-detail #summary, .tile-detail #flags, .tile-detail #actions, .tile-detail #issues {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; align-items: start; }
+.tile-detail .issue { margin: 0; }
+/* 畢業條件兩欄，由上往下排（像報紙），高矮不一的卡片不留空白；卡片內容由共用 renderRequirements 產生，這裡只調學生端樣式 */
+.student #requirements { column-count: 2; column-gap: 12px; }
+.student #requirements .req { margin: 0 0 10px; break-inside: avoid; }
+/* 進度條放在標題右邊 */
+.student #requirements .req { display: grid; grid-template-columns: minmax(0, 1fr) 110px; column-gap: 12px; position: relative; }
+.student #requirements .req > * { grid-column: 1 / -1; }
+.student #requirements .req > .req-top { grid-column: 1; grid-row: 1; }
+.student #requirements .req-top > span { white-space: nowrap; }
+.student #requirements .req > .meter { grid-column: 2; grid-row: 1; align-self: center; margin-top: 0 !important; height: 5px; min-width: 0; }
+/* 「依據」滑鼠移到卡片上才浮出，不佔版面 */
+.student #requirements .req > .cite { display: none; position: absolute; left: 8px; right: 8px; top: 100%; z-index: 5; margin-top: 4px;
+  padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, .12); }
+.student #requirements .req:hover > .cite { display: block; }
+/* 已符合的條件收成一行，點開才看 */
+.student #requirements .req-ok-group { column-span: all; }
+.student #requirements .req-ok-group > summary { cursor: pointer; color: var(--pass); font-weight: 600; padding: 6px 2px; }
+.student #requirements .req-ok-list { column-count: 2; column-gap: 12px; margin-top: 8px; }
+@media (max-width: 900px) { .student #requirements, .student #requirements .req-ok-list { column-count: 1; } }
 </style>
 </head>
 <body class="student">
@@ -44,46 +86,40 @@ body.student { font-size: 16px; }
   </div>
 
   <!-- 我的進度 -->
+  <!-- 比照系辦端學生分頁：上排卡片橫向並排；下方畢業條件整頁寬、兩欄，減少垂直捲動 -->
   <section class="view active" id="view-progress">
-    <div class="grid two">
-      <div class="grid">
-        <div class="card">
-          <h3>目前狀態</h3>
-          <div id="summary"></div>
-        </div>
-        <div class="card">
-          <h3>學分採計</h3>
-          <div class="stack" id="breakdown-bar"></div>
-          <div class="legend" id="breakdown-legend"></div>
-        </div>
-        <div class="card">
-          <h3>可能是校務系統誤判</h3>
-          <div id="flags"></div>
-        </div>
-        <div class="card">
-          <h3>需要找承辦人辦理</h3>
-          <div id="actions"></div>
-        </div>
-        <div class="card" id="issues-card">
-          <h3>需要注意</h3>
-          <div id="issues"></div>
-        </div>
-      </div>
-      <div class="grid">
-        <div class="card">
-          <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
-          <div id="requirements"></div>
-        </div>
-        <div class="card">
-          <details>
-            <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
-            <table style="margin-top:8px">
-              <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
-              <tbody id="records"></tbody>
-            </table>
-          </details>
-        </div>
-      </div>
+    <!-- 上排五塊等高摘要（大數字＋一行說明）；點一塊，下方顯示該項細節。細節長短不一，不再撐高上排 -->
+    <div class="tiles" role="tablist">
+      <button class="tile" role="tab" data-pane="summary"><span class="t-label">目前狀態</span>
+        <span class="t-value" id="tile-summary"></span><span class="t-sub" id="tile-summary-sub"></span></button>
+      <button class="tile" role="tab" data-pane="flags"><span class="t-label">可能是校務系統誤判</span>
+        <span class="t-value" id="tile-flags"></span><span class="t-sub" id="tile-flags-sub"></span></button>
+      <button class="tile" role="tab" data-pane="actions"><span class="t-label">需要找承辦人辦理</span>
+        <span class="t-value" id="tile-actions"></span><span class="t-sub" id="tile-actions-sub"></span></button>
+      <button class="tile" role="tab" data-pane="breakdown"><span class="t-label">學分採計</span>
+        <span class="t-value" id="tile-credits"></span><span class="stack" id="breakdown-bar"></span></button>
+      <button class="tile" role="tab" data-pane="issues"><span class="t-label">需要注意</span>
+        <span class="t-value" id="tile-issues"></span><span class="t-sub" id="tile-issues-sub"></span></button>
+    </div>
+    <div class="card tile-detail">
+      <div class="pane" data-pane="summary"><h3>目前狀態</h3><div id="summary"></div></div>
+      <div class="pane" data-pane="flags" hidden><h3>可能是校務系統誤判</h3><div id="flags"></div></div>
+      <div class="pane" data-pane="actions" hidden><h3>需要找承辦人辦理</h3><div id="actions"></div></div>
+      <div class="pane" data-pane="breakdown" hidden><h3>學分採計</h3><div class="legend" id="breakdown-legend"></div></div>
+      <div class="pane" data-pane="issues" hidden><h3>需要注意</h3><div id="issues"></div></div>
+    </div>
+    <div class="card" style="margin-bottom:20px">
+      <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
+      <div id="requirements"></div>
+    </div>
+    <div class="card">
+      <details>
+        <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
+        <table style="margin-top:8px">
+          <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
+          <tbody id="records"></tbody>
+        </table>
+      </details>
     </div>
   </section>
 
