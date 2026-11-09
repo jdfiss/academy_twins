@@ -25,8 +25,6 @@ body.office { font-size: 16px; }
 .office .msg.ok { color: var(--pass); } .office .msg.err { color: var(--fail); }
 .office .tag { display: inline-block; padding: 2px 12px; border-radius: 999px; font-size: 14px; font-weight: 600;
   background: var(--warn-soft); color: var(--warn); vertical-align: middle; margin-left: 8px; }
-.office .officer { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); }
-.office .officer input { width: 130px; }
 .office .stat { padding: 18px 20px; } .office .stat .n { font-size: 32px; }
 .office .flags { display: flex; flex-wrap: wrap; gap: 6px; }
 .office .flag { padding: 2px 10px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-size: 14px; }
@@ -59,7 +57,7 @@ body.office { font-size: 16px; }
 
 /* ---------- 監控者模式 ---------- */
 nav .nav-tools { margin-left: auto; }
-.office .ai-switch { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 4px 14px;
+.office .ai-switch { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 4px 14px;
   border: 1px solid var(--line); background: var(--panel); font: inherit; font-size: 14px; cursor: pointer; color: var(--ink); }
 .office .ai-switch .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pass); }
 .office .ai-switch.off .dot { background: var(--fail); }
@@ -120,7 +118,6 @@ nav .nav-tools { margin-left: auto; }
     <div class="brand"><a href="./">NCU <span>Academic Twin</span></a></div>
     <span class="side-tag">系辦監控台</span>
     <div class="sub" id="program"></div>
-    <label class="officer">監控者 <input id="officer" placeholder="姓名"></label>
     <button class="ai-switch" id="ai-toggle" title="停止或恢復系辦端所有 AI 呼叫（解析、擬稿、草擬規則）">
       <span class="dot"></span><span id="ai-label">AI 運作中</span></button>
   </div>

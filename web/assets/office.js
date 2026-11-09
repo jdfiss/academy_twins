@@ -14,20 +14,12 @@ document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click
   history.replaceState(null, "", `#${b.dataset.view}`)));
 const go = (view) => { show(view); history.replaceState(null, "", `#${view}`); };
 
-// ---------- 共用：監控者（全頁填一次）與訊息 ----------
-const officer = () => $("#officer").value.trim();
-try { $("#officer").value = localStorage.getItem("twin-reviewer") || ""; } catch {}
-$("#officer").addEventListener("change", () => { try { localStorage.setItem("twin-reviewer", officer()); } catch {} });
+// ---------- 共用：監控者與訊息 ----------
+// 不再要求填姓名：紀錄上的操作者固定為「系辦」（後端仍要求非空，紀錄格式不變）
+const officer = () => "系辦";
 
 function msg(el, html, kind = "") {
   $(el).innerHTML = html ? `<div class="msg ${kind}">${html}</div>` : "";
-}
-
-function needOfficer(el) {
-  if (officer()) return true;
-  msg(el, "請先在右上角填寫監控者姓名。", "err");
-  $("#officer").focus();
-  return false;
 }
 
 // 伺服器時間（ISO）顯示為本地「YYYY-MM-DD HH:MM」
@@ -162,7 +154,6 @@ function reviewForm(r) {
 async function submitReview(sid, button) {
   const form = button.closest(".review-form");
   const choice = button.dataset.action === "revoke" ? "revoke" : form.querySelector("select").value;
-  if (!needOfficer("#review-msg")) return;
   if (!choice) return msg("#review-msg", "請選擇採計方式。", "err");
   const [action, category = ""] = choice.split(/:(.*)/);
   try {
@@ -374,7 +365,6 @@ $("#dash-add").addEventListener("click", () => {
 $("#dash-confirm").addEventListener("click", async () => {
   if (!DRAFT || $("#dash-confirm").disabled) return;
   if (!$("#dash-checked").checked) return msg("#dash-confirm-msg", "請先對照原文並勾選確認。", "err");
-  if (!needOfficer("#dash-confirm-msg")) return;
   $("#dash-confirm").disabled = true;
   try {
     // 單一勾選同時代表「已對照原文」與「已確認警示」；伺服器仍會重新檢查，錯誤一律擋下
@@ -516,7 +506,6 @@ function renderRelease(st) {
 }
 
 async function releaseAction(action) {
-  if (!needOfficer("#release-msg")) return;
   try {
     const st = await postJSON(action === "start" ? "/api/dashboard/release" : `/api/dashboard/release/${action}`,
       { reviewer: officer() });
@@ -756,7 +745,6 @@ async function mailAction(m, act) {
     await refreshInbox();
     return openMail(m.id);
   }
-  if (!needOfficer("#mail-msg")) return;
   const body = { action: act, reviewer: officer() };
   if (act === "approve") body.reply = $("#mail-reply").value;
   if (act === "reject") body.reason = $("#mail-reason").value;
@@ -770,7 +758,6 @@ async function mailAction(m, act) {
 }
 
 async function applyProposal(m, index, accept) {
-  if (!needOfficer("#mail-msg")) return;
   try {
     await postJSON(`/api/inbox/${encodeURIComponent(m.id)}/proposals/${index}`, { reviewer: officer(), accept });
   } catch (e) {
@@ -792,7 +779,6 @@ $("#inbox-process").addEventListener("click", async () => {
   await refreshInbox();
 });
 $("#inbox-approve-many").addEventListener("click", async () => {
-  if (!needOfficer("#inbox-msg")) return;
   const ids = INBOX.messages.filter((m) => m.batch_ok).map((m) => m.id);
   try { await postJSON("/api/inbox/approve-many", { ids, reviewer: officer() }); msg("#inbox-msg", `已核准 ${ids.length} 封。`, "ok"); }
   catch (e) { return msg("#inbox-msg", esc(e.message), "err"); }
@@ -887,7 +873,6 @@ $("#rule-confirm").addEventListener("click", async () => {
       return msg("#rule-confirm-msg", "已依修改內容重新檢查，請核對後再勾選確認。");
     }
     if (!$("#rule-checked").checked) return msg("#rule-confirm-msg", "請先核對並勾選確認。", "err");
-    if (!needOfficer("#rule-confirm-msg")) return;
     const d = await postJSON("/api/rule-drafts/confirm", { draft_id: RULE_DRAFT.draft_id, requirements,
       reviewer: officer(), acknowledge: true });
     renderRuleDraft(d);
@@ -953,7 +938,6 @@ async function loadRuleVersions() {
 }
 
 async function changeRuleVersion(action, body) {
-  if (!needOfficer("#rule-versions-msg")) return;
   if (action === "activate" && !$("#rule-activate-ack").checked)
     return msg("#rule-versions-msg", "請先勾選了解啟用的影響。", "err");
   try {
