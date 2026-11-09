@@ -65,10 +65,15 @@
   }
 
   // ---------- 動作 ----------
-  async function say(text) {
-    caption.textContent = text;
-    await sleep(Math.max(1800, (text.length / CPS) * 1000));
+  // 一個斷句一個字幕框，依序播放；每框停留依字數（每秒 CPS 字）加 0.3 秒換框，至少 1.4 秒
+  async function say(...phrases) {
+    for (const p of phrases) {
+      caption.textContent = p;
+      await sleep(Math.max(1400, (p.length / CPS) * 1000 + 300));
+    }
   }
+  // 畫面文字（AI 轉出的條件）放進字幕前，標點一律改成逗號
+  const clean = (t) => t.replace(/[。？！：；、／「」『』（）()—]+/g, "，").replace(/，+/g, "，").replace(/^，|，$/g, "").trim();
   function center(el) {
     const r = el.getBoundingClientRect();
     return [r.left + r.width / 2, r.top + Math.min(r.height / 2, 40)];
@@ -158,27 +163,23 @@
     showPane("summary");
     await sleep(500);
     ring($$(".student-head"));
-    await say("系辦審完了，學生自己也看得到同一份結果。");
-    await say("這位大四學生看到校務系統寫「未通過」，第一個反應是：我是不是畢不了業？");
+    await say("系辦審完了", "學生自己也看得到同一份結果", "這位大四學生看到校務系統寫未通過", "第一個反應是", "我是不是畢不了業");
     unring();
 
     // 0:10–0:35 摘要磚：目前狀態 → 可能誤判 → 找承辦人
     await click($$('.tile[data-pane="summary"]'));
     ring($$(".tile-detail"));
-    await say("學生端把兩件事分開。");
-    await say("真正缺的：三門必修、通識和本系選修學分，這些要自己修。");
+    await say("學生端把兩件事分開", "真正缺的是三門必修", "還有通識和本系選修學分", "這些要自己修");
     await click($$('.tile[data-pane="flags"]'));
-    await say("另一件是國文多修了 2 學分，校務系統不會自動移到別的類別，");
-    await say("但可能可以由承辦人認列——這是系統的限制，不是真的缺。");
+    await say("另一件是國文多修了 2 學分", "校務系統不會自動移到別的類別", "但可能可以由承辦人認列", "這是系統的限制", "不是真的缺");
     await click($$('.tile[data-pane="actions"]'));
-    await say("旁邊直接寫出要辦什麼、找哪個單位。");
+    await say("旁邊直接寫出要辦什麼", "還有要找哪個單位");
     unring();
 
     // 0:35–0:45 畢業條件 R1 與規章依據
     const r1 = reqCard("系訂必修");
     if (r1) { await point(r1); r1.classList.add("tour-hover"); ring(r1); }
-    await say("每一條都列出缺什麼，附上規章出處。");
-    await say("學分和判定全部來自系辦同一套審查引擎，學生端不自己算。");
+    await say("每一條都列出缺什麼", "附上規章出處", "學分和判定全部來自系辦同一套審查引擎", "學生端不自己算");
     r1?.classList.remove("tour-hover"); unring();
 
     // 0:45–1:10 本學期修課
@@ -187,20 +188,20 @@
     ring($$("#current-card"));
     await show($$("#current-card"));
     const [now, trial] = totals();
-    await say("現在是大四上，成績還沒出來。學生輸入這學期修的課，假設都會過：");
+    await say("現在是大四上", "成績還沒出來", "學生輸入這學期修的課", "假設都會過");
     ring($$("#current-total"), $$("#base-plan .term.grad"));
-    await say(`學分從 ${now} 變 ${trial}，預估 ${BASE_PLAN.graduation} 畢業。`);
+    await say(`學分從 ${now} 變 ${trial}`, `預估 ${BASE_PLAN.graduation} 畢業`);
     const box = () => $$('#current-courses input[data-code="IM4048"]');
     if (box()) {
       unring();
-      await say("如果管理資訊系統可能沒過呢？取消勾選，");
+      await say("如果管理資訊系統沒過", "取消勾選");
       // 勾選改變後頁面會重新試算並重畫清單，等學分數字變了再往下
       const before = totals().join();
       await click(box());
       await waitFor(() => totals().join() !== before);
       await sleep(600);
       ring($$("#current-total"), $$("#base-plan .term.grad"));
-      await say(`它只在上學期開，畢業就延到 ${BASE_PLAN.graduation}。`);
+      await say("它只在上學期開", `畢業就延到 ${BASE_PLAN.graduation}`);
       unring();
       const after = totals().join();
       await click(box());
@@ -211,24 +212,24 @@
     // 1:10–1:45 一句話 What-if
     const input = $$("#ask-input");
     await show(input);
-    await say("規劃問題也可以直接用一句話問。");
+    await say("規劃問題也可以直接用一句話問");
     await type(input, QUESTION);
     await click($$("#ask-run"));
-    caption.textContent = "AI 轉換中……";
+    caption.textContent = "AI 轉換中";
     await waitFor(() => !$$("#ask-run").disabled, 150000);
     const confirm = $$("#ask-confirm");
     if (confirm) {
       ring($$("#ask-result"));
-      const conds = [...document.querySelectorAll("#ask-result .impact li")].map((li) => li.textContent).join("；");
-      await say(`AI 只做一件事：把問題轉成模擬條件——${conds}——而且要學生確認才算。`);
-      await say("下面是執行軌跡：用了哪個模型、檢核幾次、有沒有自我修正。");
-      if ($$("#ask-result").textContent.includes("重播")) await say("（這是預先錄下的模型回應。）");
+      const conds = [...document.querySelectorAll("#ask-result .impact li")].map((li) => clean(li.textContent));
+      await say("AI 只做一件事", "把問題轉成模擬條件", ...conds, "而且要學生確認才算");
+      await say("下面是執行軌跡", "用了哪個模型", "檢核幾次", "有沒有自我修正");
+      if ($$("#ask-result").textContent.includes("重播")) await say("這是預先錄下的模型回應");
       unring();
       await click(confirm);
     } else {
       // 腳本備案：AI 服務無法使用時改用手動選項，不提 AI 轉換
       ring($$("#ask-result"));
-      await say("AI 服務無法使用時，學生一樣可以手動選情境。");
+      await say("AI 服務無法使用時", "學生一樣可以手動選情境");
       unring();
       $$("#away-term").value = "117-2"; $$("#away-count").value = "1"; $$("#away-credits").value = "15";
       await click($$("#run-sim"));
@@ -241,10 +242,10 @@
     await show($$("#sim-result"));
     ring(result);
     const [base, scen, delay] = simStats();
-    await say(`結果由規劃器計算：電子商務只在下學期開，交換一學期，畢業從 ${base} 延到 ${scen}，延 ${delay}。`);
-    await say("學生在出國前就知道要先找系上討論怎麼調整。");
+    await say("結果由規劃器計算", "電子商務只在下學期開", "交換一學期", `畢業從 ${base} 延到 ${scen}`, `延後 ${delay}`);
+    await say("學生在出國前就知道", "要先找系上討論怎麼調整");
     unring();
-    await say("（學生端為試算，正式結果以系辦審查為準。）");
+    await say("學生端為試算", "正式結果以系辦審查為準");
     caption.textContent = ""; pointer.style.opacity = 0;
   }
 
