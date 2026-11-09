@@ -3,7 +3,7 @@ from pathlib import Path
 
 from academic_twin import knowledge_base
 from academic_twin.graph import CourseGraph
-from academic_twin.planner import Scenario, Term, explain_delay, plan
+from academic_twin.planner import Scenario, Term, away_after_graduation, explain_delay, plan
 from academic_twin.rule_engine import Record, audit
 
 KB = knowledge_base.load(Path(__file__).parent / "fixtures" / "curriculum_sample.json")
@@ -73,6 +73,19 @@ class PlannerTest(unittest.TestCase):
         alt = plan(KB, GRAPH, self.report, START, Scenario(skip={"IM2001": Term(112, 1)}))
         self.assertEqual(alt.graduation, Term(114, 2))
         self.assertIn("延後 2 學期", explain_delay(KB, self.base, alt)[-1])
+
+    def test_away_after_graduation_is_not_reported_as_no_delay(self):
+        # 原本 113-2 畢業；114 學年整年交換在畢業之後，不能說成「不受影響」
+        away = {Term(114, 1), Term(114, 2)}
+        alt = plan(KB, GRAPH, self.report, START, Scenario(away=away))
+        self.assertTrue(away_after_graduation(self.base, away))
+        lines = explain_delay(KB, self.base, alt, away)
+        self.assertEqual(len(lines), 1)
+        self.assertIn("之後", lines[0])
+        self.assertNotIn("不受影響", lines[0])
+        # 交換有落在畢業前（含畢業學期）時照常比較
+        self.assertFalse(away_after_graduation(self.base, {Term(113, 2), Term(114, 1)}))
+        self.assertFalse(away_after_graduation(self.base, set()))
 
     def test_skipping_non_critical_course_no_delay(self):
         alt = plan(KB, GRAPH, self.report, START, Scenario(skip={"GE0003": Term(111, 2)}))
