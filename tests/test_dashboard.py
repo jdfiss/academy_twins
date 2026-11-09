@@ -381,8 +381,64 @@ class LLMClientTest(unittest.TestCase):
         self.assertEqual(calls, ["primary", "backup"])
 
 
+    def test_temperature_follows_model_generation(self):
+        """Gemini 3 以上不指定溫度（溫度 0 會陷入重複迴圈，2026-11-06 實測 DEMO-D07）；2.x 維持 0。"""
+        sent = {}
+
+        def capture(request, timeout=None):
+            sent[json.loads(request.data)["generationConfig"].get("temperature", "default")] = True
+            return ok_response()
+        for model, expected in (("gemini-3.5-flash", "default"), ("gemini-2.5-flash", 0)):
+            sent.clear()
+            with self.subTest(model=model), mock.patch.dict("os.environ", {"GEMINI_API_KEY": "k"}), \
+                    mock.patch.object(llm.urllib.request, "urlopen", side_effect=capture):
+                llm.generate_json("p", {}, model=model)
+                self.assertEqual(list(sent), [expected])
+
+    def test_explicit_temperature_overrides_model_default(self):
+        """收件匣固定溫度 0（inbox-v3 人工檢查的條件），即使是 Gemini 3 也照送；同時帶單次輸出上限。"""
+        sent = []
+
+        def capture(request, timeout=None):
+            sent.append(json.loads(request.data)["generationConfig"])
+            return ok_response()
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "k"}), \
+                mock.patch.object(llm.urllib.request, "urlopen", side_effect=capture):
+            llm.generate_json("p", {}, model="gemini-3.5-flash-lite", temperature=0)
+        self.assertEqual(sent[0]["temperature"], 0)
+        self.assertEqual(sent[0]["maxOutputTokens"], llm.DEFAULT_MAX_OUTPUT_TOKENS)
+
+    def test_aborted_call_usage_is_kept(self):
+        """重複迴圈中斷的呼叫也已計費：用量帶到備援結果的 failed_usage；沒有備援時帶在 LLMError.usage。"""
+        usage = {"totalTokenCount": 5000}
+
+        def fake(request, timeout=None):
+            if "/primary:" in request.full_url:
+                return sse({**text_chunk("段落標題重複出現。" * 10), "usageMetadata": usage})
+            return ok_response()
+        with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "k", "GEMINI_MODEL": "primary",
+                                            "GEMINI_FALLBACK_MODELS": "backup"}), \
+                mock.patch.object(llm.urllib.request, "urlopen", side_effect=fake):
+            result = llm.generate_json("p", {})
+            self.assertEqual(result.model, "backup")
+            self.assertEqual(result.failed_usage, [("primary", usage)])
+            with self.assertRaises(llm.LLMError) as e:
+                llm.generate_json("p", {}, model="primary")
+            self.assertEqual(e.exception.usage, [("primary", usage)])
+
+
+def sse(*chunks: dict) -> io.BytesIO:
+    """串流（SSE）回應：每段一行 data:。"""
+    return io.BytesIO(b"".join(b"data: " + json.dumps(c, ensure_ascii=False).encode() + b"\r\n\r\n" for c in chunks))
+
+
+def text_chunk(text: str, finish: str | None = None) -> dict:
+    cand = {"content": {"parts": [{"text": text}]}}
+    return {"candidates": [{**cand, **({"finishReason": finish} if finish else {})}]}
+
+
 def ok_response(*args, **kwargs):
-    return io.BytesIO(json.dumps({"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}).encode())
+    return sse(text_chunk("{"), text_chunk("}", "STOP"))
 
 
 class LLMTimeoutTest(unittest.TestCase):
@@ -446,6 +502,71 @@ class LLMTimeoutTest(unittest.TestCase):
     def test_primary_success_has_no_fallback_reason(self):
         with mock.patch.object(llm.urllib.request, "urlopen", side_effect=ok_response):
             self.assertEqual(llm.generate_json("p", {}).fallback_from, "")
+
+    def test_repetition_loop_switches_to_fallback_early(self):
+        """輸出陷入重複迴圈（2026-11-06 實測 gemini-3.5-flash 解析 DEMO-D07）時立即中斷，改用備援模型。"""
+        read = []
+
+        def fake(request, timeout):
+            model = "primary" if "/primary:" in request.full_url else "backup"
+            self.calls.append((model, timeout))
+            if model == "backup":
+                return ok_response()
+            chunks = [text_chunk('{"rows": [')] + [text_chunk(" Section Code A01 Title 院系必修 Earned 75")] * 50
+
+            class Stream(io.BytesIO):
+                def __iter__(inner):
+                    for line in sse(*chunks).read().split(b"\r\n\r\n"):
+                        read.append(line)
+                        yield line
+            return Stream()
+        with mock.patch.object(llm.urllib.request, "urlopen", side_effect=fake):
+            result = llm.generate_json("p", {})
+        self.assertEqual(result.model, "backup")
+        self.assertIn("重複迴圈", result.fallback_from)
+        self.assertLess(len(read), 20)  # 偵測到就停，不會讀完 50 段
+
+    def test_total_deadline_is_checked_while_streaming(self):
+        """串流持續有資料時，單次讀取不會逾時；仍要依總等待時間中斷。"""
+        def fake(request, timeout):
+            model = "primary" if "/primary:" in request.full_url else "backup"
+            if model == "backup":
+                return ok_response()
+
+            class Slow(io.BytesIO):
+                def __iter__(inner):
+                    for i in range(100):
+                        self.now += 5  # 每段 5 秒
+                        yield b"data: " + json.dumps(text_chunk(f'"row{i}",')).encode() + b"\r\n"
+            return Slow()
+        with mock.patch.object(llm.urllib.request, "urlopen", side_effect=fake):
+            result = llm.generate_json("p", {})
+        self.assertEqual(result.model, "backup")
+        self.assertIn("逾時", result.fallback_from)
+        self.assertLessEqual(self.now, llm.DEFAULT_TIMEOUT + 5)
+
+    def test_stream_joins_chunks_and_skips_thoughts(self):
+        def fake(request, timeout):
+            self.assertIn(":streamGenerateContent?alt=sse", request.full_url)
+            return sse({"candidates": [{"content": {"parts": [{"text": "想一想", "thought": True}]}}]},
+                       text_chunk('{"a": '), {**text_chunk("1}", "STOP"), "usageMetadata": {"candidatesTokenCount": 3}})
+        with mock.patch.object(llm.urllib.request, "urlopen", side_effect=fake):
+            result = llm.generate_json("p", {})
+        self.assertEqual((result.data, result.usage), ({"a": 1}, {"candidatesTokenCount": 3}))
+
+    def test_error_inside_stream_is_reported(self):
+        with mock.patch.object(llm.urllib.request, "urlopen",
+                               side_effect=lambda r, timeout: sse({"error": {"code": 400, "message": "bad"}})),                 self.assertRaises(llm.LLMError) as ctx:
+            llm.generate_json("p", {}, model="primary")
+        self.assertIn("bad", str(ctx.exception))
+
+    def test_loop_detector_ignores_normal_json(self):
+        rows = "".join(f'{{"term": "114-1", "code": "IM10{i:02d}", "name": "課程{i}", "credits": "3", "grade": "8{i % 10}"}},'
+                       for i in range(40))
+        for text in (rows, " " * 500, "0" * 500, "ab" * 300):
+            with self.subTest(text=text[:20]):
+                self.assertFalse(llm.looping(text[-llm.LOOP_WINDOW:]))
+        self.assertTrue(llm.looping("院系必修 Title: " * 8))
 
     def test_invalid_timeout_setting_is_rejected(self):
         for raw in ("abc", "0", "-5"):

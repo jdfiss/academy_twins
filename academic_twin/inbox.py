@@ -41,6 +41,8 @@ WORKERS = 2
 # 費用控制：收件匣只做分類、查工具與短回覆，用最便宜的 lite 模型；指定模型時不改用備援模型，
 # 失敗就轉人工或由監控者重試，不會靜默升級到較貴的模型。改模型名稱會使收件匣的評審模式錄製失效。
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
+# 溫度固定 0：inbox-v3 人工檢查是在溫度 0 下做的；短回覆陷入重複迴圈的風險低，萬一發生由 llm.py 中斷後轉人工。
+TEMPERATURE = 0
 
 
 def model_name() -> str:
@@ -292,7 +294,8 @@ def mentions_other_student(service, sid: str, text: str) -> bool:
 # ---------- Agent 迴圈 ----------
 def draft_reply(service, message: dict, generate=None) -> tuple[dict, dict]:
     """擬一封回覆；回傳（擬稿欄位, 執行軌跡）。generate 預設為 replay.generate_json（可錄製、重播）。"""
-    generate = generate or (lambda prompt: replay.generate_json(prompt, SCHEMA, model=model_name(), purpose="inbox"))
+    generate = generate or (lambda prompt: replay.generate_json(prompt, SCHEMA, model=model_name(), purpose="inbox",
+                                                                     temperature=TEMPERATURE))
     sid = message["student_id"]
     tools = Tools(service, sid)
     question = mask(f"主旨：{message['subject']}\n{message['body']}", sid)

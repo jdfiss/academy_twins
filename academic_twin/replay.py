@@ -54,22 +54,27 @@ def key(prompt: str, model: str | None, attachments) -> str:
 
 
 def generate_json(prompt: str, schema: dict, attachments=(), *, model: str | None = None,
-                  purpose: str = "") -> llm.LLMResult:
+                  purpose: str = "", temperature: float | None = None) -> llm.LLMResult:
     """與 llm.generate_json 相同介面；依模式改用錄製結果。重播時 result.replay 帶原本的模型與時間。
 
     purpose：用途代號（dashboard／inbox／rule_draft），只用於 token 用量紀錄。
+    temperature：未指定時依模型決定（見 llm.default_temperature）；不納入錄製結果的鍵值。
+    失敗的呼叫（逾時、重複迴圈、截斷）若已消耗用量，同樣記入用量紀錄，計入每月預算。
     """
     m = mode()
     path = REPLAY_DIR / f"{key(prompt, model, attachments)}.json"
     if m == "only":
         return _load(path, "評審模式只能重播預先錄製的虛構文件，這份文件沒有錄製結果")
+    extra = {} if temperature is None else {"temperature": temperature}
     try:
         check_budget()
-        result = llm.generate_json(prompt, schema, attachments, model=model)
+        result = llm.generate_json(prompt, schema, attachments, model=model, **extra)
     except llm.LLMError as e:
+        log_failed_usage(getattr(e, "usage", ()), purpose, m)
         if m == "fallback" and path.exists():
             return _load(path, "", reason=str(e)[:200])
         raise
+    log_failed_usage(getattr(result, "failed_usage", ()), purpose, m)
     log_usage(result, purpose, m)
     if recording() and not result.fallback_from:  # 備援模型的回應不能存成主模型的錄製結果
         _save(path, result)
@@ -94,10 +99,21 @@ def usage_entry(result: llm.LLMResult, purpose: str, m: str) -> dict | None:
             "total_tokens": int(u.get("totalTokenCount") or 0)}
 
 
+def log_failed_usage(spent, purpose: str, m: str) -> None:
+    """記錄失敗呼叫已消耗的用量（[(模型, usageMetadata), ...]）；failed 欄位標示這筆沒有產出結果。"""
+    for model, usage in spent or ():
+        _append(usage_entry(llm.LLMResult(None, model, "", usage), purpose, m), failed=True)
+
+
 def log_usage(result: llm.LLMResult, purpose: str, m: str) -> None:
-    entry = usage_entry(result, purpose, m)
+    _append(usage_entry(result, purpose, m))
+
+
+def _append(entry: dict | None, failed: bool = False) -> None:
     if entry is None:
         return
+    if failed:
+        entry["failed"] = True
     with _USAGE_LOCK:  # 批次解析與收件匣都是多執行緒
         USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
         with USAGE_LOG.open("a", encoding="utf-8") as f:

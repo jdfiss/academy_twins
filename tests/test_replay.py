@@ -100,6 +100,23 @@ class ReplayTest(unittest.TestCase):
         self.assertEqual(saved["usage"]["promptTokenCount"], 1200)  # 錄製檔也保留用量
         self.assertEqual(replay.usage_summary(entries)["rows"][0]["avg_output"], 350)
 
+    def test_failed_call_usage_is_logged_and_counts_toward_budget(self):
+        """逾時、重複迴圈、截斷的呼叫也計費：失敗與備援前的用量都要記入，否則每月預算會低估。"""
+        log = Path(self.dir.parent) / "usage.jsonl"
+        error = llm.LLMError("截斷", usage=[("m1", {"totalTokenCount": 700})])
+        response = fake_response()
+        response.usage = {"totalTokenCount": 100}
+        response.failed_usage = [("m1", {"totalTokenCount": 300})]
+        with self.env(ACADEMIC_TWIN_REPLAY="off"), mock.patch.object(replay, "USAGE_LOG", log):
+            with mock.patch.object(llm, "generate_json", side_effect=error), self.assertRaises(llm.LLMError):
+                replay.generate_json("提示", {}, ATTACH, purpose="dashboard")
+            with mock.patch.object(llm, "generate_json", return_value=response):
+                replay.generate_json("提示", {}, ATTACH, purpose="dashboard")
+            entries = replay.read_usage()
+        self.assertEqual([(e["total_tokens"], e.get("failed", False)) for e in entries],
+                         [(700, True), (300, True), (100, False)])
+        self.assertEqual(replay.month_usage(entries), 1100)
+
     def test_replay_and_stub_results_do_not_log_usage(self):
         log = Path(self.dir.parent) / "usage.jsonl"
         self.record()  # 替身沒有 usage
