@@ -5,8 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>學生 Academic Twin</title>
 <link rel="stylesheet" href="assets/common.css">
+<style>
+/* 學生端專屬樣式，比照系辦端（office.html）：簡約、留白、不用小字；共用 common.css 不動 */
+body.student { font-size: 16px; }
+.student .sub { font-size: 15px; } .student .req .cite { font-size: 14px; }
+.student .course code, .student .course .code { font-size: 13px; } .student .side-tag { font-size: 14px; }
+.student .small, .student .muted.small, .student th, .student .chip, .student .issue, .student details summary,
+.student .legend, .student .course, .student .whatif label, .student .whatif select, .student .whatif input,
+.student .whatif button, .student .term-head, .student .trial { font-size: 15px; }
+.student .other, .student .terms { font-size: 14px; }
+.student .card { padding: 22px 24px; border-radius: 12px; }
+.student h2 { font-size: 20px; margin-bottom: 16px; }
+.student h3 { font-size: 17px; }
+</style>
 </head>
-<body>
+<body class="student">
 <header>
   <div class="bar">
     <div class="brand"><a href="./">NCU <span>Academic Twin</span></a></div>
@@ -23,7 +36,7 @@
 <!-- 學生端（B 組）。共用外框與樣式見 assets/common.*，變更需通知 A 組 -->
 <main>
   <div class="student-head">
-    <label class="muted small">學生 <select id="student-select"></select></label>
+    <select id="student-select"></select>
     <span id="student-status"></span>
     <span class="trial" id="trial-badge" title="學生端結果為試算，正式結果以系辦審查為準">試算</span>
     <div><span class="big" id="student-credits"></span> <span class="muted" id="student-total-target"></span></div>
@@ -44,7 +57,7 @@
           <div class="legend" id="breakdown-legend"></div>
         </div>
         <div class="card">
-          <h3>可能是校務系統誤判 <span class="muted small">不一定真的缺修</span></h3>
+          <h3>可能是校務系統誤判</h3>
           <div id="flags"></div>
         </div>
         <div class="card">
@@ -79,15 +92,14 @@
     <div class="grid">
         <div class="card" id="current-card">
           <h3>本學期修課 <span class="trial">試算</span> <span class="muted small" id="current-term"></span></h3>
-          <div class="muted small" style="margin-bottom:8px">本學期還沒有成績，請自己輸入這學期修的課（只存在這台電腦的瀏覽器，不會送出保存）。勾選的課假設會及格，一起算進下方規劃；打算停修或可能沒過的課取消勾選，規劃會把它重新排入之後的學期。正式審查結果不受影響。</div>
           <div class="whatif">
-            <label style="flex:1 1 260px">本系課程（輸入課號或課名搜尋）
+            <label style="flex:1 1 260px">本系與管理學院課程
               <input id="cur-search" list="cur-options" placeholder="例如：IM3031 或 電子商務"></label>
             <datalist id="cur-options"></datalist>
             <button class="primary" id="cur-add">加入</button>
           </div>
           <details style="margin:4px 0 8px">
-            <summary class="small">其他課程（通識、外系、體育等）</summary>
+            <summary>其他課程（通識、外系、體育等）</summary>
             <div class="whatif">
               <label>課號 <input id="cur-o-code" style="width:90px" placeholder="CC0215"></label>
               <label>課名 <input id="cur-o-name" style="width:140px"></label>
@@ -102,18 +114,16 @@
         </div>
         <div class="card">
           <h3>到畢業的修課路徑</h3>
-          <div class="muted small" style="margin-bottom:8px">每學期上限 <span id="cap"></span> 學分；先排先修鏈最長的課。順序依「建議先修」，非正式擋修；開課學期依建議修課學期推估，不是實際開課資料。</div>
           <div class="timeline" id="base-plan"></div>
         </div>
         <div class="card">
           <h3>What-if 模擬</h3>
           <div class="whatif">
-            <label style="flex:1 1 320px">用一句話問（AI 只把問題轉成模擬條件，確認後才計算）
+            <label style="flex:1 1 320px">用一句話問
               <input id="ask-input" type="text" maxlength="300" placeholder="例如：如果我大三下去交換一年，會延畢嗎？"></label>
             <button class="primary" id="ask-run">轉成條件</button>
           </div>
           <div id="ask-result"></div>
-          <div class="muted small" style="margin:4px 0 2px">或手動選情境：</div>
           <div class="whatif">
             <label>如果這門課
               <select id="skip-course"><option value="">（不設定）</option></select></label>
@@ -128,7 +138,7 @@
             <button class="primary" id="run-sim">模擬</button>
             <button class="ghost" id="reset-sim">清除</button>
           </div>
-          <div id="sim-result"><div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div></div>
+          <div id="sim-result"></div>
         </div>
     </div>
   </section>
@@ -137,13 +147,13 @@
   <section class="view" id="view-graph">
     <div class="grid">
       <div class="card">
-        <h2>先修關係圖 <span class="muted small">實線＝正式擋修，虛線＝建議先修（推論）；點課程看影響範圍</span></h2>
+        <h2>先修關係圖</h2>
         <div class="graph-wrap"><svg id="dag"></svg></div>
         <h3 style="margin-top:16px">其他課程（無先修關係）</h3>
         <div class="courses" id="isolated"></div>
       </div>
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start">
-        <div class="card" id="impact-card"><div class="muted">點選左邊任一門課。</div></div>
+        <div class="card" id="impact-card"><h3>課程影響範圍</h3></div>
         <div class="card">
           <h3>瓶頸課排行</h3>
           <table><tbody id="bottlenecks"></tbody></table>

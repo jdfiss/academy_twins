@@ -116,7 +116,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `academic_twin/evaluate.py` | A | 實證比對：審查結果對承辦人答案、原流程與輔助流程計時；只輸出彙總數字 |
 | `academic_twin/graph.py` | B | 課程關係、瓶頸、循環檢查 |
 | `academic_twin/planner.py` | B | 修課路徑規劃與情境 |
-| 白話說明（`web/assets/student.js` 的 `EXPLAIN`） | B | 依審查結果產生學生看得懂的說明；不改判定。放在前端是為了不改動交接格式 |
+| 白話說明（原 `web/assets/student.js` 的 `EXPLAIN`） | B | 2026-11-09 學生端介面比照系辦端簡化時移除；誤判提示（`FLAG_INFO`）的說明保留 |
 | 自然語言 What-if 模組（新增，如 `academic_twin/ask.py`） | B | AI 將學生問題轉成 `simulate` 參數；計算與回答依據只來自規劃器結果 |
 | `academic_twin/llm.py` | A（共用，變更需通知 B） | 以標準函式庫呼叫 Gemini；金鑰讀環境變數或未進版控的 `.env`；每個模型有總等待上限，主模型過載、逾時或輸出陷入重複迴圈時改用備援模型（串流接收、逐段檢查）；Gemini 3 以上用預設溫度；兩組的 AI 功能共用 |
 | `academic_twin/dashboard.py` | A | AI 解析儀表板 PDF 為待確認紀錄（附來源頁碼與原文）、檢查、與標準答案比對 |
@@ -132,6 +132,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | 系辦審查助理（新增，如 `academic_twin/office_agent.py`） | A | 以 `CoreService` 為工具的 agent；只讀審查結果，不改判定 |
 | `academic_twin/api.py` | A（共用，變更需通知 B） | `CoreService`：載入資料、`_report`、`rule_version`、`meta`、交接格式 `student()`；`AcademicTwinService` 組合兩端 |
 | `academic_twin/office_api.py` | A | `OfficeMixin`：`data_source`、`batch`、`roster_anomalies`、`export_csv`、`add_review`、`report_html` |
+| `academic_twin/offerings.py` | B | 本學期開課清單：從學校課程查詢系統（公開頁面）抓取資管系、管理學院學士班課程，或依實際學期模擬示範學期；只供挑課，不參與判定 |
 | `academic_twin/student_api.py` | B | `StudentMixin`：`twin_ids`、`twin`（學生端試算）、`course_impact`、`simulate`（含本學期修課試算 `current`）、`ask` |
 | `web.py` | A | 路由依「共用／系辦端／學生端」分段；B 組新增學生端路由時發 PR 給 A |
 | `app.py` | 共用 | 命令列：`--roster`、`--records`、`--export`、`--report`、`--assumptions` 屬 A；`--plan`、`--skip`、`--away`、`--away-credits`、`--course`、`--bottlenecks` 屬 B。改動以小 PR 進行 |
@@ -143,7 +144,8 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 |---|---|---|
 | `web/index.html`、`web/assets/common.css`、`web/assets/common.js` | A（變更需通知 B） | 入口頁；樣式；API 呼叫、分頁切換、學分採計、畢業條件、修課紀錄等兩端共同呈現 |
 | `web/office.html`、`web/assets/office.js` | A | 「系辦畢審」（資料上傳、總表、名單異常）、「學生明細」（審查結果與人工覆核）、「規則來源」 |
-| `web/student.html`、`web/assets/student.js` | B | 「我的進度」（試算、誤判提示、需辦理事項、白話說明）、「修課規劃與 What-if」、「先修關係圖」 |
+| `web/student.html`、`web/assets/student.js` | B | 「我的進度」（試算、誤判提示、需辦理事項）、「修課規劃與 What-if」、「先修關係圖」 |
+| `web/assets/offerings/<學期>.json` | B | 本學期開課清單（`offerings.py` 產生）；`115-1` 為實際抓取，`117-1` 為示範用模擬 |
 | `web/assets/demo-twin.json` | 共用 | 交接格式範例，`student.html?demo` 讀取；交接格式改了要一起更新（測試會檢查欄位一致） |
 
 覆核操作只在系辦頁；學生頁只呈現結果，不提供覆核，也不顯示覆核歷程（承辦人內部紀錄）。
@@ -173,6 +175,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_benchmark.py` | A |
 | `tests/test_planner.py` | B |
 | `tests/test_enrollment.py` | B |
+| `tests/test_offerings.py` | B |
 | `tests/test_demo_student.py`（學生端 demo 腳本的預期數字） | B |
 | `tests/test_contract.py`（交接格式與兩端一致性） | B 維護、A 審查；第 0 步已建立基本版 |
 | `tests/fixtures/curriculum_sample.json` | A（B 需新增測試情境時發 PR） |
@@ -228,12 +231,12 @@ A 組 flags 虛構示範使用 `data/curriculum_demo_flags.json` 與 `data/stude
 
 | 優先 | 項目 | 產出 | 驗收條件 | 對應評分 | 依賴 |
 |---|---|---|---|---|---|
-| 0 | 依 stub 建學生頁骨架 | **已完成骨架**：學生頁有誤判提示區、需辦理事項區與「試算」標示；白話說明留有 `explain()` 掛點 | `student.html?demo` 可顯示示意資料 | — | — |
-| 1 | 學分當前狀態 | **已完成畫面**（依 `demo-twin.json` 與 A 組虛構示範驗證，正式 114 規則尚無 flags）：強化進度頁：一眼看出已修、缺修、超修；嵌入誤判提示（依 `flags` 分開「疑似校務系統誤判」與「真正缺修」）與需辦理事項（依 `actions` 列出事項與單位） | 不讓學生誤以為一定不能畢業，也不保證一定能畢業（[學生端驗收條件](STUDENT_REQUIREMENTS.md#個人修業進度)）；每項需辦理事項指出單位或承辦人 | 重要性 | 先用 `demo-twin.json`；A 組產生真實 flags、actions 後接上 |
-| 1 | 白話說明 | **已完成模板**（`student.js` 的 `explain()`）：每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名；有系統代碼與章則用語時並列，沒有時顯示「待提供」 | 每條要求都有說明；只引用審查結果，不自行計算或更改判定；附規章依據 | 重要性、可行性 | 無（可先以 114 規則庫撰寫） |
-| 1 | What-if 強化 | **已完成**：現有情境（某課某學期不修、出國交換）的結果更直觀：畢業學期變化、延畢學期數、受影響課程 | 結果全部來自 `simulate`；開課學期為推估時明確標示 | 重要性 | 無 |
-| 1 | AI 自然語言 What-if | **已完成程式與替身測試**（`ask.py`）：學生用一句話提問；AI 只把問題轉成 `simulate` 參數，程式檢核、有界自我修正 1 次、記執行軌跡；學生確認後規劃器計算；回答只引用計算結果。真實模型的轉換正確率待以金鑰量測（屬學生端實證） | 符合「AI 輸入與啟用驗收」的 AI 說明規定；轉不出參數或服務失敗時，退回手動選情境；不支援的情境明說不支援 | 創新性 | AI 服務 |
-| 1 | 本學期修課試算 | **已完成**（2026-11-08）：學生自行輸入本學期修的課，勾選的課假設及格，交給審查引擎重新審查後規劃；未勾選的課重新排入；只存在瀏覽器 | 學分與判定只來自審查引擎；正式審查結果不受影響；What-if 與 AI What-if 一併套用 | 重要性 | 無（選課系統無公開介接，改由學生輸入） |
+| 0 | 依 stub 建學生頁骨架 | **已完成骨架**：學生頁有誤判提示區、需辦理事項區與「試算」標示 | `student.html?demo` 可顯示示意資料 | — | — |
+| 1 | 學分當前狀態 | **已完成畫面**（依 `demo-twin.json` 與 A 組虛構示範驗證，正式 114 規則尚無 flags）：強化進度頁：一眼看出已修、缺修、超修；嵌入誤判提示（依 `flags` 分開「疑似校務系統誤判」與「真正缺修」）與需辦理事項（依 `actions` 列出事項與單位） | 誤判提示與真正缺修分開呈現，頁首標示「試算」（2026-11-09 起不另附說明文字）；每項需辦理事項指出單位或承辦人 | 重要性 | 先用 `demo-twin.json`；A 組產生真實 flags、actions 後接上 |
+| 1 | 白話說明 | **已移除**（2026-11-09，學生端介面比照系辦端、刪除說明用小字；畢業條件只列缺修與規章依據）。原為已完成模板（`student.js` 的 `explain()`）：每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名；有系統代碼與章則用語時並列，沒有時顯示「待提供」 | 每條要求都有說明；只引用審查結果，不自行計算或更改判定；附規章依據 | 重要性、可行性 | 無（可先以 114 規則庫撰寫） |
+| 1 | What-if 強化 | **已完成**：現有情境（某課某學期不修、出國交換）的結果更直觀：畢業學期變化、延畢學期數、受影響課程 | 結果全部來自 `simulate` | 重要性 | 無 |
+| 1 | AI 自然語言 What-if | **已完成程式與替身測試**（`ask.py`）：學生用一句話提問；AI 只把問題轉成 `simulate` 參數，程式檢核、有界自我修正 1 次、記執行軌跡；學生確認後規劃器計算；回答只引用計算結果。真實模型的轉換正確率待以金鑰量測（屬學生端實證） | 符合「AI 輸入與啟用驗收」的 AI 說明規定（轉出的條件須學生確認才計算；2026-11-09 起輸入框不另附說明文字）；轉不出參數或服務失敗時，退回手動選情境；不支援的情境明說不支援 | 創新性 | AI 服務 |
+| 1 | 本學期修課試算 | **已完成**（2026-11-08）：學生自行輸入本學期修的課，勾選的課假設及格，交給審查引擎重新審查後規劃；未勾選的課重新排入；只存在瀏覽器。2026-11-09 加上本學期開課清單：挑課選單列出資管系、管理學院學士班的開課（115-1 取自學校課程查詢系統，示範學生的 117-1 依 115-1 模擬並標示） | 學分與判定只來自審查引擎；正式審查結果不受影響；What-if 與 AI What-if 一併套用 | 重要性 | 無（選課系統無公開介接，改由學生輸入） |
 | 1 | 兩端一致性測試 | 基本版已在 `tests/test_contract.py`；**flags 情境已補**（A 組虛構示範資料），年度載入情境待 A 組完成 | 同一份資料在兩端判定完全相同；納入每次測試 | 實證性 | A 組 flags、年度載入 |
 | 2 | 規劃器改用入學年度規則 | 規劃與 What-if 使用學生自己年度的規則庫 | 只限已確認的年度；缺年度規則時明示，不套其他年度 | 可行性 | A 組完成依年度載入 |
 | 2 | 學生端實證 | AI 問題轉參數的正確率；小型使用測試（如看完頁面能否正確說出自己缺什麼、該找誰辦） | 報告列樣本數、題組與限制；使用測試以虛構學生資料進行，不使用受測者真實成績 | 實證性 | 測試題組、受測同學 |
