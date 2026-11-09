@@ -132,7 +132,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | 系辦審查助理（新增，如 `academic_twin/office_agent.py`） | A | 以 `CoreService` 為工具的 agent；只讀審查結果，不改判定 |
 | `academic_twin/api.py` | A（共用，變更需通知 B） | `CoreService`：載入資料、`_report`、`rule_version`、`meta`、交接格式 `student()`；`AcademicTwinService` 組合兩端 |
 | `academic_twin/office_api.py` | A | `OfficeMixin`：`data_source`、`batch`、`roster_anomalies`、`export_csv`、`add_review`、`report_html` |
-| `academic_twin/student_api.py` | B | `StudentMixin`：`twin_ids`、`twin`（學生端試算）、`course_impact`、`simulate` |
+| `academic_twin/student_api.py` | B | `StudentMixin`：`twin_ids`、`twin`（學生端試算）、`course_impact`、`simulate`（含本學期修課試算 `current`）、`ask` |
 | `web.py` | A | 路由依「共用／系辦端／學生端」分段；B 組新增學生端路由時發 PR 給 A |
 | `app.py` | 共用 | 命令列：`--roster`、`--records`、`--export`、`--report`、`--assumptions` 屬 A；`--plan`、`--skip`、`--away`、`--away-credits`、`--course`、`--bottlenecks` 屬 B。改動以小 PR 進行 |
 | `web/` | 依下表 | 第 0 步已把原本 655 行的單頁拆成系辦頁與學生頁 |
@@ -171,6 +171,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_rule_diff.py` | A |
 | `tests/test_benchmark.py` | A |
 | `tests/test_planner.py` | B |
+| `tests/test_enrollment.py` | B |
 | `tests/test_contract.py`（交接格式與兩端一致性） | B 維護、A 審查；第 0 步已建立基本版 |
 | `tests/fixtures/curriculum_sample.json` | A（B 需新增測試情境時發 PR） |
 
@@ -230,6 +231,7 @@ A 組 flags 虛構示範使用 `data/curriculum_demo_flags.json` 與 `data/stude
 | 1 | 白話說明 | **已完成模板**（`student.js` 的 `explain()`）：每種規則類型（`all_of`、`taken_all`、`n_of`、`credits_from`、`category_credits`、`category_count`、`dept_elective_credits`、`english_threshold`、`total_credits`）的說明模板；依審查結果填入數字與課名；有系統代碼與章則用語時並列，沒有時顯示「待提供」 | 每條要求都有說明；只引用審查結果，不自行計算或更改判定；附規章依據 | 重要性、可行性 | 無（可先以 114 規則庫撰寫） |
 | 1 | What-if 強化 | **已完成**：現有情境（某課某學期不修、出國交換）的結果更直觀：畢業學期變化、延畢學期數、受影響課程 | 結果全部來自 `simulate`；開課學期為推估時明確標示 | 重要性 | 無 |
 | 1 | AI 自然語言 What-if | **已完成程式與替身測試**（`ask.py`）：學生用一句話提問；AI 只把問題轉成 `simulate` 參數，程式檢核、有界自我修正 1 次、記執行軌跡；學生確認後規劃器計算；回答只引用計算結果。真實模型的轉換正確率待以金鑰量測（屬學生端實證） | 符合「AI 輸入與啟用驗收」的 AI 說明規定；轉不出參數或服務失敗時，退回手動選情境；不支援的情境明說不支援 | 創新性 | AI 服務 |
+| 1 | 本學期修課試算 | **已完成**（2026-11-08）：學生自行輸入本學期修的課，勾選的課假設及格，交給審查引擎重新審查後規劃；未勾選的課重新排入；只存在瀏覽器 | 學分與判定只來自審查引擎；正式審查結果不受影響；What-if 與 AI What-if 一併套用 | 重要性 | 無（選課系統無公開介接，改由學生輸入） |
 | 1 | 兩端一致性測試 | 基本版已在 `tests/test_contract.py`；**flags 情境已補**（A 組虛構示範資料），年度載入情境待 A 組完成 | 同一份資料在兩端判定完全相同；納入每次測試 | 實證性 | A 組 flags、年度載入 |
 | 2 | 規劃器改用入學年度規則 | 規劃與 What-if 使用學生自己年度的規則庫 | 只限已確認的年度；缺年度規則時明示，不套其他年度 | 可行性 | A 組完成依年度載入 |
 | 2 | 學生端實證 | AI 問題轉參數的正確率；小型使用測試（如看完頁面能否正確說出自己缺什麼、該找誰辦） | 報告列樣本數、題組與限制；使用測試以虛構學生資料進行，不使用受測者真實成績 | 實證性 | 測試題組、受測同學 |
@@ -520,7 +522,7 @@ TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
 
 ### 測試
 
-- PR 合併前全部測試須通過（目前 313 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
+- PR 合併前全部測試須通過（目前 373 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
 - 新功能要附測試，放在自己組的測試檔；新增測試檔時在 PR 說明寫明歸屬。
 - **不得為了讓測試通過而刪除或放寬對方組的測試**。對方的測試若與新需求衝突，先找對方組討論，由對方修改。
 - `tests/test_contract.py` 的兩端一致性測試失敗，一律視為阻擋合併：同一份資料在兩端必須得到相同判定。
