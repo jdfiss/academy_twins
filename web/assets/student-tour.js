@@ -78,9 +78,21 @@
     const r = el.getBoundingClientRect();
     return [r.left + r.width / 2, r.top + Math.min(r.height / 2, 40)];
   }
-  // 平滑捲到畫面中央，等位置不再變動（捲動結束）才回傳，游標才會指在對的地方
+  // 平滑捲到畫面中央，等位置不再變動（捲動結束）才回傳，游標才會指在對的地方；
+  // 已經完整在畫面內（頁首以下、字幕以上）就不捲，避免畫面來回跳
   async function show(el) {
+    const r = el.getBoundingClientRect(), head = document.querySelector("header").getBoundingClientRect().bottom;
+    if (r.top >= head + 8 && r.bottom <= innerHeight - 110) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
+    await settle(el);
+  }
+  // 把元素捲到頁首正下方（後面要出現的內容才有空間）
+  async function showTop(el) {
+    const head = document.querySelector("header").getBoundingClientRect().bottom;
+    window.scrollTo({ top: scrollY + el.getBoundingClientRect().top - head - 12, behavior: "smooth" });
+    await settle(el);
+  }
+  async function settle(el) {
     let last = null;
     for (let i = 0; i < 40; i++) {
       await sleep(100);
@@ -211,8 +223,9 @@
     }
 
     // 1:10–1:45 一句話 What-if
+    // What-if 卡片捲到頁首下方，打字時下方留出 AI 轉出條件與執行軌跡的位置
     const input = $$("#ask-input");
-    await show(input);
+    await showTop(input.closest(".card"));
     await say("規劃問題也可以直接用一句話問");
     await type(input, QUESTION);
     await click($$("#ask-run"));
