@@ -58,6 +58,17 @@ class DemoStudentScriptTest(unittest.TestCase):
         self.assertEqual((sc["graduation"], sc["delay_terms"]), ("118-2", 2))
         self.assertIn("IM3031 電子商務：117-2 → 118-2", sc["impact"])
 
+    def test_exchange_after_graduation_is_not_called_no_delay(self):
+        # 組員回報：「明年整年交換」落在預估畢業（117-2）之後，不能顯示「不延畢」
+        sc = self.service.simulate(SID, away=["118-1", "118-2"], current=CURRENT)["scenario"]
+        self.assertTrue(sc["away_after_graduation"])
+        self.assertIsNone(sc["delay_terms"])
+        self.assertEqual(len(sc["impact"]), 1)
+        self.assertIn("117-2 之後", sc["impact"][0])
+        # 腳本的大四下交換在畢業前，照常算延畢
+        demo = self.service.simulate(SID, away=["117-2"], current=CURRENT)["scenario"]
+        self.assertFalse(demo["away_after_graduation"])
+
     def test_official_result_unchanged(self):
         self.service.simulate(SID, away=["117-2"], current=CURRENT)
         self.assertEqual(self.service.twin(SID)["total_credits"], 100)

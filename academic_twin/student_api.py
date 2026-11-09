@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from .ask import parse as parse_question, term_labels
-from .planner import Plan, Scenario, Term, explain_delay, plan
+from .planner import Plan, Scenario, Term, away_after_graduation, explain_delay, plan
 from .rule_engine import AuditReport, Record, audit
 
 # 本學期修課：學校選課系統沒有公開介接，改由學生自行輸入；只用於試算，伺服器不保存
@@ -139,12 +139,16 @@ class StudentMixin:
             scenario = Scenario(skip=skip_map, away=away_terms, away_credits=away_credits)
             alt = plan(self.kb, self.graph, report, start, scenario)
             g0, g1 = base.graduation, alt.graduation
+            after = away_after_graduation(base, away_terms)
             result["scenario"] = {
                 **self._plan_dict(alt),
                 "conditions": [f"{t} 不修 {c} {self.kb.courses[c].name}" for c, t in skip_map.items()]
                               + [f"{t} 出國交換／不修本系課" for t in sorted(away_terms)],
-                "impact": explain_delay(self.kb, base, alt),
-                "delay_terms": ((g1.year - g0.year) * 2 + (g1.sem - g0.sem)) if (g0 and g1 and alt.feasible) else None,
+                "impact": explain_delay(self.kb, base, alt, away_terms),
+                # 交換全在預估畢業之後時不給延畢數字，畫面改顯示說明，避免誤以為「交換也不延畢」
+                "away_after_graduation": after,
+                "delay_terms": ((g1.year - g0.year) * 2 + (g1.sem - g0.sem))
+                               if (g0 and g1 and alt.feasible and not after) else None,
             }
         return result
 
@@ -157,6 +161,7 @@ class StudentMixin:
             cohort = self.ruleset(sid).kb.cohort
         except KeyError:
             cohort = None
+        this_term = str(self._next_term(sid))  # 本學期：與「本學期修課」同一學期
         return parse_question(question, {c: self.kb.courses[c].name for c in planned}, planned,
-                              term_labels(str(start), cohort))
+                              term_labels(str(start), cohort, this_term=this_term), this_term)
 

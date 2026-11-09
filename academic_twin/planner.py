@@ -168,8 +168,18 @@ def plan(kb: KnowledgeBase, graph: CourseGraph, report: AuditReport, start: Term
     return Plan(start, terms, free, targets, unplaceable=sorted(remaining))
 
 
-def explain_delay(kb: KnowledgeBase, base: Plan, alt: Plan) -> list[str]:
-    """比較兩個計畫，列出被往後推的課與畢業時間的變化。"""
+def away_after_graduation(base: Plan, away) -> bool:
+    """交換／休學學期全部落在原本預估畢業之後：照原規劃會先畢業，模擬看不出影響，不能說成「不延畢」。"""
+    return bool(away) and base.feasible and (base.graduation is None or min(away) > base.graduation)
+
+
+def explain_delay(kb: KnowledgeBase, base: Plan, alt: Plan, away=()) -> list[str]:
+    """比較兩個計畫，列出被往後推的課與畢業時間的變化。away：情境的交換／休學學期。"""
+    if away_after_graduation(base, away):
+        when = f"預估畢業 {base.graduation} 之後" if base.graduation else "畢業條件全部符合之後"
+        terms = "、".join(str(t) for t in sorted(away))
+        return [f"交換／休學學期（{terms}）都在{when}：照目前規劃會先畢業，"
+                "這個模擬看不出影響；若打算交換回來再畢業，請先和系上討論"]
     lines = []
     moved = []
     for c in base.targets:
