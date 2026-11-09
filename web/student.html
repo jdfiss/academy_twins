@@ -17,6 +17,27 @@ body.student { font-size: 16px; }
 .student .card { padding: 22px 24px; border-radius: 12px; }
 .student h2 { font-size: 20px; margin-bottom: 16px; }
 .student h3 { font-size: 17px; }
+/* 我的進度：上排四欄橫向並排（學分採計與需要注意疊在最右欄），窄螢幕自動換行 */
+.progress-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; margin-bottom: 20px; }
+.progress-col { display: grid; gap: 16px; }
+/* 畢業條件兩欄，由上往下排（像報紙），高矮不一的卡片不留空白；卡片內容由共用 renderRequirements 產生，這裡只調學生端樣式 */
+.student #requirements { column-count: 2; column-gap: 12px; }
+.student #requirements .req { margin: 0 0 10px; break-inside: avoid; }
+/* 進度條放在標題右邊 */
+.student #requirements .req { display: grid; grid-template-columns: minmax(0, 1fr) 110px; column-gap: 12px; position: relative; }
+.student #requirements .req > * { grid-column: 1 / -1; }
+.student #requirements .req > .req-top { grid-column: 1; grid-row: 1; }
+.student #requirements .req-top > span { white-space: nowrap; }
+.student #requirements .req > .meter { grid-column: 2; grid-row: 1; align-self: center; margin-top: 0 !important; height: 5px; min-width: 0; }
+/* 「依據」滑鼠移到卡片上才浮出，不佔版面 */
+.student #requirements .req > .cite { display: none; position: absolute; left: 8px; right: 8px; top: 100%; z-index: 5; margin-top: 4px;
+  padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, .12); }
+.student #requirements .req:hover > .cite { display: block; }
+/* 已符合的條件收成一行，點開才看 */
+.student #requirements .req-ok-group { column-span: all; }
+.student #requirements .req-ok-group > summary { cursor: pointer; color: var(--pass); font-weight: 600; padding: 6px 2px; }
+.student #requirements .req-ok-list { column-count: 2; column-gap: 12px; margin-top: 8px; }
+@media (max-width: 900px) { .student #requirements, .student #requirements .req-ok-list { column-count: 1; } }
 </style>
 </head>
 <body class="student">
@@ -44,46 +65,45 @@ body.student { font-size: 16px; }
   </div>
 
   <!-- 我的進度 -->
+  <!-- 比照系辦端學生分頁：上排卡片橫向並排；下方畢業條件整頁寬、兩欄，減少垂直捲動 -->
   <section class="view active" id="view-progress">
-    <div class="grid two">
-      <div class="grid">
-        <div class="card">
-          <h3>目前狀態</h3>
-          <div id="summary"></div>
-        </div>
+    <div class="progress-top">
+      <div class="card">
+        <h3>目前狀態</h3>
+        <div id="summary"></div>
+      </div>
+      <div class="card">
+        <h3>可能是校務系統誤判</h3>
+        <div id="flags"></div>
+      </div>
+      <div class="card">
+        <h3>需要找承辦人辦理</h3>
+        <div id="actions"></div>
+      </div>
+      <div class="progress-col">
         <div class="card">
           <h3>學分採計</h3>
           <div class="stack" id="breakdown-bar"></div>
           <div class="legend" id="breakdown-legend"></div>
-        </div>
-        <div class="card">
-          <h3>可能是校務系統誤判</h3>
-          <div id="flags"></div>
-        </div>
-        <div class="card">
-          <h3>需要找承辦人辦理</h3>
-          <div id="actions"></div>
         </div>
         <div class="card" id="issues-card">
           <h3>需要注意</h3>
           <div id="issues"></div>
         </div>
       </div>
-      <div class="grid">
-        <div class="card">
-          <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
-          <div id="requirements"></div>
-        </div>
-        <div class="card">
-          <details>
-            <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
-            <table style="margin-top:8px">
-              <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
-              <tbody id="records"></tbody>
-            </table>
-          </details>
-        </div>
-      </div>
+    </div>
+    <div class="card" style="margin-bottom:20px">
+      <h3>畢業條件 <span class="muted small" id="req-summary"></span></h3>
+      <div id="requirements"></div>
+    </div>
+    <div class="card">
+      <details>
+        <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
+        <table style="margin-top:8px">
+          <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
+          <tbody id="records"></tbody>
+        </table>
+      </details>
     </div>
   </section>
 

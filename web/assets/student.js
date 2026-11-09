@@ -24,8 +24,20 @@ async function loadStudent(id) {
   renderIssues(s);
   // 待確認（英檢）不顯示系辦用語
   renderRequirements(s, (r) => flagNote(s, r), "");
+  foldSatisfied();
   renderRecords(s);
   await loadPlan(s.id);
+}
+
+// 比照系辦端：已符合的條件收進一行「已符合 N 項」，點開才看細節（只搬動畫面，不改判定）
+function foldSatisfied() {
+  const box = $("#requirements"), done = [...box.querySelectorAll(":scope > .req.ok")];
+  if (!done.length) return;
+  const group = document.createElement("details");
+  group.className = "req-ok-group";
+  group.innerHTML = `<summary>✔ 已符合 ${done.length} 項</summary><div class="req-ok-list"></div>`;
+  done.forEach((el) => group.lastElementChild.appendChild(el));
+  box.appendChild(group);
 }
 
 // ---------- 疑似誤判與需辦理事項（flags、actions 由審查核心產生，這裡只組成白話說明） ----------
