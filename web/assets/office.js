@@ -30,6 +30,23 @@ function when(iso) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// 清單用的短時間（像信箱）：今天只顯示「HH:MM」，今年顯示「MM/DD」，更早顯示「YYYY/MM/DD」
+function shortWhen(iso) {
+  const d = new Date(iso), now = new Date();
+  if (!iso || isNaN(d)) return esc(iso || "");
+  const p = (n) => String(n).padStart(2, "0");
+  if (d.toDateString() === now.toDateString()) return `${p(d.getHours())}:${p(d.getMinutes())}`;
+  return d.getFullYear() === now.getFullYear() ? `${p(d.getMonth() + 1)}/${p(d.getDate())}`
+    : `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
+}
+
+// AI 錯誤原文（常是 Gemini 的英文 JSON）在清單只顯示短的中文原因；完整原文放在信件詳細內容
+function shortError(err) {
+  if (/429|quota|RESOURCE_EXHAUSTED/i.test(err)) return "額度已用完，稍後重試";
+  if (/逾時|timeout/i.test(err)) return "AI 回應逾時";
+  return "AI 擬稿失敗";
+}
+
 const errorList = (e) => `<b>${esc(e.message)}</b>`
   + (e.details?.length ? `<ul class="upload-errors">${e.details.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>` : "");
 
@@ -96,6 +113,7 @@ $("#flag-filter").addEventListener("change", (e) => {
 
 function renderRoster(rows) {
   $("#roster-card").hidden = !rows.length;
+  $("#roster-count").textContent = rows.length ? `${rows.length} 筆` : "";
   $("#roster-rows").innerHTML = rows.map((a) =>
     `<tr><td><b>${a.id ? esc(a.id) : "—"}</b></td><td>${esc(a.message)}</td></tr>`).join("");
 }
@@ -113,7 +131,19 @@ async function loadStudent(id) {
   renderBreakdown(s, target ?? 0);
   renderIssues(s);
   renderRequirements(s);
+  foldSatisfied();
   renderRecords(s);
+}
+
+// 系辦主要看沒過的條件：已符合的收進一行「已符合 N 項」，點開才看細節（只搬動畫面，不改判定）
+function foldSatisfied() {
+  const box = $("#requirements"), done = [...box.querySelectorAll(":scope > .req.ok")];
+  if (!done.length) return;
+  const group = document.createElement("details");
+  group.className = "req-ok-group";
+  group.innerHTML = `<summary>✔ 已符合 ${done.length} 項</summary><div class="req-ok-list"></div>`;
+  done.forEach((el) => group.lastElementChild.appendChild(el));
+  box.appendChild(group);
 }
 
 function renderIssues(s) {
@@ -670,10 +700,11 @@ function renderInbox() {
     || (inboxFilter === "new" && m.state === "processing"));
   $("#inbox-list").innerHTML = list.map((m) => `<div class="mail ${m.id === inboxSel ? "sel" : ""}" data-id="${m.id}">
       <div class="top"><span class="mstate ${m.state}">${esc(INBOX.states[m.state])}</span>
-        <span class="subj">${esc(m.subject)}</span></div>
-      <div class="hint">${esc(m.student_id)}・${when(m.received_at)}${m.type ? `・${esc(INBOX.types[m.type])}` : ""}
-        ${m.grounded === false ? "・<b style='color:var(--fail)'>無法確認</b>" : ""}${m.proposals ? `・覆核建議 ${m.proposals}` : ""}
-        ${m.stale ? "・<b>需重新擬稿</b>" : ""}${m.error ? `・${esc(m.error)}` : ""}</div></div>`).join("")
+        <span class="subj">${esc(m.subject)}</span><span class="time">${shortWhen(m.received_at)}</span></div>
+      <div class="meta"><span class="who">${m.type ? `${esc(INBOX.types[m.type])}・` : ""}${esc(m.student_id)}</span>
+        <span class="marks">${m.error ? `<span class="m-err">${esc(shortError(m.error))}</span>` : ""}
+          ${m.grounded === false ? '<span class="m-warn">⚠ 需核對</span>' : ""}${m.stale ? '<span class="m-warn">需重新擬稿</span>' : ""}
+          ${m.proposals ? `<span>覆核建議 ${m.proposals}</span>` : ""}</span></div></div>`).join("")
     || '<p class="empty">沒有信件。按「匯入示範信件」載入虛構範例。</p>';
   document.querySelectorAll("#inbox-list .mail").forEach((el) => el.addEventListener("click", () => openMail(el.dataset.id)));
   if (inboxSel && !INBOX.messages.some((m) => m.id === inboxSel)) {
@@ -709,7 +740,8 @@ async function openMail(id) {
     ${m.type ? `<div>問題類型：<b>${esc(INBOX.types[m.type])}</b></div>` : ""}
     ${m.notes.map((n) => `<div class="issue WARNING">⚠ ${esc(n)}</div>`).join("")}
     ${m.stale ? '<div class="issue WARNING">⚠ 審查結果已因採用覆核建議而改變，建議重新擬稿。</div>' : ""}
-    ${m.error ? `<div class="issue FAIL">✘ ${esc(m.error)}</div>` : ""}
+    ${m.error ? `<div class="issue FAIL">✘ ${esc(shortError(m.error))}
+      <details class="fold" style="margin-top: 6px"><summary>錯誤詳情</summary><div class="hint" style="overflow-wrap: anywhere">${esc(m.error)}</div></details></div>` : ""}
     ${trace}
     ${proposals}
     ${m.state === "new" || m.state === "processing" ? '<p class="hint">尚未擬稿。</p>' : `<div>
@@ -768,8 +800,9 @@ async function applyProposal(m, index, accept) {
 }
 
 $("#inbox-demo").addEventListener("click", async () => {
-  try { INBOX = await postJSON("/api/inbox/demo", {}); msg("#inbox-msg", "已匯入虛構示範信件。", "ok"); }
-  catch (e) { return msg("#inbox-msg", esc(e.message), "err"); }
+  // 按鈕在「工具」分頁，訊息顯示在同一張卡片
+  try { INBOX = await postJSON("/api/inbox/demo", {}); msg("#upload-msg", "已匯入虛構示範信件，到「收件匣」查看。", "ok"); }
+  catch (e) { return msg("#upload-msg", esc(e.message), "err"); }
   inboxSel = null;
   await refreshInbox();
 });
