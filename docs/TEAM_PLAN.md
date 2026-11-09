@@ -161,6 +161,7 @@ A 組先與承辦人確認案例、人工答案與量測方式，再開發及調
 | `tests/test_cohort_rules.py` | A |
 | `tests/test_dashboard.py` | A |
 | `tests/test_demo_batch.py` | A |
+| `tests/test_demo_office.py`（系辦端 demo 腳本的預期數字，評審模式端到端） | A |
 | `tests/test_dashboard_batch.py` | A |
 | `tests/test_replay.py` | A |
 | `tests/test_rule_draft.py` | A |
@@ -523,7 +524,7 @@ TEAM_PLAN.md：A 組優先 1「規則依入學年度取用」
 
 ### 測試
 
-- PR 合併前全部測試須通過（目前 373 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
+- PR 合併前全部測試須通過（目前 386 項；GitHub Actions `.github/workflows/tests.yml` 會在 push 與 PR 時自動執行）。
 - 新功能要附測試，放在自己組的測試檔；新增測試檔時在 PR 說明寫明歸屬。
 - **不得為了讓測試通過而刪除或放寬對方組的測試**。對方的測試若與新需求衝突，先找對方組討論，由對方修改。
 - `tests/test_contract.py` 的兩端一致性測試失敗，一律視為阻擋合併：同一份資料在兩端必須得到相同判定。

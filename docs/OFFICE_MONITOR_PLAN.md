@@ -17,7 +17,7 @@
 | M4 介面收斂 | 完成：監控台／收件匣／學生／規則＋工具；舊網址 `#ingest`、`#batch` 導向監控台 |
 | M5 收件匣 | 完成（`inbox.py`），測試 `tests/test_inbox.py`（替身模型） |
 | M6 實證 | **收件匣完成、基準量測未做**：收件匣改用 `gemini-3.5-flash-lite`、提示升為 `inbox-v2`，示範 10 封已錄製（評審模式可完整重播），30 題 × 3 次評測與人工審閱（數字與待修問題見 IMPLEMENTATION_STATUS）。儀表板基準量測需數百次 `gemini-3.5-flash`／`2.5-flash` 呼叫，免費方案每模型每日 20 次無法執行，待決定費用方案 |
-| M7 影片 | 待 M6 錄製完成 |
+| M7 影片 | **腳本完成**（2026-11-09，[DEMO_OFFICE.md](DEMO_OFFICE.md)，數字由 `tests/test_demo_office.py` 以評審模式鎖定）；下方 M7 表格為規劃時的預估，實際數字以腳本為準 |
 
 額度恢復後依序執行：
 1. `python -m academic_twin.benchmark --runs 3`（24 份 × 3 次，約 144 次呼叫；額度不足可先 `--runs 1`）
