@@ -1,0 +1,32 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:37:30",
+ "recorded_at": "2026-11-07T16:37:30",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1065,
+  "candidatesTokenCount": 138,
+  "totalTokenCount": 1203,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 1065
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "find_record",
+  "args": {
+   "code": "XFER-01",
+   "id": "XFER-01"
+  },
+  "type": "course",
+  "reply": "同學你好，關於你詢問的程式語言（課號 XFER-01），經查目前已認列為本系選修。若對採計方式有疑問，歡迎洽系辦確認。",
+  "citations": [
+   "XFER-01"
+  ],
+  "proposals": []
+ }
+}

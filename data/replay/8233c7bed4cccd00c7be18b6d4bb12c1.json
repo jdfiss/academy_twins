@@ -1,0 +1,40 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:37:37",
+ "recorded_at": "2026-11-07T16:37:37",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1207,
+  "candidatesTokenCount": 227,
+  "totalTokenCount": 1434,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 1207
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "find_record",
+  "args": {
+   "code": "IM9001",
+   "id": "IM9001"
+  },
+  "type": "course",
+  "reply": "同學你好，關於你修習兩次的 IM9001 Python，117-1 學期已採計為本系選修，而 117-2 學期目前顯示為重複通過，待人工覆核（尚未採計）。已請承辦人確認採計方式。",
+  "citations": [
+   "IM9001"
+  ],
+  "proposals": [
+   {
+    "code": "IM9001",
+    "term": "117-2",
+    "action": "dept_elective",
+    "category": "本系選修",
+    "reason": "重複修習第二次人工覆核"
+   }
+  ]
+ }
+}

@@ -181,6 +181,33 @@ def classify(kb: KnowledgeBase, records: list[Record], decisions: Decisions | No
     return t
 
 
+def placement(kb: KnowledgeBase, t: Transcript, code: str, term: str) -> str:
+    """某筆「及格」紀錄在 classify() 結果中的採計去處（唯讀描述，不重新判定）。供收件匣等說明用；
+    不及格的紀錄由呼叫端依成績先排除（之後重修通過的課，舊的不及格紀錄不留在 t.failed）。"""
+    def has(rows: list[Record]) -> bool:
+        return any(r.code == code and r.term == term for r in rows)
+    if has(t.duplicate_review):
+        return "重複通過，待人工覆核（尚未採計）"
+    if has(t.review):
+        return "類別不明，待人工覆核（尚未採計）"
+    if has(t.dept_unverified):
+        return "本系課號、認列方式未確認，暫計本系選修"
+    if has(t.excluded):
+        return "覆核決定不採計"
+    if has(t.dept_elective) or has(t.dept_confirmed):
+        return "本系選修"
+    if has(t.outside):
+        return "外系學分"
+    for r in t.categorized:
+        if r.code == code and r.term == term:
+            return f"{r.category}（{root_category(kb, r.category)}）" if root_category(kb, r.category) != r.category \
+                else r.category
+    if code in t.passed and code in kb.courses:
+        return {None: "院系必修", "dept_elective": "本系選修", "outside": "外系學分"}.get(kb.courses[code].counts_as,
+                                                                                      "院系必修")
+    return "未採計"
+
+
 def _apply(kb: KnowledgeBase, t: Transcript, r: Record, d: Decision) -> None:
     if d.action == CATEGORY:
         if d.category not in kb.categories:

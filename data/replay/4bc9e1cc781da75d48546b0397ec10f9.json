@@ -1,0 +1,35 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:37:25",
+ "recorded_at": "2026-11-07T16:37:25",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1458,
+  "candidatesTokenCount": 210,
+  "totalTokenCount": 1668,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 1458
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "get_progress",
+  "args": {
+   "code": "none",
+   "id": "none"
+  },
+  "type": "progress",
+  "reply": "同學好，目前您的審查結果為尚須人工覆核，總學分已修 97 學分。各項要求中，系訂必修還缺 3 門（包含電子商務、資訊系統發展專題II、管理資訊系統），共同必修通識還缺 5 學分，本系選修還缺 10 學分，最低畢業學分 128 還缺 31 學分。詳細進度可再洽系辦確認。",
+  "citations": [
+   "R1",
+   "R6",
+   "R10",
+   "R11"
+  ],
+  "proposals": []
+ }
+}

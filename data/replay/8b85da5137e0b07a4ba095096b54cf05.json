@@ -1,0 +1,30 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:37:45",
+ "recorded_at": "2026-11-07T16:37:45",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 921,
+  "candidatesTokenCount": 65,
+  "totalTokenCount": 986,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 921
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "",
+  "args": {
+   "code": "",
+   "id": ""
+  },
+  "type": "other",
+  "reply": "",
+  "citations": [],
+  "proposals": []
+ }
+}

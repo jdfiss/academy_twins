@@ -4,7 +4,9 @@
 - 同時處理的份數由環境變數 DASHBOARD_WORKERS 指定，預設 DEFAULT_WORKERS。
 - 失敗的由承辦人按重試；「停止全部」讓佇列中的不再開始，並暫停系辦端的 AI 呼叫，直到承辦人恢復。
   已送出的模型呼叫無法中斷，回來的結果照常保留為待確認草稿。
-- 解析結果只是草稿（與單份解析相同），確認前不進入審查。狀態只在記憶體，伺服器重開後需重新上傳。
+- 解析結果只是草稿（與單份解析相同），確認前不進入審查。
+- 狀態改變時呼叫 on_change，由系辦端存檔（office_state.py）；伺服器重開後以 restore 接續，
+  當時還在排隊或解析中的改為失敗（PDF 不存檔），需重新上傳。
 """
 from __future__ import annotations
 
@@ -21,6 +23,7 @@ from . import llm
 DEFAULT_WORKERS = 3
 QUEUED, RUNNING, DONE, FAILED, STOPPED, CONFIRMED = "queued", "running", "done", "failed", "stopped", "confirmed"
 PENDING = (QUEUED, RUNNING)
+RESTARTED = "伺服器重開時尚未解析完成，PDF 未保存，請重新上傳"
 
 
 class AIPaused(llm.LLMError):
@@ -68,14 +71,17 @@ class Job:
                 "warnings": sum(i["level"] == "warning" for i in issues),
                 "cross_checked": cc.get("status") == "ok",
                 "flagged_rows": cc.get("flagged_rows", 0) + cc.get("missing_in_primary", 0),
-                "corrected": bool(trace.get("corrected")), "to_manual": bool(trace.get("to_manual"))}
+                "corrected": bool(trace.get("corrected")), "to_manual": bool(trace.get("to_manual")),
+                "source_check": trace.get("source_check"), "replay": bool(trace.get("replay"))}
 
 
 class DashboardBatch:
     """extract(pdf, student_id) 為單份解析（OfficeMixin.dashboard_extract），回傳待確認草稿。"""
 
-    def __init__(self, extract: Callable[[bytes, str], dict], max_workers: int | None = None, paused: bool = False):
+    def __init__(self, extract: Callable[[bytes, str], dict], max_workers: int | None = None, paused: bool = False,
+                 on_change: Callable[[], None] | None = None):
         self._extract = extract
+        self._on_change = on_change or (lambda: None)  # 在鎖外呼叫，避免存檔時讀 status() 卡住
         self.max_workers = max_workers or workers()
         self._pool = ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="dashboard-batch")
         self._lock = threading.Lock()
@@ -87,11 +93,15 @@ class DashboardBatch:
     def add(self, filename: str, pdf: bytes, roster_ids: set[str]) -> dict:
         """加入佇列；學號不在名單上時不解析，記為名單異常並回傳 {"unmatched": ...}。"""
         sid = student_id_from_filename(filename)
+        entry = {"student_id": sid, "filename": filename}
         with self._lock:
-            if sid not in roster_ids:
-                entry = {"student_id": sid, "filename": filename}
+            changed = sid not in roster_ids
+            if changed:
                 self.unmatched = [u for u in self.unmatched if u["student_id"] != sid] + [entry]
-                return {"unmatched": entry}
+        if changed:
+            self._on_change()
+            return {"unmatched": entry}
+        with self._lock:
             if self.paused:
                 raise ValueError("AI 已停用，請先按「恢復 AI」再加入佇列")
             old = self.jobs.get(sid)
@@ -100,7 +110,9 @@ class DashboardBatch:
             job = self.jobs[sid] = Job(sid, filename, pdf)
             self.unmatched = [u for u in self.unmatched if u["student_id"] != sid]
             self._submit(job)
-            return job.summary()
+            summary = job.summary()
+        self._on_change()
+        return summary
 
     def retry(self, sid: str | None = None) -> list[dict]:
         """重試失敗或已停止的一份（sid）或全部；AI 停用中不能重試。"""
@@ -114,8 +126,11 @@ class DashboardBatch:
                 if job.state in (FAILED, STOPPED) and job.pdf is not None:
                     job.state, job.error, job.seconds = QUEUED, "", None
                     self._submit(job)
+                elif sid is not None and job.pdf is None and job.state in (FAILED, STOPPED):
+                    raise ValueError(f"{sid} 的 PDF 未保存（伺服器重開過），請重新上傳這份")
                 elif sid is not None:
                     raise ValueError(f"{sid} 目前是「{job.state}」，只有失敗或已停止的可以重試")
+        self._on_change()
         return self.status()["jobs"]
 
     def stop(self) -> None:
@@ -125,6 +140,7 @@ class DashboardBatch:
             for job in self.jobs.values():
                 if job.state == QUEUED:
                     job.state, job.error = STOPPED, "已由承辦人停止"
+        self._on_change()
 
     def close(self) -> None:
         """換新批次時呼叫：還沒開始的不再開始；執行中的模型呼叫無法中斷，結果不會出現在新批次。"""
@@ -137,12 +153,34 @@ class DashboardBatch:
     def resume(self) -> None:
         with self._lock:
             self.paused = False
+        self._on_change()
 
     def mark_confirmed(self, draft_id: str) -> None:
         with self._lock:
             for job in self.jobs.values():
                 if job.draft and job.draft.get("draft_id") == draft_id:
                     job.state = CONFIRMED
+        self._on_change()
+
+    def to_state(self) -> dict:
+        """存檔用：不含 PDF。"""
+        with self._lock:
+            return {"paused": self.paused, "unmatched": list(self.unmatched),
+                    "jobs": [{"student_id": j.student_id, "filename": j.filename, "state": j.state,
+                              "queued_at": j.queued_at, "error": j.error, "seconds": j.seconds, "draft": j.draft}
+                             for j in self.jobs.values()]}
+
+    def restore(self, state: dict) -> None:
+        """伺服器重開後接續；排隊或解析中的改為失敗（PDF 未保存）。"""
+        with self._lock:
+            self.paused = bool(state.get("paused"))
+            self.unmatched = list(state.get("unmatched") or [])
+            for j in state.get("jobs") or []:
+                job = Job(j["student_id"], j["filename"], None, j["state"], j["queued_at"], j.get("error", ""),
+                          j.get("seconds"), j.get("draft"))
+                if job.state in PENDING:
+                    job.state, job.error = FAILED, RESTARTED
+                self.jobs[job.student_id] = job
 
     def draft(self, sid: str) -> dict:
         with self._lock:
@@ -193,3 +231,4 @@ class DashboardBatch:
                 job.state, job.error = FAILED, error
             else:
                 job.state, job.draft, job.pdf = DONE, draft, None  # 成功後不再保留 PDF
+        self._on_change()

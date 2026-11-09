@@ -15,6 +15,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -51,28 +53,143 @@ def key(prompt: str, model: str | None, attachments) -> str:
     return h.hexdigest()[:32]
 
 
-def generate_json(prompt: str, schema: dict, attachments=(), *, model: str | None = None) -> llm.LLMResult:
-    """與 llm.generate_json 相同介面；依模式改用錄製結果。重播時 result.replay 帶原本的模型與時間。"""
+def generate_json(prompt: str, schema: dict, attachments=(), *, model: str | None = None,
+                  purpose: str = "", temperature: float | None = None) -> llm.LLMResult:
+    """與 llm.generate_json 相同介面；依模式改用錄製結果。重播時 result.replay 帶原本的模型與時間。
+
+    purpose：用途代號（dashboard／inbox／rule_draft），只用於 token 用量紀錄。
+    temperature：未指定時依模型決定（見 llm.default_temperature）；不納入錄製結果的鍵值。
+    失敗的呼叫（逾時、重複迴圈、截斷）若已消耗用量，同樣記入用量紀錄，計入每月預算。
+    """
     m = mode()
     path = REPLAY_DIR / f"{key(prompt, model, attachments)}.json"
     if m == "only":
         return _load(path, "評審模式只能重播預先錄製的虛構文件，這份文件沒有錄製結果")
+    extra = {} if temperature is None else {"temperature": temperature}
     try:
-        result = llm.generate_json(prompt, schema, attachments, model=model)
+        check_budget()
+        result = llm.generate_json(prompt, schema, attachments, model=model, **extra)
     except llm.LLMError as e:
+        log_failed_usage(getattr(e, "usage", ()), purpose, m)
         if m == "fallback" and path.exists():
             return _load(path, "", reason=str(e)[:200])
         raise
+    log_failed_usage(getattr(result, "failed_usage", ()), purpose, m)
+    log_usage(result, purpose, m)
     if recording() and not result.fallback_from:  # 備援模型的回應不能存成主模型的錄製結果
         _save(path, result)
     return result
+
+
+# ---------- token 用量（估算費用用；只記計數，不記提示或回應內容） ----------
+USAGE_LOG = ROOT / "data" / "eval" / "llm_usage.jsonl"
+_USAGE_LOCK = threading.Lock()
+
+
+def usage_entry(result: llm.LLMResult, purpose: str, m: str) -> dict | None:
+    """把模型回傳的 usageMetadata 整理成一筆紀錄；沒有用量資料（例如測試替身）時回傳 None。"""
+    u = result.usage or {}
+    if not u:
+        return None
+    return {"at": datetime.now().isoformat(timespec="seconds"), "purpose": purpose or "other",
+            "model": result.model, "fallback": bool(result.fallback_from), "measure": m == "off",
+            "input_tokens": int(u.get("promptTokenCount") or 0),
+            "output_tokens": int(u.get("candidatesTokenCount") or 0),
+            "thinking_tokens": int(u.get("thoughtsTokenCount") or 0),
+            "total_tokens": int(u.get("totalTokenCount") or 0)}
+
+
+def log_failed_usage(spent, purpose: str, m: str) -> None:
+    """記錄失敗呼叫已消耗的用量（[(模型, usageMetadata), ...]）；failed 欄位標示這筆沒有產出結果。"""
+    for model, usage in spent or ():
+        _append(usage_entry(llm.LLMResult(None, model, "", usage), purpose, m), failed=True)
+
+
+def log_usage(result: llm.LLMResult, purpose: str, m: str) -> None:
+    _append(usage_entry(result, purpose, m))
+
+
+def _append(entry: dict | None, failed: bool = False) -> None:
+    if entry is None:
+        return
+    if failed:
+        entry["failed"] = True
+    with _USAGE_LOCK:  # 批次解析與收件匣都是多執行緒
+        USAGE_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with USAGE_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+# ---------- 每月 token 預算（費用上限） ----------
+# 超過預算時不再呼叫模型，拋出 LLMError：各功能本來就把 LLMError 視為「AI 無法使用」改走人工流程，
+# 所以超支的結果是變慢而不是多花錢。0 表示不設上限（需明確設定）。
+# 檢查與呼叫之間不加鎖：同時進行的呼叫最多多用「同時呼叫數 × 單次上限」，量小且可預估。
+DEFAULT_MONTHLY_BUDGET = 3_000_000
+
+
+def monthly_budget() -> int:
+    raw = os.environ.get("ACADEMIC_TWIN_TOKEN_BUDGET", "").strip()
+    try:
+        value = int(raw) if raw else DEFAULT_MONTHLY_BUDGET
+    except ValueError:
+        raise llm.LLMError(f"ACADEMIC_TWIN_TOKEN_BUDGET 必須是整數（token 數），目前為「{raw}」") from None
+    if value < 0:
+        raise llm.LLMError("ACADEMIC_TWIN_TOKEN_BUDGET 不能是負數")
+    return value
+
+
+def read_usage() -> list[dict]:
+    if not USAGE_LOG.is_file():
+        return []
+    entries = []
+    for line in USAGE_LOG.read_text(encoding="utf-8").splitlines():
+        try:
+            entries.append(json.loads(line))
+        except ValueError:
+            continue  # 寫到一半的行不影響計算
+    return entries
+
+
+def month_usage(entries: list[dict], month: str | None = None) -> int:
+    month = month or datetime.now().strftime("%Y-%m")
+    return sum(int(e.get("total_tokens") or 0) for e in entries if str(e.get("at", "")).startswith(month))
+
+
+def budget_status() -> dict:
+    """監控台用：本月已用 token、預算與是否已停用。"""
+    budget = monthly_budget()
+    used = month_usage(read_usage())
+    return {"month": datetime.now().strftime("%Y-%m"), "used": used, "budget": budget,
+            "exceeded": bool(budget) and used >= budget}
+
+
+def check_budget() -> None:
+    s = budget_status()
+    if s["exceeded"]:
+        raise llm.LLMError(f"本月 AI 用量已達預算（{s['used']:,}／{s['budget']:,} token），暫停呼叫模型；"
+                           "其餘功能照常，可改由人工處理，或由負責人調整 ACADEMIC_TWIN_TOKEN_BUDGET")
+
+
+def usage_summary(entries: list[dict]) -> dict:
+    """依用途與模型彙總：呼叫次數、平均輸入／輸出（含思考）token。費用由使用者以當時的價目表換算。"""
+    groups: dict[tuple, list[dict]] = {}
+    for e in entries:
+        groups.setdefault((e.get("purpose", "other"), e.get("model", "")), []).append(e)
+    rows = []
+    for (purpose, model), es in sorted(groups.items()):
+        n = len(es)
+        rows.append({"purpose": purpose, "model": model, "calls": n,
+                     "avg_input": round(sum(e["input_tokens"] for e in es) / n),
+                     "avg_output": round(sum(e["output_tokens"] + e["thinking_tokens"] for e in es) / n)})
+    return {"rows": rows, "calls": len(entries)}
 
 
 def _save(path: Path, result: llm.LLMResult) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"model": result.model, "generated_at": result.generated_at,
                                 "recorded_at": datetime.now().isoformat(timespec="seconds"),
-                                "fallback_from": result.fallback_from, "data": result.data},
+                                "fallback_from": result.fallback_from, "usage": result.usage or {},
+                                "data": result.data},
                                ensure_ascii=False, indent=1), encoding="utf-8")
 
 
@@ -85,3 +202,25 @@ def _load(path: Path, missing: str, reason: str = "") -> llm.LLMResult:
     result.replay = {"model": saved["model"], "generated_at": saved["generated_at"],
                      "reason": reason or "評審模式"}
     return result
+
+
+def main() -> None:
+    """python -m academic_twin.replay --usage：彙總 data/eval/llm_usage.jsonl 的 token 用量。"""
+    if "--usage" not in sys.argv[1:]:
+        print("用法：python -m academic_twin.replay --usage")
+        return
+    b = budget_status()
+    print(f"{b['month']} 已用 {b['used']:,} token；每月預算 {b['budget']:,}" if b["budget"]
+          else f"{b['month']} 已用 {b['used']:,} token；未設預算上限")
+    entries = read_usage()
+    if not entries:
+        print(f"尚無用量紀錄（{USAGE_LOG}）：真實模型呼叫後才會產生")
+        return
+    s = usage_summary(entries)
+    print(f"共 {s['calls']} 次真實模型呼叫（不含重播）；輸出含思考 token")
+    for r in s["rows"]:
+        print(f"  {r['purpose']:<10} {r['model']:<24} {r['calls']:>4} 次  平均輸入 {r['avg_input']:>6}  平均輸出 {r['avg_output']:>6}")
+
+
+if __name__ == "__main__":
+    main()

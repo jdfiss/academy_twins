@@ -1,0 +1,39 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:37:27",
+ "recorded_at": "2026-11-07T16:37:27",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1171,
+  "candidatesTokenCount": 207,
+  "totalTokenCount": 1378,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 1171
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "find_record",
+  "args": {
+   "code": "XFER-01",
+   "id": "XFER-01"
+  },
+  "type": "course",
+  "reply": "同學你好，關於你詢問的程式語言（XFER-01），目前系統顯示為「類別不明，待人工覆核（尚未採計）」。已請承辦人確認採計方式，若有疑問歡迎洽系辦確認。",
+  "citations": [
+   "XFER-01"
+  ],
+  "proposals": [
+   {
+    "code": "XFER-01",
+    "term": "114-1",
+    "action": "dept_elective",
+    "reason": "轉學抵免課程待人工覆核"
+   }
+  ]
+ }
+}

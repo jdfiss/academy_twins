@@ -1,7 +1,7 @@
 {
  "model": "gemini-2.5-flash",
- "generated_at": "2026-11-06T21:38:38",
- "recorded_at": "2026-11-06T21:38:38",
+ "generated_at": "2026-11-07T00:48:21",
+ "recorded_at": "2026-11-07T00:48:21",
  "fallback_from": "",
  "data": {
   "rows": [
@@ -580,7 +580,6 @@
   ],
   "cohort": 114,
   "declared_earned": 133,
-  "declared_required": 128,
-  "unreadable": ""
+  "declared_required": 128
  }
 }

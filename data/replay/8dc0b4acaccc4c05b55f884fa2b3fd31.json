@@ -1,0 +1,30 @@
+{
+ "model": "gemini-3.5-flash-lite",
+ "generated_at": "2026-11-07T16:37:35",
+ "recorded_at": "2026-11-07T16:37:35",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1067,
+  "candidatesTokenCount": 135,
+  "totalTokenCount": 1202,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 1067
+   }
+  ],
+  "serviceTier": "standard"
+ },
+ "data": {
+  "action": "answer",
+  "tool": "get_progress",
+  "args": {
+   "code": "dummy",
+   "id": "dummy"
+  },
+  "type": "misjudge",
+  "reply": "同學你好，系統顯示目前畢業審查狀態為通過，總學分已達133學分，其中通識14學分。通識超修學分無法自動流用至其他類別，若對學分計算有疑問，請洽系辦確認。",
+  "citations": [],
+  "proposals": []
+ }
+}
