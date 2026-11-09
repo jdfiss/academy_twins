@@ -5,34 +5,6 @@ const params = new URLSearchParams(location.search);
 const DEMO = params.has("demo");
 setupTabs("twin-student-view");
 
-// 白話說明：依 r.kind 與審查結果組成學生看得懂的說明；只引用 have、need、shortfall 等審查結果，不自行計算或改判
-// 缺的課程與缺額已由 renderRequirements 列出（「缺：」「尚缺」），這裡不再重複
-const EXPLAIN = {
-  all_of: (r) => r.satisfied
-    ? "這些是必修課，你都已經修過並及格。"
-    : `這些是必修課，每一門都要修過並及格；共 ${r.need} 門，你已通過 ${r.have} 門。`,
-  taken_all: () => "必選課只要「有修過」就算符合，不及格也可以；但不及格就拿不到這門課的學分。",
-  n_of: (r) => `從指定的課程中選 ${r.need} 門及格即可，不必全修。`
-    + (r.satisfied ? `你已經修了 ${r.have} 門。` : `上面列出的是可以選的課，再挑 ${r.shortfall} 門就夠了。`),
-  credits_from: (r) => `從指定範圍的課程修滿 ${r.need} 學分；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
-  category_credits: (r) => `這一類課程合計要修滿 ${r.need} 學分；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
-  category_count: (r) => `這項看的是門數（或學期數），不看學分；需要 ${r.need}，目前 ${r.have}${r.satisfied ? "，已經足夠" : ""}。`
-    + (!r.satisfied && !r.shortfall && r.detail ? `數量已經夠了，但還有附加條件沒達到：${esc(r.detail)}。` : ""),
-  dept_elective_credits: (r) => `本系開設的選修課要修滿 ${r.need} 學分（外系課不算在這裡）；目前採計 ${r.have} 學分${r.satisfied ? "，已經足夠" : ""}。`,
-  english_threshold: (r) => r.satisfied
-    ? "已符合英文畢業門檻。"
-    : r.pending
-      ? `修課紀錄看不出你是否已通過英檢。英檢達標就符合；沒有的話，修替代課程及格滿 ${r.need} 學分也可以（目前 ${r.have} 學分）。英檢結果由語言中心登錄，請先確認登錄狀態。`
-      : `英檢尚未達標，替代課程目前 ${r.have} 學分，要滿 ${r.need} 學分才算通過。`,
-  total_credits: (r) => `這是「可採計」的畢業學分，不是你修過的所有學分，例如不及格、不計入畢業的課，或超過上限的外系學分都不算。需要 ${r.need}，目前 ${r.have}${r.satisfied ? "，已經足夠" : ""}。`,
-};
-
-function explain(r) {
-  const text = EXPLAIN[r.kind]?.(r) ?? "這項規則的白話說明尚未提供，請參考上方條件與規章依據。";
-  const terms = `校務系統代碼：${esc(r.system_code ?? "待提供")}・章則用語：${esc(r.regulation_term ?? "待提供")}`;
-  return `<div class="small" style="margin-top:6px">${text}</div><div class="muted small">${terms}</div>`;
-}
-
 // ---------- 我的進度 ----------
 async function loadStudent(id) {
   const s = DEMO ? await api("assets/demo-twin.json") : await api(`/api/twin/${encodeURIComponent(id)}`);
@@ -50,8 +22,8 @@ async function loadStudent(id) {
   renderFlags(s);
   renderActions(s);
   renderIssues(s);
-  // 待確認（英檢）由 explain() 以白話說明，不顯示系辦用語
-  renderRequirements(s, (r) => explain(r) + flagNote(s, r), "");
+  // 待確認（英檢）不顯示系辦用語
+  renderRequirements(s, (r) => flagNote(s, r), "");
   renderRecords(s);
   await loadPlan(s.id);
 }
@@ -91,7 +63,7 @@ function renderFlags(s) {
     ? s.flags.map((f) => `<div class="issue WARNING">⚑ <b>${esc(flagLabel(f.type))}</b>
         <div class="small" style="margin-top:4px">${FLAG_INFO[f.type] ? FLAG_INFO[f.type].text(f) : esc(f.message)}</div>
         <div class="muted small" style="margin-top:4px">${related(s, f)}</div></div>`).join("")
-      + `<div class="muted small">以上是校務系統可能顯示有誤的項目，和「畢業條件」裡真正缺修的項目分開看；處理後是否符合，以承辦人審查為準。</div>`
+
     : `<div class="muted small">目前沒有偵測到可能被校務系統誤判的項目。</div>`;
 }
 
@@ -133,8 +105,7 @@ function renderSummary(s) {
   ].filter(([n]) => n);
   $("#summary").innerHTML = (rows.length
     ? rows.map(([n, cls, label, text]) => `<div class="issue ${cls}"><b>${label}（${n}）</b><div class="small">${text}</div></div>`).join("")
-    : `<div class="issue PASS"><b>✔ 目前的修課紀錄符合所有已建檔的畢業條件</b></div>`)
-    + `<div class="muted small" style="margin-top:6px">這是試算：只依目前的修課紀錄與已建檔的規則計算，不代表一定能或一定不能畢業，正式結果以系辦審查為準。</div>`;
+    : `<div class="issue PASS"><b>✔ 目前的修課紀錄符合所有已建檔的畢業條件</b></div>`);
 }
 
 function renderIssues(s) {
@@ -188,13 +159,13 @@ async function refreshPlan(id) {
   $("#base-plan").innerHTML = renderPlan(sim.base);
   fillWhatIf(sim.base);
   $("#ask-result").innerHTML = "";
-  $("#sim-result").innerHTML = `<div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div>`;
+  $("#sim-result").innerHTML = "";
 }
 
 // 學分數字全部來自 simulate 的 current（審查引擎結果），這裡只負責排版
 function renderCurrent(cur) {
   if (!cur) {
-    $("#current-courses").innerHTML = `<div class="muted small">尚未輸入；規劃從 ${esc(CURRENT?.next_term ?? "")} 開始，本學期的課視為還沒修。</div>`;
+    $("#current-courses").innerHTML = "";
     $("#current-total").innerHTML = "";
     return;
   }
@@ -242,12 +213,6 @@ function fillCurrentOptions() {
       `${o.credits} 學分・${OFFERINGS.simulated ? "模擬開課" : "本學期開課"}：${sectionsText(o)}`)),
     ...notOffered.map((c) => option(c.code, c.name, `${c.credits} 學分`)),
   ].join("");
-  const o = OFFERINGS;
-  $("#cur-source").textContent = !o
-    ? `沒有 ${CURRENT?.next_term ?? "本學期"} 的開課清單，只列本系還沒通過的課；其他課請用「其他課程」輸入。`
-    : o.simulated
-      ? `模擬開課清單：${o.term} 還沒有開課資料，先照 ${o.based_on} 的實際開課列出${o.departments.join("、")} ${o.courses.length} 門，教師與時間僅供參考（${o.based_on} 資料取自${o.source}，${o.fetched} 抓取）。${o.note}`
-      : `本學期開課清單：${o.departments.join("、")} ${o.courses.length} 門（${o.source}，${o.fetched} 抓取，實際以選課系統為準）。${o.note}`;
 }
 
 function fillCategoryOptions() {
@@ -358,7 +323,7 @@ $("#reset-sim").addEventListener("click", () => {
   $("#skip-course").value = ""; $("#away-term").value = ""; $("#away-count").value = "1";
   $("#ask-result").innerHTML = "";
   $("#base-plan").innerHTML = renderPlan(BASE_PLAN);
-  $("#sim-result").innerHTML = `<div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div>`;
+  $("#sim-result").innerHTML = "";
 });
 
 $("#run-sim").addEventListener("click", () => {
@@ -454,7 +419,6 @@ async function runSim(skip, away, awayCredits) {
         ${!sc.feasible ? esc(sc.impact.at(-1)) : delayed ? `會延畢 ${sc.delay_terms} 學期：${sim.base.graduation} → ${sc.graduation}` : `不影響畢業：仍可在 ${sc.graduation} 畢業`}
         ${moved.length ? `<ul class="impact">${moved.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
       </div>
-      <div class="muted small" style="margin-bottom:6px">模擬後的路徑（紅框＝被往後推的課）。開課學期依應修科目表的建議修課學期推估，不是實際開課資料。</div>
       <div class="timeline">${renderPlan(sc, movedCodes, away)}</div>`;
   } catch (err) {
     $("#sim-result").innerHTML = `<div class="issue FAIL">${esc(err.message)}</div>`;
@@ -523,14 +487,12 @@ async function selectCourse(code) {
     <div style="margin-top:12px"><b>要先修</b>（${info.ancestors.length}）</div>
     <div class="courses">${info.ancestors.map((c) => courseTag(c)).join("") || '<span class="muted small">無</span>'}</div>
     <div style="margin-top:12px"><b>沒修會卡到</b>（${info.descendants.length}）</div>
-    <div class="courses">${info.descendants.map((c) => courseTag(c, "moved")).join("") || '<span class="muted small">無</span>'}</div>
-    ${info.soft ? '<div class="muted small" style="margin-top:10px">＊含建議先修：依建議修課學期推論，非正式擋修。</div>' : ""}`;
+    <div class="courses">${info.descendants.map((c) => courseTag(c, "moved")).join("") || '<span class="muted small">無</span>'}</div>`;
 }
 
 // ---------- 啟動 ----------
 (async function init() {
   await loadMeta();
-  $("#cap").textContent = META.max_credits_per_term;
   fillCategoryOptions();
   renderGraph();
   // demo 模式只有範例檔這一位，選單不列其他學生，以免切換後仍顯示範例資料
