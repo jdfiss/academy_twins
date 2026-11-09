@@ -97,7 +97,13 @@ nav .nav-tools { margin-left: auto; }
 .mail { padding: 12px 14px; border-bottom: 1px solid var(--line); cursor: pointer; display: grid; gap: 4px; }
 .mail:hover, .mail.sel { background: var(--accent-soft); }
 .mail .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.mail .subj { font-weight: 600; }
+.mail .subj { font-weight: 600; min-width: 0; }
+/* 信件清單第二行：左「類型・學號」，右狀態記號；時間在標題列最右 */
+.mail .time { margin-left: auto; color: var(--muted); font-size: 14px; white-space: nowrap; }
+.mail .meta { display: flex; align-items: baseline; gap: 12px; color: var(--muted); font-size: 15px; }
+.mail .meta .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail .meta .marks { display: flex; gap: 10px; white-space: nowrap; font-size: 14px; }
+.mail .m-warn { color: var(--warn); font-weight: 600; } .mail .m-err { color: var(--fail); font-weight: 600; }
 .mstate { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 13px; font-weight: 600; }
 .mstate.new, .mstate.processing { background: var(--accent-soft); color: var(--accent); }
 .mstate.drafted { background: var(--warn-soft); color: var(--warn); }
@@ -113,6 +119,27 @@ nav .nav-tools { margin-left: auto; }
 /* 收起的次要卡片：標題列跟 h2 同大小 */
 .office details.fold-card > summary { font-size: 18px; font-weight: 600; cursor: pointer; }
 .office details.fold-card > summary .hint { font-weight: 400; margin-left: 8px; }
+/* 學生分頁：上排兩卡並排，畢業條件兩欄（卡片內容由共用 renderRequirements 產生，這裡只調系辦端樣式） */
+.student-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; margin-bottom: 20px; }
+.student-top:has(> #issues-card[style*="none"]) { grid-template-columns: minmax(0, 1fr); }
+/* 兩欄由上往下排（像報紙），高矮不一的卡片不會留下空白 */
+#requirements { column-count: 2; column-gap: 12px; }
+#requirements .req { margin: 0 0 10px; break-inside: avoid; }
+@media (max-width: 900px) { .student-top { grid-template-columns: minmax(0, 1fr); } #requirements, #requirements .req-ok-list { column-count: 1; } }
+/* 進度條放在標題右邊 */
+.office #requirements .req { display: grid; grid-template-columns: minmax(0, 1fr) 110px; column-gap: 12px; position: relative; }
+.office #requirements .req > * { grid-column: 1 / -1; }
+.office #requirements .req > .req-top { grid-column: 1; grid-row: 1; }
+.office #requirements .req-top > span { white-space: nowrap; }
+.office #requirements .req > .meter { grid-column: 2; grid-row: 1; align-self: center; margin-top: 0 !important; height: 5px; min-width: 0; }
+/* 「依據」滑鼠移到卡片上才浮出，不佔版面 */
+.office #requirements .req > .cite { display: none; position: absolute; left: 8px; right: 8px; top: 100%; z-index: 5; margin-top: 4px;
+  padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, .12); }
+.office #requirements .req:hover > .cite { display: block; }
+/* 已符合的條件收成一行 */
+.office #requirements .req-ok-group { column-span: all; }
+.office #requirements .req-ok-group > summary { cursor: pointer; color: var(--pass); font-weight: 600; padding: 6px 2px; }
+.office #requirements .req-ok-list { column-count: 2; column-gap: 12px; margin-top: 8px; }
 </style>
 </head>
 <body class="office">
@@ -288,38 +315,35 @@ nav .nav-tools { margin-left: auto; }
       <a class="ghost" id="student-report" target="_blank" style="text-decoration: none">列印明細</a>
       <a class="ghost" id="student-twin" target="_blank" style="text-decoration: none">學生端畫面</a>
     </div>
-    <div class="grid two">
-      <div class="grid">
-        <div class="card">
-          <h3>學分採計</h3>
-          <div class="stack" id="breakdown-bar"></div>
-          <div class="legend" id="breakdown-legend"></div>
-        </div>
-        <div class="card" id="issues-card">
-          <h3>需要注意</h3>
-          <div id="issues"></div>
-          <div id="review-msg"></div>
-          <details id="review-history-box" class="fold">
-            <summary>覆核歷程（<span id="review-history-count"></span> 筆）</summary>
-            <div id="review-history" style="margin-top: 8px"></div>
-          </details>
-        </div>
+    <!-- 上排：學分採計與需要注意並排；下方畢業條件整頁寬、兩欄，減少垂直捲動 -->
+    <div class="student-top">
+      <div class="card">
+        <h3>學分採計</h3>
+        <div class="stack" id="breakdown-bar"></div>
+        <div class="legend" id="breakdown-legend"></div>
       </div>
-      <div class="grid">
-        <div class="card">
-          <h3>畢業條件 <span class="hint" id="req-summary"></span></h3>
-          <div id="requirements"></div>
-        </div>
-        <div class="card">
-          <details>
-            <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
-            <table style="margin-top: 8px">
-              <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
-              <tbody id="records"></tbody>
-            </table>
-          </details>
-        </div>
+      <div class="card" id="issues-card">
+        <h3>需要注意</h3>
+        <div id="issues"></div>
+        <div id="review-msg"></div>
+        <details id="review-history-box" class="fold">
+          <summary>覆核歷程（<span id="review-history-count"></span> 筆）</summary>
+          <div id="review-history" style="margin-top: 8px"></div>
+        </details>
       </div>
+    </div>
+    <div class="card section">
+      <h3>畢業條件 <span class="hint" id="req-summary"></span></h3>
+      <div id="requirements"></div>
+    </div>
+    <div class="card">
+      <details>
+        <summary>修課紀錄（<span id="record-count"></span> 筆）</summary>
+        <table style="margin-top: 8px">
+          <thead><tr><th>學期</th><th>課號</th><th>課名</th><th>學分</th><th>成績</th><th>類別</th></tr></thead>
+          <tbody id="records"></tbody>
+        </table>
+      </details>
     </div>
   </section>
 
