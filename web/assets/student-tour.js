@@ -12,7 +12,7 @@
     { code: "GE-3", name: "通識：社會與文化", credits: 3, category: "通識" },
   ];
   const QUESTION = "如果我大四下去交換一學期，會延畢嗎？";
-  const CPS = 4.5; // 字幕每秒字數（同腳本旁白語速）
+  const CPS = 5.2; // 字幕每秒字數；與下方停留、游標、打字時間一起調到全程約 2 分鐘（不含 AI 等待）
 
   // ---------- 樣式與覆蓋層 ----------
   const css = document.createElement("style");
@@ -23,7 +23,7 @@
     .tour-caption:empty { opacity: 0; }
     .tour-pointer { position: fixed; z-index: 1001; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%;
       background: rgba(31, 78, 140, .35); border: 3px solid #1f4e8c; pointer-events: none; opacity: 0;
-      transition: left .7s ease, top .7s ease, opacity .3s, transform .15s; }
+      transition: left .5s ease, top .5s ease, opacity .3s, transform .15s; }
     .tour-pointer.press { transform: scale(.7); }
     .tour-ring { outline: 3px solid #e0a020 !important; outline-offset: 4px; border-radius: 10px; transition: outline-color .3s; }
     .student #requirements .req.tour-hover > .cite { display: block; }
@@ -65,11 +65,11 @@
   }
 
   // ---------- 動作 ----------
-  // 一個斷句一個字幕框，依序播放；每框停留依字數（每秒 CPS 字）加 0.3 秒換框，至少 1.4 秒
+  // 一個斷句一個字幕框，依序播放；每框停留依字數（每秒 CPS 字）加 0.2 秒換框，至少 1.2 秒
   async function say(...phrases) {
     for (const p of phrases) {
       caption.textContent = p;
-      await sleep(Math.max(1400, (p.length / CPS) * 1000 + 300));
+      await sleep(Math.max(1200, (p.length / CPS) * 1000 + 200));
     }
   }
   // 畫面文字（AI 轉出的條件）放進字幕前，標點一律改成逗號
@@ -93,13 +93,13 @@
     await show(el);
     const [x, y] = center(el);
     pointer.style.opacity = 1; pointer.style.left = `${x}px`; pointer.style.top = `${y}px`;
-    await sleep(750);
+    await sleep(550);
   }
   async function click(el) {
     await point(el);
     pointer.classList.add("press"); await sleep(150); pointer.classList.remove("press");
     el.click();
-    await sleep(400);
+    await sleep(300);
   }
   let ringed = [];
   function ring(...els) { unring(); ringed = els.filter(Boolean); ringed.forEach((e) => e.classList.add("tour-ring")); }
@@ -107,7 +107,7 @@
   async function type(input, text) {
     await click(input);
     input.value = "";
-    for (const ch of text) { input.value += ch; await sleep(110); }
+    for (const ch of text) { input.value += ch; await sleep(80); }
     await sleep(400);
   }
   const $$ = (sel) => document.querySelector(sel);
@@ -157,6 +157,7 @@
 
   // ---------- 分鏡（docs/DEMO_STUDENT.md） ----------
   async function run() {
+    const t0 = performance.now();
     // 0:00–0:10 我的進度
     $$('nav button[data-view="progress"]').click();
     window.scrollTo({ top: 0 });
@@ -247,6 +248,7 @@
     unring();
     await say("學生端為試算", "正式結果以系辦審查為準");
     caption.textContent = ""; pointer.style.opacity = 0;
+    console.info(`學生端導覽結束：共 ${((performance.now() - t0) / 1000).toFixed(1)} 秒（含 AI 等待）`);
   }
 
   (async () => {
