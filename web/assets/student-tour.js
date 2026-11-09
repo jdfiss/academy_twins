@@ -31,6 +31,11 @@
     .tour-start > div { background: var(--panel); color: var(--ink); border-radius: 14px; padding: 28px 34px; max-width: 560px; font-size: 17px; line-height: 1.7; }
     .tour-start h2 { margin: 0 0 8px; }
     .tour-start .warn { color: var(--fail); font-weight: 600; }
+    .tour-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .tour-actions button { font-size: 16px; padding: 8px 18px; }
+    .tour-again { position: fixed; right: 20px; bottom: 20px; z-index: 1002; font-size: 15px; padding: 8px 16px; border-radius: 999px;
+      border: 1px solid var(--accent); background: var(--panel); color: var(--accent); font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, .15); }
+    .tour-again[hidden] { display: none; }
     .tour-paused::after { content: "⏸ 已暫停（空白鍵繼續）"; position: fixed; top: 16px; right: 16px; z-index: 1003;
       background: rgba(15, 18, 26, .85); color: #fff; padding: 6px 14px; border-radius: 8px; font-size: 15px; }`;
   document.head.appendChild(css);
@@ -39,10 +44,10 @@
   document.body.append(caption, pointer);
 
   // ---------- 控制：暫停、結束 ----------
-  let paused = false, stopped = false;
+  let paused = false, stopped = false, running = false;
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { stopped = true; caption.textContent = ""; pointer.style.opacity = 0; document.body.classList.remove("tour-paused"); }
-    if (e.key === " " && !document.querySelector(".tour-start") && document.activeElement?.tagName !== "INPUT") {
+    if (e.key === "Escape" && running) { stopped = true; paused = false; document.body.classList.remove("tour-paused"); }
+    if (e.key === " " && running && document.activeElement?.tagName !== "INPUT") {
       e.preventDefault(); paused = !paused; document.body.classList.toggle("tour-paused", paused);
     }
   });
@@ -148,8 +153,45 @@
       await waitFor(() => totals().length === 2);
     }
     if (!want) notes.push("找不到 IM4001／IM4048，無法自動填本學期修課。");
-    $$("#ask-input").value = "";
+    // 上一輪在 AI 轉換中被中止時，等那次請求回來再清掉，免得舊結果出現在新的一輪
+    await waitFor(() => !$$("#ask-run").disabled, 150000);
+    $$("#ask-input").value = ""; $$("#ask-result").innerHTML = "";
     return notes;
+  }
+
+  // 重新錄影前把畫面還原到起點：清掉提示框、What-if 輸入與結果，本學期修課由 prepare() 重設成 4 門全勾
+  function reset() {
+    unring();
+    document.querySelectorAll(".tour-hover").forEach((e) => e.classList.remove("tour-hover"));
+    caption.textContent = ""; pointer.style.opacity = 0;
+    paused = false; stopped = false; document.body.classList.remove("tour-paused");
+    $$("#ask-result").innerHTML = ""; $$("#sim-result").innerHTML = "";
+    $$("#reset-sim").click();
+    $$('nav button[data-view="progress"]').click();
+    showPane("summary");
+    window.scrollTo({ top: 0 });
+  }
+
+  // 結束畫面：「重新錄影」或「關閉」；關閉後右下角留一顆小按鈕，也可按 R 重新錄影
+  const again = Object.assign(document.createElement("button"), { className: "tour-again", textContent: "↻ 重新錄影", hidden: true });
+  document.body.appendChild(again);
+  function endScreen(message) {
+    return new Promise((resolve) => {
+      const box = document.createElement("div");
+      box.className = "tour-start";
+      box.innerHTML = `<div><h2>${esc(message)}</h2>
+        要再錄一次，先停止目前的螢幕錄影，再按「重新錄影」。<br>畫面會回到起點，停在開始畫面。
+        <div class="tour-actions"><button class="primary" data-act="again">↻ 重新錄影</button><button class="ghost" data-act="close">關閉</button></div></div>`;
+      const done = () => { box.remove(); again.hidden = true; document.removeEventListener("keydown", key); resolve(); };
+      const key = (e) => { if (e.key === "r" || e.key === "R") done(); };
+      box.addEventListener("click", (e) => {
+        if (e.target.dataset.act === "again") done();
+        if (e.target.dataset.act === "close") { box.remove(); again.hidden = false; }
+      });
+      again.onclick = done;
+      document.addEventListener("keydown", key);
+      document.body.appendChild(box);
+    });
   }
 
   function startScreen(notes) {
@@ -157,7 +199,7 @@
       const box = document.createElement("div");
       box.className = "tour-start";
       box.innerHTML = `<div><h2>學生端自動導覽</h2>
-        先開始螢幕錄影，再按<b>空白鍵</b>或點一下開始。<br>導覽中：空白鍵暫停／繼續，Esc 結束。
+        先開始螢幕錄影，再按<b>空白鍵</b>或點一下開始。<br>導覽中：空白鍵暫停／繼續，Esc 中止。
         ${notes.map((n) => `<div class="warn">⚠ ${esc(n)}</div>`).join("")}</div>`;
       const go = () => { box.remove(); document.removeEventListener("keydown", key); setTimeout(resolve, 600); };
       const key = (e) => { if (e.key === " ") { e.preventDefault(); go(); } };
@@ -265,13 +307,23 @@
   }
 
   (async () => {
-    try {
-      const notes = await prepare();
-      // ?tour=auto 直接開始（自動截圖檢查用），一般錄影用 ?tour 會先停在開始畫面
-      if (MODE !== "auto") await startScreen(notes);
-      await run();
-    } catch (err) {
-      if (!(err instanceof Stop)) { caption.textContent = `導覽中斷：${err.message}`; console.error(err); }
+    // 開始畫面 → 導覽 → 結束畫面（可重新錄影）；?tour=auto 跳過開始畫面（自動截圖檢查用）
+    for (;;) {
+      let message = "導覽結束";
+      try {
+        const notes = await prepare();
+        if (MODE !== "auto") await startScreen(notes);
+        running = true;
+        await run();
+      } catch (err) {
+        message = err instanceof Stop ? "導覽已中止" : `導覽中斷：${err.message}`;
+        if (!(err instanceof Stop)) console.error(err);
+      } finally {
+        running = false;
+      }
+      caption.textContent = ""; pointer.style.opacity = 0;
+      await endScreen(message);
+      reset();
     }
   })();
 })();
