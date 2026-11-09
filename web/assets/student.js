@@ -148,13 +148,131 @@ function renderIssues(s) {
 $("#student-select").addEventListener("change", (e) => loadStudent(e.target.value));
 
 // ---------- 修課規劃與 What-if ----------
+// 本學期修課：學生自行輸入（學校選課系統沒有公開介接），只存在瀏覽器；每次規劃與 What-if 都帶給後端試算
+// 每項 {code, name, credits, category, counted}；勾選的課由後端交給審查引擎假設及格重算，這裡不計算學分
+let CURRENT_COURSES = [];
+const curKey = (id) => `twin-current-courses:${id}`;
+
+function saveCurrent() {
+  try { localStorage.setItem(curKey(CURRENT.id), JSON.stringify(CURRENT_COURSES)); } catch {}
+}
+
+function currentParams(params = new URLSearchParams()) {
+  if (CURRENT_COURSES.length) params.set("current", JSON.stringify(CURRENT_COURSES));
+  return params;
+}
+
 async function loadPlan(id) {
-  const sim = await api(`/api/students/${encodeURIComponent(id)}/simulate`);
+  CURRENT_COURSES = [];
+  try { CURRENT_COURSES = JSON.parse(localStorage.getItem(curKey(id)) || "[]"); } catch {}
+  if (!Array.isArray(CURRENT_COURSES)) CURRENT_COURSES = [];
+  $("#current-term").textContent = CURRENT?.next_term ?? "";
+  fillCurrentOptions();
+  try {
+    await refreshPlan(id);
+  } catch (err) {
+    // 存在瀏覽器的舊輸入不合規則庫時清掉重來，不讓整個規劃頁壞掉
+    CURRENT_COURSES = []; saveCurrent();
+    await refreshPlan(id);
+    $("#current-msg").innerHTML = `<div class="issue WARNING">先前輸入的本學期課程無法使用，已清除：${esc(err.message)}</div>`;
+  }
+}
+
+async function refreshPlan(id) {
+  const sim = await api(`/api/students/${encodeURIComponent(id)}/simulate?${currentParams()}`);
   BASE_PLAN = sim.base;
+  $("#current-msg").innerHTML = "";
+  renderCurrent(sim.current);
   $("#base-plan").innerHTML = renderPlan(sim.base);
   fillWhatIf(sim.base);
+  $("#ask-result").innerHTML = "";
   $("#sim-result").innerHTML = `<div class="muted small">選一門課與學期，或選擇交換學期，看看會不會延畢。</div>`;
 }
+
+// 學分數字全部來自 simulate 的 current（審查引擎結果），這裡只負責排版
+function renderCurrent(cur) {
+  if (!cur) {
+    $("#current-courses").innerHTML = `<div class="muted small">尚未輸入；規劃從 ${esc(CURRENT?.next_term ?? "")} 開始，本學期的課視為還沒修。</div>`;
+    $("#current-total").innerHTML = "";
+    return;
+  }
+  $("#current-courses").innerHTML = cur.courses.map((c) => `
+    <div class="small" style="display:flex;align-items:center;gap:8px;margin:2px 0">
+      <label style="flex:1"><input type="checkbox" data-code="${esc(c.code)}" ${c.counted ? "checked" : ""}>
+        ${esc(c.code)} ${esc(c.name)}（${c.credits} 學分${c.category ? `・${esc(c.category)}` : ""}）</label>
+      <button class="ghost" data-remove="${esc(c.code)}" style="padding:2px 10px">移除</button>
+    </div>`).join("");
+  const n = cur.courses.filter((c) => c.counted).length;
+  $("#current-total").innerHTML = `可採計學分：目前 <b>${cur.official_total_credits}</b>；若勾選的 ${n} 門都及格 → <b>${cur.trial_total_credits}</b>。規劃從 ${esc(nextTerm(cur.term))} 開始。`;
+}
+
+// 本系課程選項：只列審查結果中還沒通過的課（remaining_courses，不及格可重修的課仍在內），已通過的不列
+function fillCurrentOptions() {
+  $("#cur-options").innerHTML = (CURRENT?.remaining_courses ?? []).map((c) => `<option value="${esc(c.code)} ${esc(c.name)}"></option>`).join("");
+}
+
+function fillCategoryOptions() {
+  $("#cur-o-category").innerHTML = `<option value="">（外系／不確定）</option>` +
+    META.categories.map((c) => `<option>${esc(c)}</option>`).join("");
+}
+
+async function changeCurrent(next) {
+  const before = CURRENT_COURSES;
+  CURRENT_COURSES = next;
+  try {
+    await refreshPlan(CURRENT.id);
+    saveCurrent();
+  } catch (err) {
+    CURRENT_COURSES = before;
+    $("#current-msg").innerHTML = `<div class="issue FAIL">${esc(err.message)}</div>`;
+  }
+}
+
+function addCurrent(course) {
+  if (CURRENT_COURSES.some((c) => c.code === course.code)) {
+    $("#current-msg").innerHTML = `<div class="issue WARNING">${esc(course.code)} 已經在清單裡。</div>`;
+    return;
+  }
+  changeCurrent([...CURRENT_COURSES, { ...course, counted: true }]);
+}
+
+$("#cur-add").addEventListener("click", () => {
+  const text = $("#cur-search").value.trim();
+  const code = text.split(/\s+/)[0].toUpperCase();
+  const options = CURRENT?.remaining_courses ?? [];
+  const c = options.find((x) => x.code === code) ?? options.find((x) => text && x.name === text);
+  if (!c) {
+    const passed = META.courses.some((x) => x.code === code || (text && x.name === text));
+    $("#current-msg").innerHTML = passed
+      ? `<div class="issue WARNING">「${esc(text)}」你已經修過並通過了，不用再加入。</div>`
+      : `<div class="issue WARNING">本系課程裡找不到「${esc(text)}」；通識或外系課請用「其他課程」加入。</div>`;
+    return;
+  }
+  $("#cur-search").value = "";
+  addCurrent({ code: c.code, name: c.name, credits: c.credits, category: "" });
+});
+$("#cur-search").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#cur-add").click(); });
+
+$("#cur-o-add").addEventListener("click", () => {
+  const name = $("#cur-o-name").value.trim();
+  const code = $("#cur-o-code").value.trim().toUpperCase() || `自填-${name}`;
+  if (!name) {
+    $("#current-msg").innerHTML = `<div class="issue WARNING">請填課名。</div>`;
+    return;
+  }
+  $("#cur-o-code").value = ""; $("#cur-o-name").value = "";
+  addCurrent({ code, name, credits: Number($("#cur-o-credits").value || 0), category: $("#cur-o-category").value });
+});
+
+$("#current-courses").addEventListener("change", (e) => {
+  const code = e.target.dataset.code;
+  if (!code) return;
+  changeCurrent(CURRENT_COURSES.map((c) => (c.code === code ? { ...c, counted: e.target.checked } : c)));
+});
+$("#current-courses").addEventListener("click", (e) => {
+  const code = e.target.dataset.remove;
+  if (code) changeCurrent(CURRENT_COURSES.filter((c) => c.code !== code));
+});
 
 // 學期字串的下一學期，同 planner.py 的 Term.next()（"115-1" → "115-2" → "116-1"）
 function nextTerm(term) {
@@ -225,7 +343,7 @@ $("#ask-run").addEventListener("click", async () => {
   $("#ask-run").disabled = $("#ask-input").disabled = true;
   $("#ask-result").innerHTML = `<div class="muted small">AI 轉換中，約需 10–30 秒…</div>`;
   try {
-    const res = await api(`/api/twin/${encodeURIComponent(CURRENT.id)}/ask`, { method: "POST", body: JSON.stringify({ question }) });
+    const res = await api(`/api/twin/${encodeURIComponent(CURRENT.id)}/ask`, { method: "POST", body: JSON.stringify({ question, current: CURRENT_COURSES }) });
     $("#ask-result").innerHTML = renderAsk(res);
     if (res.status === "proposed") ASK = res.params;
   } catch (err) {
@@ -266,7 +384,7 @@ $("#ask-result").addEventListener("click", (e) => {
 });
 
 async function runSim(skip, away, awayCredits) {
-  const params = new URLSearchParams();
+  const params = currentParams();
   skip.forEach((s) => params.append("skip", s));
   away.forEach((t) => params.append("away", t));
   if (away.length) params.append("away_credits", awayCredits);
@@ -371,6 +489,7 @@ async function selectCourse(code) {
 (async function init() {
   await loadMeta();
   $("#cap").textContent = META.max_credits_per_term;
+  fillCategoryOptions();
   renderGraph();
   // demo 模式只有範例檔這一位，選單不列其他學生，以免切換後仍顯示範例資料
   const ids = DEMO ? [(await api("assets/demo-twin.json")).id] : await api("/api/twin");
