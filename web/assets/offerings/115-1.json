@@ -1,0 +1,461 @@
+{
+ "term": "115-1",
+ "source": "國立中央大學課程查詢系統（依開課單位）",
+ "source_url": "https://cis.ncu.edu.tw/Course/main/query/byUnion",
+ "fetched": "2026-11-09",
+ "departments": [
+  "資訊管理學系",
+  "管理學院"
+ ],
+ "note": "只列學士班可選、未停開的課；通識、體育與外系課不在清單內，請手動輸入。",
+ "courses": [
+  {
+   "code": "IM1001",
+   "name": "計算機概論Ｉ",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43001",
+     "teacher": "何迪亞",
+     "time": "三789/I1-017 (管理二館-017 )"
+    }
+   ]
+  },
+  {
+   "code": "IM1013",
+   "name": "初階程式設計",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "A",
+     "serial": "43002",
+     "teacher": "施皇嘉",
+     "time": "五234/I1-405-1 (管理二館-405-1 )"
+    },
+    {
+     "section": "D",
+     "serial": "43003",
+     "teacher": "劉子源",
+     "time": "四789/I1-405-1 (管理二館-405-1 )"
+    }
+   ]
+  },
+  {
+   "code": "IM1024",
+   "name": "商事法",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43004",
+     "teacher": "錢世傑",
+     "time": "二567/I1-107 (管理二館-107 )"
+    }
+   ]
+  },
+  {
+   "code": "IM2011",
+   "name": "資料與檔案結構",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43005",
+     "teacher": "蘇坤良",
+     "time": "五234/I1-017 (管理二館-017 )"
+    }
+   ]
+  },
+  {
+   "code": "IM2029",
+   "name": "管理會計",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43006",
+     "teacher": "范懿文",
+     "time": "四567/I1-107 (管理二館-107 )"
+    }
+   ]
+  },
+  {
+   "code": "IM2030",
+   "name": "財務管理",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43007",
+     "teacher": "邱信瑜",
+     "time": "四234/I1-105 (管理二館-105 )"
+    }
+   ]
+  },
+  {
+   "code": "IM2038",
+   "name": "Python",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43008",
+     "teacher": "邱信瑜",
+     "time": "三567/I1-405-1 (管理二館-405-1 )"
+    }
+   ]
+  },
+  {
+   "code": "IM2046",
+   "name": "作業系統",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43009",
+     "teacher": "陳以錚",
+     "time": "四234/I-204 (志希館-204 )"
+    }
+   ]
+  },
+  {
+   "code": "IM3003",
+   "name": "作業研究 Ⅰ",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43010",
+     "teacher": "蘇雅惠",
+     "time": "三567/I-204 (志希館-204 )"
+    }
+   ]
+  },
+  {
+   "code": "IM3059",
+   "name": "行銷學",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43011",
+     "teacher": "周恩頤",
+     "time": "三234/I1-017 (管理二館-017 )"
+    }
+   ]
+  },
+  {
+   "code": "IM3069",
+   "name": "系統分析與設計",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43012",
+     "teacher": "陳仲儼",
+     "time": "五567/I1-017 (管理二館-017 )"
+    }
+   ]
+  },
+  {
+   "code": "IM3070",
+   "name": "組織行為",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43013",
+     "teacher": "蔡家安 周惠文",
+     "time": "一567/I1-017 (管理二館-017 )"
+    }
+   ]
+  },
+  {
+   "code": "IM4001",
+   "name": "資訊系統發展專題Ⅱ",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "A",
+     "serial": "43014",
+     "teacher": "李俊賢 陳以錚",
+     "time": "六123/I-314 (志希館-314 )"
+    },
+    {
+     "section": "B",
+     "serial": "43015",
+     "teacher": "許文錦",
+     "time": "六678/I-315 (志希館-315 )"
+    },
+    {
+     "section": "C",
+     "serial": "43016",
+     "teacher": "陳奕明 柯士文",
+     "time": "六123/I-315 (志希館-315 )"
+    },
+    {
+     "section": "D",
+     "serial": "43017",
+     "teacher": "許智誠",
+     "time": "六123/I1-107 (管理二館-107 )"
+    },
+    {
+     "section": "E",
+     "serial": "43018",
+     "teacher": "陳仲儼",
+     "time": "六678/I1-105 (管理二館-105 )"
+    },
+    {
+     "section": "F",
+     "serial": "43019",
+     "teacher": "陳彥良",
+     "time": "六678/I-314 (志希館-314 )"
+    },
+    {
+     "section": "G",
+     "serial": "43020",
+     "teacher": "胡雅涵",
+     "time": "六234/I1-105 (管理二館-105 )"
+    }
+   ]
+  },
+  {
+   "code": "IM4048",
+   "name": "管理資訊系統",
+   "credits": 3,
+   "dept": "資訊管理學系",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "43021",
+     "teacher": "蘇雅惠",
+     "time": "二567/I1-017 (管理二館-017 )"
+    }
+   ]
+  },
+  {
+   "code": "MT1011",
+   "name": "經濟學",
+   "credits": 3,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "A",
+     "serial": "94001",
+     "teacher": "彭小萍",
+     "time": "三234/I1-018 (管理二館-018 )"
+    },
+    {
+     "section": "E",
+     "serial": "94002",
+     "teacher": "張李治華",
+     "time": "一234/I-204 (志希館-204 )"
+    },
+    {
+     "section": "F",
+     "serial": "94003",
+     "teacher": "廖志興",
+     "time": "一234/I1-004 (管理二館-004 )"
+    },
+    {
+     "section": "G",
+     "serial": "94004",
+     "teacher": "鄭保志",
+     "time": "一234/I1-117 (管理二館-117會議廳 )"
+    }
+   ]
+  },
+  {
+   "code": "MT1021",
+   "name": "企業概論",
+   "credits": 3,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "A",
+     "serial": "94005",
+     "teacher": "何䓝涵",
+     "time": "四234/I1-018 (管理二館-018 )"
+    },
+    {
+     "section": "E",
+     "serial": "94006",
+     "teacher": "周恩頤",
+     "time": "五567/I-204 (志希館-204 )"
+    },
+    {
+     "section": "F",
+     "serial": "94007",
+     "teacher": "賴弘能",
+     "time": "四234/I1-311 (管理二館-311 )"
+    }
+   ]
+  },
+  {
+   "code": "MT1031",
+   "name": "會計學",
+   "credits": 3,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "A",
+     "serial": "94008",
+     "teacher": "曹壽民",
+     "time": "一567/I1-018 (管理二館-018 )"
+    },
+    {
+     "section": "E",
+     "serial": "94009",
+     "teacher": "謝依靜",
+     "time": "一234/I1-017 (管理二館-017 )"
+    },
+    {
+     "section": "F",
+     "serial": "94010",
+     "teacher": "王曉雯",
+     "time": "三789/I1-114 (管理二館-114 )"
+    },
+    {
+     "section": "G",
+     "serial": "94011",
+     "teacher": "陳建中",
+     "time": "四789/I1-308 (管理二館-308 )"
+    }
+   ]
+  },
+  {
+   "code": "MT1051",
+   "name": "程式設計：Python",
+   "credits": 3,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "A",
+     "serial": "94012",
+     "teacher": "呂俊德",
+     "time": "一234/I1-405-1 (管理二館-405-1 )"
+    },
+    {
+     "section": "F",
+     "serial": "94013",
+     "teacher": "駱建陵",
+     "time": "五567/I1-405-1 (管理二館-405-1 )"
+    },
+    {
+     "section": "G",
+     "serial": "94014",
+     "teacher": "邱信瑜",
+     "time": "三234/I1-405-1 (管理二館-405-1 )"
+    }
+   ]
+  },
+  {
+   "code": "MT2041",
+   "name": "統計學",
+   "credits": 3,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "A",
+     "serial": "94016",
+     "teacher": "張東生",
+     "time": "一234/I1-304 (管理二館-304 )"
+    },
+    {
+     "section": "B",
+     "serial": "94017",
+     "teacher": "沈建文",
+     "time": "一234/I1-007 (管理二館-007 )"
+    },
+    {
+     "section": "E",
+     "serial": "94018",
+     "teacher": "黃子菱",
+     "time": "三234/I-204 (志希館-204 )"
+    },
+    {
+     "section": "F",
+     "serial": "94019",
+     "teacher": "葉錦徽 朱珊瑩",
+     "time": "二678/I-204 (志希館-204 )"
+    },
+    {
+     "section": "G",
+     "serial": "94020",
+     "teacher": "葉錦徽 朱珊瑩",
+     "time": "二678/I-204 (志希館-204 )"
+    }
+   ]
+  },
+  {
+   "code": "MT3002",
+   "name": "政經哲思小論文",
+   "credits": 2,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "94021",
+     "teacher": "許雲翔 陸敬忠 葉錦徽",
+     "time": "日678/I1-117 (管理二館-117會議廳 )"
+    }
+   ]
+  },
+  {
+   "code": "MT3003",
+   "name": "哲學批判與政治經濟分析",
+   "credits": 3,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "94022",
+     "teacher": "許雲翔 陸敬忠 葉錦徽",
+     "time": "二234/I1-309 (管理二館-309 )"
+    }
+   ]
+  },
+  {
+   "code": "MT4013",
+   "name": "企業實習(三)",
+   "credits": 3,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "94025",
+     "teacher": "許文錦 劉子源 高櫻芬 楊志海 鄭保志 陳韻旻",
+     "time": "日678/*-*** (其他-*** )"
+    }
+   ]
+  },
+  {
+   "code": "MT4019",
+   "name": "暑期實習(三)",
+   "credits": 3,
+   "dept": "管理學院",
+   "sections": [
+    {
+     "section": "*",
+     "serial": "94026",
+     "teacher": "陳永儀 黃承祖 曹真睿 陳韻旻",
+     "time": "日234/*-*** (其他-*** )"
+    }
+   ]
+  }
+ ]
+}

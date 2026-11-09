@@ -81,11 +81,12 @@
           <h3>本學期修課 <span class="trial">試算</span> <span class="muted small" id="current-term"></span></h3>
           <div class="muted small" style="margin-bottom:8px">本學期還沒有成績，請自己輸入這學期修的課（只存在這台電腦的瀏覽器，不會送出保存）。勾選的課假設會及格，一起算進下方規劃；打算停修或可能沒過的課取消勾選，規劃會把它重新排入之後的學期。正式審查結果不受影響。</div>
           <div class="whatif">
-            <label style="flex:1 1 260px">本系課程（輸入課號或課名搜尋）
+            <label style="flex:1 1 260px">本系與管理學院課程（輸入課號或課名搜尋）
               <input id="cur-search" list="cur-options" placeholder="例如：IM3031 或 電子商務"></label>
             <datalist id="cur-options"></datalist>
             <button class="primary" id="cur-add">加入</button>
           </div>
+          <div class="muted small" id="cur-source" style="margin:-4px 0 6px"></div>
           <details style="margin:4px 0 8px">
             <summary class="small">其他課程（通識、外系、體育等）</summary>
             <div class="whatif">

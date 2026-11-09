@@ -168,6 +168,7 @@ async function loadPlan(id) {
   try { CURRENT_COURSES = JSON.parse(localStorage.getItem(curKey(id)) || "[]"); } catch {}
   if (!Array.isArray(CURRENT_COURSES)) CURRENT_COURSES = [];
   $("#current-term").textContent = CURRENT?.next_term ?? "";
+  await loadOfferings(CURRENT?.next_term);
   fillCurrentOptions();
   try {
     await refreshPlan(id);
@@ -207,9 +208,46 @@ function renderCurrent(cur) {
   $("#current-total").innerHTML = `可採計學分：目前 <b>${cur.official_total_credits}</b>；若勾選的 ${n} 門都及格 → <b>${cur.trial_total_credits}</b>。規劃從 ${esc(nextTerm(cur.term))} 開始。`;
 }
 
-// 本系課程選項：只列審查結果中還沒通過的課（remaining_courses，不及格可重修的課仍在內），已通過的不列
+// 本學期開課清單（academic_twin/offerings.py 從學校課程查詢系統抓取的公開資料），依學生的本學期讀取；
+// 沒有該學期的檔案時為 null，退回只列規則庫課程。清單只方便挑課，學分與判定仍以規則庫、審查引擎為準
+let OFFERINGS = null;
+
+async function loadOfferings(term) {
+  OFFERINGS = null;
+  if (!term || DEMO) return;
+  try {
+    const res = await fetch(`assets/offerings/${encodeURIComponent(term)}.json`);
+    if (res.ok) OFFERINGS = await res.json();
+  } catch {}
+}
+
+function offeringOf(code) {
+  return OFFERINGS?.courses.find((c) => c.code === code) ?? null;
+}
+
+function sectionsText(o) {
+  const s = o.sections.map((x) => `${x.time.split("/")[0]} ${x.teacher}`.trim());
+  return s.length > 2 ? `${s.slice(0, 2).join("；")}…共 ${s.length} 班` : s.join("；");
+}
+
+// 課程選項：審查結果中還沒通過的課（remaining_courses，不及格可重修的課仍在內）＋本學期開課清單；已通過的不列
 function fillCurrentOptions() {
-  $("#cur-options").innerHTML = (CURRENT?.remaining_courses ?? []).map((c) => `<option value="${esc(c.code)} ${esc(c.name)}"></option>`).join("");
+  const remaining = CURRENT?.remaining_courses ?? [];
+  const passed = new Set(META.courses.map((c) => c.code).filter((code) => !remaining.some((r) => r.code === code)));
+  const offered = (OFFERINGS?.courses ?? []).filter((o) => !passed.has(o.code));
+  const notOffered = remaining.filter((c) => !offeringOf(c.code));
+  const option = (code, name, label) => `<option value="${esc(code)} ${esc(name)}" label="${esc(label)}"></option>`;
+  $("#cur-options").innerHTML = [
+    ...offered.map((o) => option(o.code, remaining.find((r) => r.code === o.code)?.name ?? o.name,
+      `${o.credits} 學分・${OFFERINGS.simulated ? "模擬開課" : "本學期開課"}：${sectionsText(o)}`)),
+    ...notOffered.map((c) => option(c.code, c.name, `${c.credits} 學分`)),
+  ].join("");
+  const o = OFFERINGS;
+  $("#cur-source").textContent = !o
+    ? `沒有 ${CURRENT?.next_term ?? "本學期"} 的開課清單，只列本系還沒通過的課；其他課請用「其他課程」輸入。`
+    : o.simulated
+      ? `模擬開課清單：${o.term} 還沒有開課資料，先照 ${o.based_on} 的實際開課列出${o.departments.join("、")} ${o.courses.length} 門，教師與時間僅供參考（${o.based_on} 資料取自${o.source}，${o.fetched} 抓取）。${o.note}`
+      : `本學期開課清單：${o.departments.join("、")} ${o.courses.length} 門（${o.source}，${o.fetched} 抓取，實際以選課系統為準）。${o.note}`;
 }
 
 function fillCategoryOptions() {
@@ -242,15 +280,18 @@ $("#cur-add").addEventListener("click", () => {
   const code = text.split(/\s+/)[0].toUpperCase();
   const options = CURRENT?.remaining_courses ?? [];
   const c = options.find((x) => x.code === code) ?? options.find((x) => text && x.name === text);
-  if (!c) {
-    const passed = META.courses.some((x) => x.code === code || (text && x.name === text));
+  // 規則庫沒有、但本學期有開的課（如本系選修、管院課程）：課名學分取自開課清單，類別留給審查引擎依規則判斷
+  const o = c ? null : (offeringOf(code) ?? OFFERINGS?.courses.find((x) => text && x.name === text));
+  const passed = META.courses.some((x) => x.code === (o?.code ?? code) || (!o && text && x.name === text));
+  if (!c && (!o || passed)) {
     $("#current-msg").innerHTML = passed
       ? `<div class="issue WARNING">「${esc(text)}」你已經修過並通過了，不用再加入。</div>`
-      : `<div class="issue WARNING">本系課程裡找不到「${esc(text)}」；通識或外系課請用「其他課程」加入。</div>`;
+      : `<div class="issue WARNING">課程清單裡找不到「${esc(text)}」；通識或外系課請用「其他課程」加入。</div>`;
     return;
   }
   $("#cur-search").value = "";
-  addCurrent({ code: c.code, name: c.name, credits: c.credits, category: "" });
+  const pick = c ?? o;
+  addCurrent({ code: pick.code, name: pick.name, credits: pick.credits, category: "" });
 });
 $("#cur-search").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#cur-add").click(); });
 
