@@ -7,6 +7,7 @@
 | [專案設計與主要流程](PROJECT_DESIGN.md) | 主設計文件：雙端架構、已定案的核心模組、主要流程與責任分工 |
 | [系辦端業務需求](OFFICE_REQUIREMENTS.md) | 單人查詢與批次畢審的輸入、輸出及驗收條件 |
 | [學生端需求](STUDENT_REQUIREMENTS.md) | 學生個人進度、白話說明、需辦理事項與修課規劃的輸入、輸出及驗收條件 |
+| [Demo 錄影使用說明](DEMO_RECORDING.md) | 兩段自動播放（教務處端 `autopilot.html`、學生端 `?tour`）的啟動、錄影、重新錄影與常見問題；給組員與 AI agent |
 | [現有實作與待建置項目](IMPLEMENTATION_STATUS.md) | 現有程式、資料、操作方式及待建置能力 |
 | [兩組分工計畫](TEAM_PLAN.md) | 系辦端＋審查核心與學生端＋推演兩組的職責、檔案歸屬、交接格式、時程與協作規則 |
 | [畢業規則確認清單](OFFICE_QUESTIONS.md) | 請系辦確認的 17 項規則、AI 功能與效果驗證問題，含回覆欄位 |

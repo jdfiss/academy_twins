@@ -1,0 +1,27 @@
+{
+ "model": "gemini-3.5-flash",
+ "generated_at": "2026-11-09T17:18:40",
+ "recorded_at": "2026-11-09T17:18:40",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 631,
+  "candidatesTokenCount": 33,
+  "totalTokenCount": 1566,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 631
+   }
+  ],
+  "thoughtsTokenCount": 902,
+  "serviceTier": "standard"
+ },
+ "data": {
+  "supported": true,
+  "reason": "",
+  "skip": [],
+  "away_start": "117-2",
+  "away_count": 1,
+  "away_credits": -1
+ }
+}
