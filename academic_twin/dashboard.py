@@ -4,8 +4,9 @@ AI 只抽出文件上的原始欄位，並逐列附來源頁碼與原文；規�
 不讓 AI 推測。所有結果都標示待確認，檢查出的錯誤未修正前不得送入審查
 （見 docs/TEAM_PLAN.md〈AI 輸入與啟用驗收〉）。
 
-目前只支援虛構示範版型（academic_twin/demo_dashboard.py 產生）；真實儀表板格式待取得
-去識別化範例後新增版型。不支援掃描影像，無法辨識時須顯示失敗，不能當成沒有修課紀錄。
+支援虛構示範版型（demo-v1，academic_twin/demo_dashboard.py 產生）與本校校務系統「畢業審核紀錄表」
+（ncu-v1，2026-11-10 以一份真實儀表板確認），依規則代碼樣式自動判斷。校務系統的規則代碼對照依段落標題
+推定，正式意義待承辦人確認。不支援掃描影像，無法辨識時須顯示失敗，不能當成沒有修課紀錄。
 
     python -m academic_twin.dashboard data/samples/dashboard_demo_d01.pdf \\
         --answer data/samples/dashboard_demo_d01_answer.csv     # 解析並與標準答案比對
@@ -40,7 +41,20 @@ FIELDS = ["term", "code", "name", "credits", "grade", "category"]
 FORMATS = {
     "demo-v1": {"A01": "", "A02": "", "B01": "", "B02": "", "C01": "國文", "C02": "外文", "C03": "通識",
                 "C04": "通識核心", "C05": "體育", "C06": "服務學習", "Z99": "抵免"},
+    # 本校校務系統「畢業審核紀錄表」：2026-11-10 以一份組員本人同意提供的真實儀表板確認版面。
+    # 代碼依段落標題對應到規則庫類別，正式意義待承辦人確認；沒列出的代碼（例如 18301 軍訓、
+    # 19xxx 特殊檢核）若出現修課列仍報錯，不猜類別。
+    "ncu-v1": {"11201": "外文", "11202": "外文", "11321": "人文與思想", "11322": "自然科學",
+               "11323": "應用科學", "11324": "社會思潮與現象", "11325": "通識", "11401": "國文",
+               "12101": "", "13101": "", "13102": "", "13103": "", "14101": "",
+               "18101": "", "18201": "體育", "18202": "體育", "18401": "服務學習"},
 }
+# 規則庫沒有對應要求、不列入審查的段落（確認時略過，並以整份警示告知承辦人）
+NOT_REVIEWED = {"ncu-v1": {"18101": "操行"}}
+# 非數字成績（只在支援的版型出現）：通過制課程以及格計入；尚無成績的修課中課程不列入這次審查
+PASS, PENDING = "通過", "未到"
+TEXT_GRADES = {"ncu-v1": {PASS, PENDING}}
+NCU_TERM = re.compile(r"^(\d{2,3})([12])$")  # 1131 → 113-1
 
 PROMPT = """你是資料擷取工具。附件是一份大學「畢業資格審查儀表板」PDF。
 請逐列抽出文件上「每一筆修課紀錄」，不要推論、不要補寫、不要合併，只抄錄文件上實際出現的內容：
@@ -141,17 +155,48 @@ def extract(pdf: bytes, fmt: str = FORMAT, model: str | None = None, read_text: 
     result = replay.generate_json(prompt, SCHEMA, [llm.Attachment("application/pdf", pdf)], model=model,
                                   purpose="dashboard")
     data = result.data if isinstance(result.data, dict) else {}
-    mapping = FORMATS[fmt]
     rows = []
     for r in data.get("rows", []):
         row = {k: str(r.get(k) or "").strip() for k in ("rule_code", "term", "code", "name", "credits", "grade",
                                                         "source_text")}
         row["source_page"] = r.get("source_page")
-        row["category"] = mapping.get(row["rule_code"], "")
         rows.append(row)
+    if fmt == FORMAT:
+        fmt = detect_format(rows)
+    mapping = FORMATS[fmt]
+    for row in rows:
+        if fmt == "ncu-v1":
+            _normalize_ncu(row)
+        row["category"] = mapping.get(row["rule_code"], "")
     return Extraction(rows, data.get("sections", []), data.get("declared_required"), data.get("declared_earned"),
                       str(data.get("unreadable") or ""), result.model, result.generated_at, PROMPT_VERSION, fmt,
                       data.get("cohort"), result.fallback_from, pages, getattr(result, "replay", None))
+
+
+def detect_format(rows: list[dict]) -> str:
+    """依 AI 抄回的規則代碼判斷版型：全部是 5 位數字時為校務系統版型，否則沿用虛構示範版型。
+    判斷只看代碼樣式，不讓 AI 決定；兩種都不符時照示範版型檢查，錯誤會照常列出。"""
+    codes = [r.get("rule_code", "") for r in rows]
+    return "ncu-v1" if codes and all(re.fullmatch(r"\d{5}", c) for c in codes) else FORMAT
+
+
+def _normalize_ncu(row: dict) -> None:
+    """校務系統版型的寫法換成審查用格式，原文仍保留在 source_text：學期 1131 → 113-1；
+    「勞動服務通過(Pass)」→ 通過；「未到(Not Entered)」→ 未到。其他寫法不動，交給 check 報錯。"""
+    m = NCU_TERM.match(row["term"])
+    if m:
+        row["term"] = f"{int(m[1])}-{m[2]}"
+    grade = re.sub(r"\s+", "", unicodedata.normalize("NFKC", row["grade"]))
+    if "未到" in grade or "NotEntered" in grade:
+        row["grade"] = PENDING
+    elif "未通過" not in grade and ("通過" in grade or "Pass" in grade):
+        row["grade"] = PASS
+
+
+def review_rows(fmt: str, rows: list[dict]) -> list[dict]:
+    """確認後要送入審查的列：略過尚無成績的修課中課程與規則庫沒有對應要求的段落（如操行）。"""
+    skip = NOT_REVIEWED.get(fmt, {})
+    return [r for r in rows if r.get("grade") != PENDING and r.get("rule_code") not in skip]
 
 
 def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = None) -> list[Issue]:
@@ -177,7 +222,7 @@ def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = N
         if not str(r.get("credits", "")).isdigit():
             err(f"學分「{r.get('credits')}」不是非負整數")
         try:
-            if not 0 <= float(r.get("grade", "")) <= 100:
+            if r.get("grade") not in TEXT_GRADES.get(ext.format, ()) and not 0 <= float(r.get("grade", "")) <= 100:
                 raise ValueError
         except ValueError:
             err(f"成績「{r.get('grade')}」不是 0–100 的數字")
@@ -196,17 +241,33 @@ def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = N
 
     def earned(rows):
         return sum(int(r["credits"]) for r in rows if str(r.get("credits")).isdigit()
-                   and _grade(r) is not None and _grade(r) >= kb.passing_grade)
+                   and (r.get("grade") == PASS or (_grade(r) is not None and _grade(r) >= kb.passing_grade)))
+
+    def in_section(r, code):
+        # 校務系統版型的代碼有層級（11000 ⊃ 11200 ⊃ 11201），段落實得含所有下層代碼的列
+        if ext.format == "ncu-v1":
+            return str(r.get("rule_code", "")).startswith(code.rstrip("0"))
+        return r.get("rule_code") == code
 
     for s in ext.sections:
-        declared = s.get("declared_earned")
-        got = earned([r for r in ext.rows if r.get("rule_code") == s.get("rule_code")])
+        declared, code = s.get("declared_earned"), str(s.get("rule_code") or "")
+        if ext.format == "ncu-v1" and (code.startswith("19") or code == "10000"):
+            continue  # 19xxx 特殊檢核是推算的條件、10000 是全系總計（另與學分區比對），都不是修課列的合計
+        got = earned([r for r in ext.rows if code and in_section(r, code)])
         if declared is not None and declared != got:
             issues.append(Issue("warning", f"規則代碼 {s.get('rule_code')} 文件標示實得 {declared} 學分，"
                                            f"擷取的及格紀錄合計 {got} 學分，可能有漏列或多列"))
     if ext.declared_earned is not None and ext.declared_earned != earned(ext.rows):
         issues.append(Issue("warning", f"學分區實得 {ext.declared_earned} 學分，擷取的及格紀錄合計 "
                                        f"{earned(ext.rows)} 學分，可能有漏列或多列"))
+    pending = [r for r in ext.rows if r.get("grade") == PENDING]
+    if pending:
+        issues.append(Issue("warning", f"{len(pending)} 列尚無成績（修課中），不列入這次審查："
+                                       + "、".join(r.get("code", "") for r in pending)))
+    for code, label in NOT_REVIEWED.get(ext.format, {}).items():
+        n = sum(r.get("rule_code") == code for r in ext.rows)
+        if n:
+            issues.append(Issue("warning", f"{n} 列為{label}（規則代碼 {code}），規則庫沒有這項要求，不列入審查"))
     text = pages if pages is not None else ext.pages
     if text is not None:
         issues += check_sources(ext.rows, text)
@@ -279,13 +340,17 @@ def _grade(r: dict) -> float | None:
         return None
 
 
-def to_records_csv(student_id: str, rows: list[dict]) -> str:
-    """確認後的紀錄轉成修課紀錄 CSV，交給 records.parse_records 再檢查一次。"""
+def to_records_csv(student_id: str, rows: list[dict], passing_grade: float = 60) -> str:
+    """確認後的紀錄轉成修課紀錄 CSV，交給 records.parse_records 再檢查一次。
+    通過制成績（通過）以及格分數寫入；尚無成績等不審查的列由呼叫端先以 review_rows 略過。"""
     out = io.StringIO()
     writer = csv.DictWriter(out, fieldnames=REQUIRED + ["category"], lineterminator="\n")
     writer.writeheader()
     for r in rows:
-        writer.writerow({"student_id": student_id, **{k: str(r.get(k, "")).strip() for k in FIELDS}})
+        row = {k: str(r.get(k, "")).strip() for k in FIELDS}
+        if row["grade"] == PASS:
+            row["grade"] = f"{passing_grade:g}"
+        writer.writerow({"student_id": student_id, **row})
     return out.getvalue()
 
 

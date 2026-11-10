@@ -241,7 +241,7 @@ class OfficeMixin(MonitorMixin, InboxMixin):
             trace["to_manual"] = True
             finish("failed")
             raise
-        trace["model"] = ext.model
+        trace["model"], trace["format"] = ext.model, ext.format
         trace["replay"] = ext.replay  # 評審模式重播：原本的模型與產生時間
         trace["steps"].append({"step": "extract", "ok": True, "model": ext.model, "rows": len(ext.rows),
                                "fallback": bool(ext.fallback_from), "replay": bool(ext.replay)})
@@ -332,7 +332,9 @@ class OfficeMixin(MonitorMixin, InboxMixin):
         if any(i.level == "warning" for i in issues) and not acknowledge_warnings:
             raise RecordsError(["仍有警示未確認；請逐項對照原文後勾選「已確認警示」"]
                                + [_issue_text(i) for i in issues if i.level == "warning"])
-        records = parse_records(dashboard.to_records_csv(sid, edited.rows))[sid]
+        kb = self.rulesets[cohort].kb if cohort in self.rulesets else self.kb
+        records = parse_records(dashboard.to_records_csv(sid, dashboard.review_rows(edited.format, edited.rows),
+                                                         kb.passing_grade))[sid]
         self._replace_student(sid, records, cohort)
         del drafts[draft_id]
         counts = _edit_counts(ext.rows, edited.rows)

@@ -669,3 +669,85 @@ class LLMOutputCapTest(unittest.TestCase):
         with mock.patch.dict("os.environ", {"GEMINI_API_KEY": "k", "GEMINI_MAX_OUTPUT_TOKENS": "-1"}), \
                 self.assertRaises(llm.LLMError):
             llm.generate_json("p", {}, model="m")
+
+
+def ncu_response(cohort=114):
+    """校務系統版型（ncu-v1）的假 AI 回應：照真實儀表板的寫法抄錄，課程與成績皆為虛構。"""
+    rows = [
+        ("11201", "1141", "LN1005", "大一英文:管理課群", "3", "85.00"),
+        ("12101", "1141", "IM1001", "計算機概論Ｉ", "3", "80.00"),
+        ("12101", "1151", "IM3003", "作業研究 Ⅰ", "3", "未到(Not Entered)"),
+        ("18101", "1141", "CR0001", "操行", "0", "85.00"),
+        ("18401", "1141", "SC0003", "服務學習課程", "0", "勞動服務通過(Pass)"),
+    ]
+    rows = [{"rule_code": c, "term": t, "code": k, "name": n, "credits": cr, "grade": g, "source_page": 1,
+             "source_text": f"{t} {k} {n} {cr} {g} 通過"} for c, t, k, n, cr, g in rows]
+    sections = [{"rule_code": "11000", "declared_earned": 3}, {"rule_code": "11201", "declared_earned": 3},
+                {"rule_code": "12000", "declared_earned": 3}, {"rule_code": "19120", "declared_earned": 9}]
+    data = {"cohort": cohort, "declared_required": 128, "declared_earned": 6, "sections": sections, "rows": rows}
+    return llm.LLMResult(data, "fake-model", "2026-11-10T00:00:00")
+
+
+class NcuFormatTest(unittest.TestCase):
+    """校務系統版型：學期、文字成績與 5 位數規則代碼由程式換算，不靠 AI。"""
+
+    setUp = DashboardTest.setUp
+    extract = DashboardTest.extract
+
+    def ncu_extract(self, response=None):
+        with mock.patch.object(llm, "generate_json", return_value=response or ncu_response()):
+            return dashboard.extract(b"%PDF-1.7 fake")
+
+    def test_detects_format_and_normalizes(self):
+        ext = self.ncu_extract()
+        self.assertEqual(ext.format, "ncu-v1")
+        self.assertEqual([r["term"] for r in ext.rows], ["114-1", "114-1", "115-1", "114-1", "114-1"])
+        self.assertEqual([r["grade"] for r in ext.rows][2:], [dashboard.PENDING, "85.00", dashboard.PASS])
+        self.assertEqual(ext.rows[0]["category"], "外文")
+        self.assertIn("未到(Not Entered)", ext.rows[2]["source_text"])  # 原文保留
+
+    def test_demo_format_unchanged(self):
+        with mock.patch.object(llm, "generate_json", return_value=fake_response()):
+            self.assertEqual(dashboard.extract(b"%PDF-1.7 fake").format, "demo-v1")
+
+    def test_clean_ncu_extraction_has_no_errors_only_explanations(self):
+        issues = dashboard.check(self.ncu_extract(), self.service.kb)
+        self.assertEqual([i.message for i in issues if i.level == "error"], [])
+        messages = " ".join(i.message for i in issues)
+        self.assertIn("1 列尚無成績", messages)
+        self.assertIn("操行", messages)
+        self.assertNotIn("規則代碼 11000", messages)  # 上層段落含下層代碼的列，合計相符
+        self.assertNotIn("19120", messages)  # 特殊檢核不是修課列合計
+
+    def test_section_total_counts_lower_codes(self):
+        response = ncu_response()
+        response.data["sections"][0]["declared_earned"] = 6
+        messages = [i.message for i in dashboard.check(self.ncu_extract(response), self.service.kb)]
+        self.assertTrue(any("規則代碼 11000 文件標示實得 6 學分" in m for m in messages))
+
+    def test_unknown_code_and_text_still_errors(self):
+        response = ncu_response()
+        response.data["rows"][0].update(rule_code="18301", grade="缺考")
+        messages = [i.message for i in dashboard.check(self.ncu_extract(response), self.service.kb)
+                    if i.level == "error"]
+        self.assertTrue(any("18301" in m for m in messages))
+        self.assertTrue(any("缺考" in m for m in messages))
+
+    def test_review_rows_and_pass_grade(self):
+        ext = self.ncu_extract()
+        rows = dashboard.review_rows(ext.format, ext.rows)
+        self.assertEqual([r["code"] for r in rows], ["LN1005", "IM1001", "SC0003"])
+        text = dashboard.to_records_csv("DEMO-X", rows, 60)
+        self.assertIn("SC0003,服務學習課程,0,60,114-1,服務學習", text)
+
+    def test_confirm_flow_reviews_only_graded_rows(self):
+        draft = self.extract(ncu_response(), student_id="DEMO-N01")
+        self.assertEqual(draft["format"], "ncu-v1")
+        self.assertFalse([i for i in draft["issues"] if i["level"] == "error"])
+        self.service.dashboard_confirm(draft["draft_id"], draft["rows"], "王助教", draft["cohort"],
+                                       acknowledge_warnings=True)
+        self.assertEqual(sorted(r.code for r in self.service.students["DEMO-N01"]), ["IM1001", "LN1005", "SC0003"])
+
+    def test_cohort_without_rules_still_blocked(self):
+        draft = self.extract(ncu_response(cohort=113), student_id="DEMO-N02")
+        self.assertTrue(any(i["level"] == "error" and "113" in i["message"] for i in draft["issues"]))
