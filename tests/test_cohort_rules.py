@@ -92,5 +92,26 @@ class CohortRulesTest(unittest.TestCase):
                          {"S002", "S003"})
 
 
+
+class Cohort113RulesTest(unittest.TestCase):
+    """113 學年度應修科目表與 114 版逐格相同（2026-11-10 比對），規則庫只有年度與出處不同；
+    之後任一年度改動規則時，這裡會提醒另一年度要不要跟著改。"""
+
+    def test_113_rules_match_114_except_year_and_source(self):
+        kb_113 = KB_PATH.with_name("curriculum_im_113.json")
+        a = json.loads(KB_PATH.read_text(encoding="utf-8"))
+        b = json.loads(kb_113.read_text(encoding="utf-8").replace("IM-113-TABLE", "IM-114-TABLE"))
+        self.assertEqual(b["cohort"], 113)
+        for k in ("courses", "requirements", "categories", "code_categories", "credit_policy", "passing_grade",
+                  "dept_prefixes"):
+            self.assertEqual(a[k], b[k], k)
+
+    def test_web_startup_loads_113(self):
+        from academic_twin import rule_versions
+        default, extra = rule_versions.startup_paths()
+        service = AcademicTwinService(default, extra_kb_paths=extra)
+        self.assertIn(113, service.rulesets)
+
+
 if __name__ == "__main__":
     unittest.main()

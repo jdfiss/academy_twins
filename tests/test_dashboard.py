@@ -749,5 +749,5 @@ class NcuFormatTest(unittest.TestCase):
         self.assertEqual(sorted(r.code for r in self.service.students["DEMO-N01"]), ["IM1001", "LN1005", "SC0003"])
 
     def test_cohort_without_rules_still_blocked(self):
-        draft = self.extract(ncu_response(cohort=113), student_id="DEMO-N02")
-        self.assertTrue(any(i["level"] == "error" and "113" in i["message"] for i in draft["issues"]))
+        draft = self.extract(ncu_response(cohort=112), student_id="DEMO-N02")
+        self.assertTrue(any(i["level"] == "error" and "112" in i["message"] for i in draft["issues"]))
