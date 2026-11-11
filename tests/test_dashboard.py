@@ -740,6 +740,37 @@ class NcuFormatTest(unittest.TestCase):
         text = dashboard.to_records_csv("DEMO-X", rows, 60)
         self.assertIn("SC0003,服務學習課程,0,60,114-1,服務學習", text)
 
+    def test_fail_transferred_withdrawn_exempt_grades(self):
+        """2026-11-11 另 3 份真實儀表板的寫法：「不通過」不能被當成通過（含「通過」二字）。"""
+        response = ncu_response()
+        extra = [("11325", "1141", "GS0076", "自主學習微學分(一)", "1", "一般課程不通過(Fail)"),
+                 ("12101", "1132", "MA1005", "微積分", "3", "抵免(Transferred)"),
+                 ("11325", "1142", "GS4538", "Linux與邊緣運算", "3", "停修(Withdrawn)"),
+                 ("18101", "1142", "CR0001", "操行", "0", "免修(Exempted)")]
+        response.data["rows"] += [{"rule_code": c, "term": tm, "code": k, "name": n, "credits": cr, "grade": g,
+                                   "source_page": 1, "source_text": f"{tm} {k} {n} {cr} {g}"}
+                                  for c, tm, k, n, cr, g in extra]
+        ext = self.ncu_extract(response)
+        self.assertEqual([r["grade"] for r in ext.rows][-4:],
+                         [dashboard.FAIL, dashboard.TRANSFERRED, dashboard.WITHDRAWN, dashboard.EXEMPT])
+        issues = dashboard.check(ext, self.service.kb)
+        self.assertEqual([i.message for i in issues if i.level == "error"], [])
+        messages = " ".join(i.message for i in issues)
+        self.assertIn("1 列為抵免", messages)
+        self.assertIn("1 列為停修", messages)
+        rows = dashboard.review_rows(ext.format, ext.rows)
+        self.assertNotIn("GS4538", [r["code"] for r in rows])
+        text = dashboard.to_records_csv("DEMO-X", rows, 60)
+        self.assertIn("GS0076,自主學習微學分(一),1,0,", text)  # 不通過以不及格計入
+        self.assertIn("MA1005,微積分,3,60,", text)  # 抵免依儀表板判定以及格計入
+
+    def test_exempt_outside_not_reviewed_section_is_error(self):
+        response = ncu_response()
+        response.data["rows"][1]["grade"] = "免修(Exempted)"
+        messages = [i.message for i in dashboard.check(self.ncu_extract(response), self.service.kb)
+                    if i.level == "error"]
+        self.assertTrue(any("免修" in m for m in messages))
+
     def test_confirm_flow_reviews_only_graded_rows(self):
         draft = self.extract(ncu_response(), student_id="DEMO-N01")
         self.assertEqual(draft["format"], "ncu-v1")

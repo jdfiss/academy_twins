@@ -51,9 +51,12 @@ FORMATS = {
 }
 # 規則庫沒有對應要求、不列入審查的段落（確認時略過，並以整份警示告知承辦人）
 NOT_REVIEWED = {"ncu-v1": {"18101": "操行"}}
-# 非數字成績（只在支援的版型出現）：通過制課程以及格計入；尚無成績的修課中課程不列入這次審查
-PASS, PENDING = "通過", "未到"
-TEXT_GRADES = {"ncu-v1": {PASS, PENDING}}
+# 非數字成績（只在支援的版型出現）：通過制課程以及格計入；尚無成績的修課中課程不列入這次審查。
+# 2026-11-11 以另外 3 份組員本人同意提供的儀表板補上：不通過以不及格計入；抵免依儀表板「通過」判定
+# 以及格計入並警示承辦人確認；停修不列入審查；免修只接受在不審查的段落（如操行），其他段落仍報錯。
+PASS, PENDING, FAIL, WITHDRAWN, TRANSFERRED, EXEMPT = "通過", "未到", "不通過", "停修", "抵免", "免修"
+TEXT_GRADES = {"ncu-v1": {PASS, PENDING, FAIL, WITHDRAWN, TRANSFERRED}}
+COUNTED_AS_PASS = {PASS, TRANSFERRED}
 NCU_TERM = re.compile(r"^(\d{2,3})([12])$")  # 1131 → 113-1
 
 PROMPT = """你是資料擷取工具。附件是一份大學「畢業資格審查儀表板」PDF。
@@ -182,21 +185,31 @@ def detect_format(rows: list[dict]) -> str:
 
 def _normalize_ncu(row: dict) -> None:
     """校務系統版型的寫法換成審查用格式，原文仍保留在 source_text：學期 1131 → 113-1；
-    「勞動服務通過(Pass)」→ 通過；「未到(Not Entered)」→ 未到。其他寫法不動，交給 check 報錯。"""
+    「勞動服務通過(Pass)」→ 通過；「未到(Not Entered)」→ 未到；「一般課程不通過(Fail)」→ 不通過；
+    「停修(Withdrawn)」→ 停修；「抵免(Transferred)」→ 抵免；「免修(Exempted)」→ 免修。
+    「不通過」要先於「通過」判斷，否則不及格的課會被當成通過。其他寫法不動，交給 check 報錯。"""
     m = NCU_TERM.match(row["term"])
     if m:
         row["term"] = f"{int(m[1])}-{m[2]}"
     grade = re.sub(r"\s+", "", unicodedata.normalize("NFKC", row["grade"]))
     if "未到" in grade or "NotEntered" in grade:
         row["grade"] = PENDING
-    elif "未通過" not in grade and ("通過" in grade or "Pass" in grade):
+    elif "停修" in grade or "Withdrawn" in grade:
+        row["grade"] = WITHDRAWN
+    elif "不通過" in grade or "未通過" in grade or "Fail" in grade:
+        row["grade"] = FAIL
+    elif "抵免" in grade or "Transferred" in grade:
+        row["grade"] = TRANSFERRED
+    elif "免修" in grade or "Exempt" in grade:
+        row["grade"] = EXEMPT
+    elif "通過" in grade or "Pass" in grade:
         row["grade"] = PASS
 
 
 def review_rows(fmt: str, rows: list[dict]) -> list[dict]:
-    """確認後要送入審查的列：略過尚無成績的修課中課程與規則庫沒有對應要求的段落（如操行）。"""
+    """確認後要送入審查的列：略過尚無成績的修課中課程、停修的課與規則庫沒有對應要求的段落（如操行）。"""
     skip = NOT_REVIEWED.get(fmt, {})
-    return [r for r in rows if r.get("grade") != PENDING and r.get("rule_code") not in skip]
+    return [r for r in rows if r.get("grade") not in (PENDING, WITHDRAWN) and r.get("rule_code") not in skip]
 
 
 def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = None) -> list[Issue]:
@@ -221,11 +234,14 @@ def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = N
             err(f"學期「{r['term']}」格式應為 學年-學期，例如 114-1")
         if not str(r.get("credits", "")).isdigit():
             err(f"學分「{r.get('credits')}」不是非負整數")
+        not_reviewed = r.get("rule_code") in NOT_REVIEWED.get(ext.format, {})  # 不列入審查，成績寫法不影響判定
         try:
-            if r.get("grade") not in TEXT_GRADES.get(ext.format, ()) and not 0 <= float(r.get("grade", "")) <= 100:
+            if (not not_reviewed and r.get("grade") not in TEXT_GRADES.get(ext.format, ())
+                    and not 0 <= float(r.get("grade", "")) <= 100):
                 raise ValueError
         except ValueError:
-            err(f"成績「{r.get('grade')}」不是 0–100 的數字")
+            err(f"免修的課程如何採計待承辦人確認，請改為實際採計的成績" if r.get("grade") == EXEMPT
+                else f"成績「{r.get('grade')}」不是 0–100 的數字")
         if r.get("rule_code") not in mapping:
             err(f"規則代碼「{r.get('rule_code')}」不在支援版型 {ext.format} 的對照表，無法決定類別")
         if (type(r.get("source_page")) is not int or r["source_page"] < 1
@@ -241,7 +257,7 @@ def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = N
 
     def earned(rows):
         return sum(int(r["credits"]) for r in rows if str(r.get("credits")).isdigit()
-                   and (r.get("grade") == PASS or (_grade(r) is not None and _grade(r) >= kb.passing_grade)))
+                   and (r.get("grade") in COUNTED_AS_PASS or (_grade(r) is not None and _grade(r) >= kb.passing_grade)))
 
     def in_section(r, code):
         # 校務系統版型的代碼有層級（11000 ⊃ 11200 ⊃ 11201），段落實得含所有下層代碼的列
@@ -264,6 +280,11 @@ def check(ext: Extraction, kb: KnowledgeBase, pages: pdf_text.PdfText | None = N
     if pending:
         issues.append(Issue("warning", f"{len(pending)} 列尚無成績（修課中），不列入這次審查："
                                        + "、".join(r.get("code", "") for r in pending)))
+    for grade, note in ((TRANSFERRED, "為抵免，依儀表板判定以通過計入，請承辦人確認抵免是否已核定"),
+                        (WITHDRAWN, "為停修，不列入這次審查")):
+        listed = [r.get("code", "") for r in ext.rows if r.get("grade") == grade]
+        if listed:
+            issues.append(Issue("warning", f"{len(listed)} 列{note}：" + "、".join(listed)))
     for code, label in NOT_REVIEWED.get(ext.format, {}).items():
         n = sum(r.get("rule_code") == code for r in ext.rows)
         if n:
@@ -348,8 +369,10 @@ def to_records_csv(student_id: str, rows: list[dict], passing_grade: float = 60)
     writer.writeheader()
     for r in rows:
         row = {k: str(r.get(k, "")).strip() for k in FIELDS}
-        if row["grade"] == PASS:
+        if row["grade"] in COUNTED_AS_PASS:
             row["grade"] = f"{passing_grade:g}"
+        elif row["grade"] == FAIL:
+            row["grade"] = "0"
         writer.writerow({"student_id": student_id, **row})
     return out.getvalue()
 
