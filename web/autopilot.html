@@ -110,7 +110,7 @@ async function run() {
   say("載入示範批次：6 位虛構應屆生");
   await nav("monitor");
   if (visible($("#empty-demo"))) await click("#empty-demo");
-  else { await nav("tools"); await click("#demo-btn"); await nav("monitor"); }
+  else { await nav("tools"); $("#demo-fold").open = true; await click("#demo-btn"); await nav("monitor"); }
   await waitFor(() => visible($("#empty-demo")) || !$("#jobs-rows tr"), "清空的監控台");
   await sleep(800);
 
@@ -145,8 +145,9 @@ async function run() {
   await sleep(1000);
 
   say("學生來信：AI 分類、只查寄件人自己的審查結果、擬稿");
-  await nav("inbox");
+  await nav("tools"); $("#demo-fold").open = true;  // 示範按鈕在「工具」的收合區
   await click("#inbox-demo");
+  await nav("inbox");
   await waitFor(() => D().querySelectorAll("#inbox-list .mail").length >= 10, "示範信件");
   await click("#inbox-process");
   await waitFor(() => !D().querySelector("#inbox-list .mstate.new, #inbox-list .mstate.processing")

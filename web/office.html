@@ -405,17 +405,21 @@ nav .nav-tools { margin-left: auto; }
         <span class="hint" id="data-source"></span>
       </div>
       <div class="row" style="margin-top: 12px">
+        <a class="ghost" href="/api/export.csv" download style="text-decoration: none">匯出 CSV</a>
+      </div>
+      <div id="upload-msg"></div>
+    </div>
+    <details class="card section fold" id="demo-fold">
+      <summary>示範資料（比賽用，正式使用時不需要）</summary>
+      <div class="row" style="margin-top: 12px">
         <button class="ghost" id="demo-btn">載入示範批次（虛構 DEMO-D03–D08）</button>
         <button class="ghost" id="inbox-demo">匯入示範信件</button>
         <button class="ghost" id="reset-btn">還原示例</button>
-        <a class="ghost" href="/api/export.csv" download style="text-decoration: none">匯出 CSV</a>
       </div>
-      <details class="fold"><summary>示範資料說明</summary>
-        <p class="hint" style="margin: 8px 0 0">示範批次：名單 6 位、尚無修課紀錄，到監控台解析儀表板並確認後才進入審查；同時清空收件匣。
-        匯入示範信件：放入一組虛構學生來信，到收件匣讓 AI 擬稿。</p>
-      </details>
-      <div id="upload-msg"></div>
-    </div>
+      <p class="hint" style="margin: 12px 0 0">全部是虛構資料，會取代目前的名單與修課紀錄。
+      示範批次：名單 6 位、尚無修課紀錄，到監控台解析儀表板並確認後才進入審查；同時清空收件匣。
+      匯入示範信件：放入一組虛構學生來信，到收件匣讓 AI 擬稿。</p>
+    </details>
     <details class="card section fold">
       <summary>單份解析（不在名單上的學生，或重新解析一份）</summary>
       <div class="row" style="margin-top: 12px">
