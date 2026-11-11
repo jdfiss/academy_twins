@@ -1,0 +1,272 @@
+{
+ "model": "gemini-3.5-flash",
+ "generated_at": "2026-11-10T23:27:28",
+ "recorded_at": "2026-11-10T23:27:28",
+ "fallback_from": "",
+ "usage": {
+  "promptTokenCount": 1673,
+  "candidatesTokenCount": 2858,
+  "totalTokenCount": 10381,
+  "promptTokensDetails": [
+   {
+    "modality": "IMAGE",
+    "tokenCount": 532
+   },
+   {
+    "modality": "TEXT",
+    "tokenCount": 1141
+   }
+  ],
+  "thoughtsTokenCount": 5850,
+  "serviceTier": "standard"
+ },
+ "data": {
+  "requirements": [
+   {
+    "id": "R1",
+    "kind": "all_of",
+    "title": "系訂必修清單",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "系訂必修"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "無",
+    "source_page": 1,
+    "source_quote": "微積分 MA1005 計算機概論I IM1001 程式設計 IM1023 資訊管理導論 IM1018 作業系統 IM2046 資料與檔案結構 IM2011 資料庫管理 IM2002 企業資料通訊 IM3061 行銷學 IM3059 系統分析與設計 IM3069 作業研究I IM3003 組織行為 IM3070 人工智慧與機器學習 IM3078 演算法 IM2037 電子商務 IM3031 資訊系統發展專題 I/Ⅱ IM3028 / IM4001 管理資訊系統 IM4048",
+    "courses": [
+     "MA1005",
+     "IM1001",
+     "IM1023",
+     "IM1018",
+     "IM2046",
+     "IM2011",
+     "IM2002",
+     "IM3061",
+     "IM3059",
+     "IM3069",
+     "IM3003",
+     "IM3070",
+     "IM3078",
+     "IM2037",
+     "IM3031",
+     "IM3028",
+     "IM4001",
+     "IM4048"
+    ]
+   },
+   {
+    "id": "R2",
+    "kind": "all_of",
+    "title": "院訂必修清單",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "院訂必修"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "無",
+    "source_page": 1,
+    "source_quote": "會計學 MT1031 / MT1032 企業概論 MT1021 統計學 MT2041 / MT2042 經濟學 MT1011 / MT1012",
+    "courses": [
+     "MT1031",
+     "MT1032",
+     "MT1021",
+     "MT2041",
+     "MT2042",
+     "MT1011",
+     "MT1012"
+    ]
+   },
+   {
+    "id": "R3",
+    "kind": "all_of",
+    "title": "必選課",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "備註二-3"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "無",
+    "source_page": 1,
+    "source_quote": "必選課：初階程式設計(IM1013)、網頁程式設計(IM3029)、微積分(MA1006)。",
+    "courses": [
+     "IM1013",
+     "IM3029",
+     "MA1006"
+    ]
+   },
+   {
+    "id": "R4",
+    "kind": "category_credits",
+    "title": "共同必修：國文",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "共同必修"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "無",
+    "source_page": 1,
+    "source_quote": "國文 5",
+    "categories": [
+     "國文"
+    ],
+    "min_credits": 5
+   },
+   {
+    "id": "R5",
+    "kind": "category_credits",
+    "title": "共同必修：外文",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "共同必修"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "不得以第二外語課程抵免大一英文學分。",
+    "review_notes": "無",
+    "source_page": 1,
+    "source_quote": "外文 3 3",
+    "categories": [
+     "外文"
+    ],
+    "min_credits": 6
+   },
+   {
+    "id": "R6",
+    "kind": "category_credits",
+    "title": "共同必修：通識課程",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "共同必修"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "無",
+    "source_page": 1,
+    "source_quote": "通識課程(含核心必修、選修科目) 14",
+    "categories": [
+     "通識"
+    ],
+    "min_credits": 14
+   },
+   {
+    "id": "R7",
+    "kind": "category_count",
+    "title": "通識核心領域",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "備註一-4"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "無",
+    "source_page": 1,
+    "source_quote": "通識核心必修四大領域中至少須修習一個領域。",
+    "categories": [
+     "通識核心"
+    ],
+    "n": 1
+   },
+   {
+    "id": "R8",
+    "kind": "category_credits",
+    "title": "體育課程",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "共同必修"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "附件未載明，需人工確認缺的是體育必修門數或學期數限制。",
+    "source_page": 1,
+    "source_quote": "體育課程 0 0 0 0 0",
+    "categories": [
+     "體育"
+    ],
+    "min_credits": 0
+   },
+   {
+    "id": "R9",
+    "kind": "category_credits",
+    "title": "服務學習課程",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "共同必修"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "附件未載明，需人工確認缺的是服務學習必修門數或學期數限制。",
+    "source_page": 1,
+    "source_quote": "服務學習課程 0 0",
+    "categories": [
+     "服務學習"
+    ],
+    "min_credits": 0
+   },
+   {
+    "id": "R10",
+    "kind": "total_credits",
+    "title": "備註二-1：最低畢業學分",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "備註二-1"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "無",
+    "source_page": 1,
+    "source_quote": "必修科目計 100學分，最低畢業學分：128 學分。",
+    "min_credits": 128
+   },
+   {
+    "id": "R11",
+    "kind": "dept_elective_credits",
+    "title": "本系選修學分",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "備註二-1、二-2"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "未載明，需人工確認",
+    "review_notes": "由總學分128扣除必修100計算得選修28學分，再扣除外系最多認定12學分計算得本系選修至少16學分。附件未載明，需人工確認缺的是本系選修學分明確數字。",
+    "source_page": 1,
+    "source_quote": "必修科目計 100學分，最低畢業學分：128 學分。選修部份，只認定外系12學分(通識課程至多認列4學分，MT課號「企業實習」課程至多認列3學分)，其餘皆要選修本系所開之選修課。",
+    "min_credits": 16
+   },
+   {
+    "id": "R12",
+    "kind": "english_threshold",
+    "title": "英文畢業門檻",
+    "source": {
+     "doc": "IM-114-TABLE",
+     "ref": "備註一-2、一-3"
+    },
+    "applicability": "114學年度資管系學士班新生",
+    "applicable_year": 114,
+    "exceptions": "不得以第二外語課程抵免大一英文學分。",
+    "review_notes": "附件未載明，需人工確認缺的是校/系英檢門檻標準與替代方案條件。",
+    "source_page": 1,
+    "source_quote": "本系新生外文課程可修：大一英文管理課群6學分或英文系之其他課程，但不得以第二外語課程抵免大一英文學分。選修「進修英文」取得之學分，不列入本系之畢業學分總數。",
+    "categories": [
+     "外文"
+    ],
+    "min_credits": 6
+   }
+  ],
+  "unreadable": ""
+ }
+}

@@ -16,12 +16,26 @@ QUOTES = {
     "R2": "會計學 MT1031 / MT1032\n企業概論 MT1021\n統計學 MT2041 / MT2042\n經濟學 MT1011 / MT1012",
     "R4": "國文 5",
     "R10": "必修科目計 100學分，最低畢業學分 128 學分。",
+    "R1": "資料與檔案結構 IM2011",
+    "R3": "必選課：初階程式設計(IM1013)、網頁程式設計(IM3029)、微積分(MA1006)。",
+    "R5": "本系新生外文課程可修：大一英文管理課群6學分或英文系之其他課程，但不得以第二外語課程抵免大一英文學分。",
+    "R6": "通識課程(含核心必修、選修科目) 14",
+    "R7": "通識核心必修四大領域中至少須修習一個領域。",
+    "R8": "體育課程",
+    "R9": "服務學習課程",
+    "R11": "選修部份，只認定外系12學分(通識課程至多認列4學分，MT課號「企業實習」課程至多認列3學分)，其餘皆要選修本系所",
+    "R12": "選修「進修英文」取得之學分，不列入本系之畢業學分總數。",
 }
+# 現有 R12 引用語言中心公告，但附件只有應修科目表：草稿只能引用科目表，來源欄必然與現有規則不同。
+R12_SOURCE = {"doc": "IM-114-TABLE", "ref": "備註：進修英文"}
 
 
 def fake_response(**extra):
-    rows = [copy.deepcopy(r) for r in rule_draft.baseline()["requirements"] if r["id"] in rule_draft.TARGETS]
+    current = {r["id"]: r for r in rule_draft.baseline()["requirements"]}
+    rows = [copy.deepcopy(current[rid]) for rid in QUOTES]  # R2 排第一，沿用既有測試的 rows[0]
     for r in rows:
+        if r["id"] == "R12":
+            r["source"] = dict(R12_SOURCE)
         r.update(applicable_year=114, source_page=1, source_quote=QUOTES[r["id"]],
                  applicability="114 學年度入學新生適用", exceptions="來源未載明其他例外，需人工確認",
                  review_notes="請核對清單、門檻與遺漏；其餘要求不在本次草擬範圍")
@@ -60,7 +74,9 @@ class RuleDraftTest(unittest.TestCase):
         d = self.draft()
         self.assertEqual(d["issues"], [])
         self.assertEqual({r["id"] for r in d["diff"]}, set(rule_draft.TARGETS))
-        self.assertTrue(all(r["status"] == "same" for r in d["diff"]))
+        self.assertTrue(all(r["status"] == "same" for r in d["diff"] if r["id"] != "R12"))
+        r12 = next(r for r in d["diff"] if r["id"] == "R12")
+        self.assertEqual({f["field"] for f in r12["fields"]}, {"source.doc", "source.ref"})
         self.assertFalse(d["active"])
         self.assertEqual(d["label"], "AI 草稿、未啟用")
 
@@ -93,6 +109,20 @@ class RuleDraftTest(unittest.TestCase):
                 response = fake_response()
                 row = next(r for r in response.data["requirements"] if r["id"] == "R10")
                 row[field] = value
+                self.assertTrue(self.draft(response)["issues"])
+
+    def test_new_kinds_check_their_own_fields(self):
+        cases = (("R8", "n", 0), ("R8", "n", None), ("R8", "name_min", 9), ("R8", "name_contains", " "),
+                 ("R9", "name_contains", "大一"), ("R3", "min_credits", 3), ("R11", "categories", ["國文"]),
+                 ("R12", "min_credits", 0), ("R7", "min_credits", 1), ("R10", "n", 1))
+        for rid, field, value in cases:
+            with self.subTest(rid=rid, field=field, value=value):
+                response = fake_response()
+                row = next(r for r in response.data["requirements"] if r["id"] == rid)
+                if value is None:
+                    del row[field]
+                else:
+                    row[field] = value
                 self.assertTrue(self.draft(response)["issues"])
 
     def test_uses_existing_knowledge_base_validation(self):
@@ -243,8 +273,9 @@ class RuleDraftTest(unittest.TestCase):
         del rows[0]
         rows[0]["min_credits"] += 1
         rows.append({**copy.deepcopy(answer[0]), "id": "EXTRA"})
+        n = len(answer)
         self.assertEqual(rule_draft.compare(rows, answer), {
-            "correct": 1, "wrong": 1, "missing": 1, "extra": 1, "answer_count": 3, "draft_count": 3})
+            "correct": n - 2, "wrong": 1, "missing": 1, "extra": 1, "answer_count": n, "draft_count": n})
 
     def test_compare_ignores_wording_of_review_text(self):
         answer = fake_response().data["requirements"]
@@ -260,7 +291,7 @@ class RuleDraftTest(unittest.TestCase):
         rows[0]["source_page"] = True
         rows.append(copy.deepcopy(rows[1]))
         result = rule_draft.compare(rows, answer)
-        self.assertEqual((result["correct"], result["wrong"], result["extra"]), (2, 1, 1))
+        self.assertEqual((result["correct"], result["wrong"], result["extra"]), (len(answer) - 1, 1, 1))
 
     def test_answer_must_be_human_confirmed_not_existing_json(self):
         with mock.patch.object(llm, "generate_json") as generate:
@@ -279,7 +310,7 @@ class RuleDraftTest(unittest.TestCase):
         with mock.patch.object(llm, "generate_json", return_value=fake_response()):
             rule_draft.run_draft(PDF, 114, answer)
         entry = json.loads(self.log.read_text(encoding="utf-8").splitlines()[-1])
-        self.assertEqual(entry["before_correction"]["correct"], 3)
+        self.assertEqual(entry["before_correction"]["correct"], len(QUOTES))
         self.assertEqual(entry["before_correction"]["wrong"], 0)
         self.assertIn("answer_version", entry)
         for text in ("虛構確認人", "source_quote", str(answer), QUOTES["R10"]):
@@ -289,12 +320,12 @@ class RuleDraftTest(unittest.TestCase):
             bad = rule_draft.run_draft(PDF, 114, answer)
         self.assertTrue(bad["issues"])
         entry = json.loads(self.log.read_text(encoding="utf-8").splitlines()[-1])
-        self.assertEqual(entry["before_correction"]["missing"], 3)
+        self.assertEqual(entry["before_correction"]["missing"], len(QUOTES))
         with mock.patch.object(llm, "generate_json", side_effect=llm.LLMError("逾時")):
             with self.assertRaises(llm.LLMError):
                 rule_draft.run_draft(PDF, 114, answer)
         entry = json.loads(self.log.read_text(encoding="utf-8").splitlines()[-1])
-        self.assertEqual(entry["before_correction"]["missing"], 3)
+        self.assertEqual(entry["before_correction"]["missing"], len(QUOTES))
         self.assert_active_unchanged()
 
     def test_review_after_restart_and_changed_baseline(self):

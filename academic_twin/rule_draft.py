@@ -1,9 +1,10 @@
-"""AI 草擬 114 年度少量規則：提案 → 既有驗證器 → 人工確認存檔，永不啟用。（A 組）
+"""AI 草擬 114 年度規則：提案 → 既有驗證器 → 人工確認存檔，永不啟用。（A 組）
 
     python -m academic_twin.rule_draft data/sources/im_114_table.pdf --year 114
     python -m academic_twin.rule_draft <pdf> --year 114 --answer <已確認草稿.json>
 
-只支援公開 114 應修科目表的 R2、R4、R10；不是完整規則庫。
+對照現有 114 規則庫的全部 12 項要求（R1–R12）；附件只有公開的 114 應修科目表，
+科目表未載明的條件（如英檢標準、大一體育學期數）AI 不得推測，須寫進 review_notes 交人工確認。
 結構合法、與現有 JSON 相同，皆不代表規章解讀正確。新版本啟用留待年度載入流程接入。
 """
 from __future__ import annotations
@@ -24,8 +25,17 @@ BASELINE_PATH = ROOT / "data" / "curriculum_im_114.json"
 SOURCE_PATH = ROOT / "data" / "sources" / "im_114_table.pdf"
 DRAFT_DIR = ROOT / "data" / "eval" / "rule_drafts"
 EVAL_LOG = ROOT / "data" / "eval" / "rule_draft_runs.jsonl"
-PROMPT_VERSION = "rule-draft-v1"
-TARGETS = {"R2": "院訂必修清單", "R4": "共同必修：國文", "R10": "備註二-1：最低畢業學分"}
+PROMPT_VERSION = "rule-draft-v2"
+TARGETS = {"R1": "系訂必修清單", "R2": "院訂必修清單", "R3": "必選課", "R4": "共同必修：國文",
+           "R5": "共同必修：外文", "R6": "共同必修：通識課程", "R7": "通識核心領域", "R8": "體育課程",
+           "R9": "服務學習課程", "R10": "備註二-1：最低畢業學分", "R11": "本系選修學分",
+           "R12": "英文畢業門檻"}
+# 各型式使用的欄位；其他欄位不可出現（引擎不使用，留著只會誤導核對的人）
+KIND_FIELDS = {"all_of": {"courses"}, "taken_all": {"courses"}, "category_credits": {"categories", "min_credits"},
+               "category_count": {"categories", "n", "name_contains", "name_min"},
+               "dept_elective_credits": {"min_credits"}, "english_threshold": {"categories", "min_credits"},
+               "total_credits": {"min_credits"}}
+RULE_FIELDS = {"courses", "categories", "min_credits", "n", "name_contains", "name_min"}
 LABEL = "AI 草稿、未啟用"
 EVIDENCE = {"applicable_year", "source_page", "source_quote", "applicability", "exceptions", "review_notes"}
 
@@ -34,10 +44,11 @@ STRINGS = {"type": "ARRAY", "items": STRING}
 REQUIREMENT_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "id": STRING, "kind": {"type": "STRING", "enum": ["all_of", "category_credits", "total_credits"]},
+        "id": STRING, "kind": {"type": "STRING", "enum": list(KIND_FIELDS)},
         "title": STRING, "source": {"type": "OBJECT", "properties": {"doc": STRING, "ref": STRING},
                                       "required": ["doc", "ref"]},
-        "courses": STRINGS, "categories": STRINGS, "min_credits": {"type": "INTEGER"},
+        "courses": STRINGS, "categories": STRINGS, "min_credits": {"type": "INTEGER"}, "n": {"type": "INTEGER"},
+        "name_contains": STRING, "name_min": {"type": "INTEGER"},
         "exclusive": {"type": "BOOLEAN"}, "system_code": STRING, "regulation_term": STRING,
         "applicable_year": {"type": "INTEGER"}, "source_page": {"type": "INTEGER"}, "source_quote": STRING,
         "applicability": STRING, "exceptions": STRING, "review_notes": STRING,
@@ -48,9 +59,17 @@ SCHEMA = {"type": "OBJECT", "properties": {
     "requirements": {"type": "ARRAY", "items": REQUIREMENT_SCHEMA}, "unreadable": STRING},
     "required": ["requirements", "unreadable"]}
 PROMPT = """你是規則草擬工具，附件為公開的 114 學年度資管系應修科目表。
-只草擬指定的三項要求，不補寫其他年度、必選課、外系上限或未提供的規則。
-使用知識庫 JSON 欄位（id、kind、title、courses 或 categories、min_credits、source.doc/ref）。
-kind 僅用 all_of（清單全數通過）、category_credits（類別最低學分）、total_credits（最低總學分）。
+只草擬指定的要求，每項一條、id 照指定編號；不補寫其他年度、外系學分上限或未指定的規則。
+使用知識庫 JSON 欄位（id、kind、title、source.doc/ref，以及依 kind 使用的欄位），kind 僅用下列幾種：
+- all_of：清單課程全數及格（courses）
+- taken_all：清單課程須修過、不需及格（courses）
+- category_credits：某類別及格學分至少 min_credits（categories、min_credits）
+- category_count：某類別及格門數至少 n；若另規定課名含某字的課至少幾門，用 name_contains、name_min（categories、n）
+- dept_elective_credits：本系選修學分至少 min_credits（min_credits）
+- english_threshold：英文畢業門檻，未通過英檢時以 categories 類別及格學分至少 min_credits 替代（categories、min_credits）
+- total_credits：最低畢業總學分（min_credits）
+只填該 kind 使用的欄位。附件沒有寫明的數字或條件（例如門數、學期數、英檢標準、替代學分）不可推測：
+仍依附件草擬能確定的部分，並在 review_notes 寫明「附件未載明，需人工確認」與缺的是什麼。
 每條必須附 applicable_year=114、source_page（PDF 實際頁次從 1 起，不是頁尾印刷頁碼）、
 source_quote（逐字引用原文，清單要完整引用課名與課號）、applicability（適用條件）、
 exceptions（例外；來源未載明時明寫未載明、需人工確認，不推測）、review_notes（門檻、漏列及解讀疑義）。
@@ -123,17 +142,7 @@ def check(requirements: object, year: int, context: dict, unreadable: str = "") 
                 errors.append(f"{rid} 的 {key} 不得空白（不明時須列為待確認）")
         if r["source"]["doc"] != "IM-114-TABLE" or not r["source"]["ref"].strip():
             errors.append(f"{rid} 須引用 IM-114-TABLE 並附原文位置")
-        kind = r["kind"]
-        key = "courses" if kind == "all_of" else "categories" if kind == "category_credits" else None
-        if key and (not r.get(key) or len(set(r[key])) != len(r[key])
-                    or any(not v.strip() for v in r[key])):
-            errors.append(f"{rid} 的 {key} 須為不重複的非空白清單")
-        if kind != "all_of" and (type(r.get("min_credits")) is not int or r["min_credits"] < 1):
-            errors.append(f"{rid} 的最低學分須為正整數")
-        if kind == "all_of" and "min_credits" in r:
-            errors.append(f"{rid} 清單要求不可另加引擎不使用的最低學分")
-        if (kind != "all_of" and "courses" in r) or (kind != "category_credits" and "categories" in r):
-            errors.append(f"{rid} 含此類型不使用的課程或類別欄位")
+        errors.extend(_kind_errors(r))
     if not errors:
         raw = copy.deepcopy(context)
         raw["requirements"] = [_rule(r) for r in requirements]
@@ -142,6 +151,27 @@ def check(requirements: object, year: int, context: dict, unreadable: str = "") 
         except (ValueError, KeyError, TypeError) as exc:
             errors.append(str(exc))
     return [{"level": "error", "message": e} for e in errors]
+
+
+def _kind_errors(r: dict) -> list[str]:
+    """依規則型式檢查欄位：該有的要有、值要合理，不使用的欄位不可出現。"""
+    rid, kind = r["id"], r["kind"]
+    allowed = KIND_FIELDS[kind]
+    errors = [f"{rid} 含此類型不使用的欄位 {k}" for k in sorted(RULE_FIELDS - allowed) if k in r]
+    for key in sorted({"courses", "categories"} & allowed):
+        if not r.get(key) or len(set(r[key])) != len(r[key]) or any(not v.strip() for v in r[key]):
+            errors.append(f"{rid} 的 {key} 須為不重複的非空白清單")
+    if "min_credits" in allowed and (type(r.get("min_credits")) is not int or r["min_credits"] < 1):
+        errors.append(f"{rid} 的最低學分須為正整數")
+    if kind == "category_count":
+        if type(r.get("n")) is not int or r["n"] < 1:
+            errors.append(f"{rid} 的門數 n 須為正整數")
+        if ("name_contains" in r) != ("name_min" in r):
+            errors.append(f"{rid} 的 name_contains 與 name_min 須同時提供")
+        elif "name_contains" in r and (not r["name_contains"].strip() or type(r["name_min"]) is not int
+                                       or not 1 <= r["name_min"] <= r.get("n", 0)):
+            errors.append(f"{rid} 的課名條件須有關鍵字，門數介於 1 與 n 之間")
+    return errors
 
 
 def field_changes(before: dict, after: dict, prefix: str = "") -> list[dict]:
@@ -158,7 +188,7 @@ def field_changes(before: dict, after: dict, prefix: str = "") -> list[dict]:
 
 
 def diff(requirements: object, current: list[dict]) -> list[dict]:
-    """只對照指定三項；其他現有要求不算漏列。差異不是 AI 錯誤或標準答案。"""
+    """只對照指定要求；其他現有要求不算漏列。差異不是 AI 錯誤或標準答案。"""
     old = {r["id"]: r for r in current if r["id"] in TARGETS}
     new = {r["id"]: _rule(r) for r in requirements if isinstance(r, dict) and isinstance(r.get("id"), str)} \
         if isinstance(requirements, list) else {}
@@ -353,7 +383,7 @@ def confirm(draft_id: str, requirements: list[dict], reviewer: str, acknowledge:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="AI 草擬規則（114 年度少量要求，未啟用）")
+    parser = argparse.ArgumentParser(description="AI 草擬規則（114 年度 12 項要求，未啟用）")
     parser.add_argument("pdf", type=Path)
     parser.add_argument("--year", type=int, required=True)
     parser.add_argument("--answer", type=Path, help="人工確認草稿 JSON，用於計數量測")
